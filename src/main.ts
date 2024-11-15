@@ -1,4 +1,4 @@
-import { App, MarkdownPreviewView, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom } from 'obsidian';
+import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom } from 'obsidian';
 import { FRView, VIEW_TYPE_FEEDS_READER, createFeedBar, waitForElm } from "./view";
 import { getFeedItems, RssFeedContent, nowdatetime, itemKeys } from "./getFeed";
 import { GLB } from "./globals";
@@ -128,7 +128,11 @@ export default class FeedsReader extends Plugin {
           const itemLink = sanitizeHTMLToDom(item.link).textContent;
 
           if (item.content) {
-            elContent.appendChild(sanitizeHTMLToDom(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
+            try {
+              elContent.appendChild(sanitizeHTMLToDom(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
+            } catch (e) {
+              elContent.appendChild(item.content.replace(/<img src="\/\//g,"<img src=\"https://"));
+            }
           }
           evt.target.setAttribute('showContent', '1');
         } else {
@@ -209,7 +213,7 @@ export default class FeedsReader extends Plugin {
               elContent.id = 'itemContent' + idx;
             }
             elContent.className = 'itemContent';
-            MarkdownPreviewView.renderMarkdown(
+            MarkdownRenderer.render(this.app,
               remedyLatex(htmlToMarkdown(item.content)), elContent);
           }
       }
