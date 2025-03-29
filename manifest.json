@@ -1,11 +1,10 @@
 {
-	"id": "rss-feeds-reader",
+	"id": "feeds-reader",
 	"name": "Feeds Reader",
-	"version": "1.2.0",
+	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Read RSS feeds within Obsidian.",
-	"author": "fjdu",
-	"authorUrl": "https://fjdu.github.io",
-	"fundingUrl": "https://www.buymeacoffee.com/fjdu",
+	"author": "mryfmo",
+	"authorUrl": "https://mryfmo.github.io",
 	"isDesktopOnly": false
 }

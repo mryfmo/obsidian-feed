@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from 'builtin-modules'
+import builtins from 'builtin-modules';
 
 const banner =
 `/*
@@ -11,32 +11,71 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === 'production');
 
-esbuild.build({
-	banner: {
-		js: banner,
-	},
-	entryPoints: ['src/main.ts'],
-	bundle: true,
-	external: [
-		'obsidian',
-		'electron',
-		'@codemirror/autocomplete',
-		'@codemirror/collab',
-		'@codemirror/commands',
-		'@codemirror/language',
-		'@codemirror/lint',
-		'@codemirror/search',
-		'@codemirror/state',
-		'@codemirror/view',
-		'@lezer/common',
-		'@lezer/highlight',
-		'@lezer/lr',
-		...builtins],
-	format: 'cjs',
-	watch: !prod,
-	target: 'es2018',
-	logLevel: "info",
-	sourcemap: prod ? false : 'inline',
-	treeShaking: true,
-	outfile: 'main.js',
-}).catch(() => process.exit(1));
+// --- Development mode build options ★★★
+// watch options are removed from buildOptions
+const buildOptions = {
+  banner: {
+    js: banner,
+  },
+  entryPoints: ['src/main.ts'],
+  bundle: true,
+  external: [
+    'obsidian',
+    'electron',
+    '@codemirror/autocomplete',
+    '@codemirror/collab',
+    '@codemirror/commands',
+    '@codemirror/language',
+    '@codemirror/lint',
+    '@codemirror/search',
+    '@codemirror/state',
+    '@codemirror/view',
+    '@lezer/common',
+    '@lezer/highlight',
+    '@lezer/lr',
+    ...builtins
+  ],
+  format: 'cjs',
+  target: 'es2020', // Change from ES2018 to ES2020 (adjust as needed)
+  logLevel: "info",
+  sourcemap: prod ? false : 'inline',
+  treeShaking: true,
+  outfile: 'main.js',
+};
+
+async function runBuild() {
+  try {
+    // --- Create the build context with esbuild.context() ---
+    const context = await esbuild.context(buildOptions);
+
+    if (prod) {
+      // --- Production mode ---
+      console.log("Starting production build...");
+      await context.rebuild(); // Run the build once
+      console.log("Production build complete.");
+      await context.dispose(); // Dispose the context and exit the process
+      process.exit(0); // Explicitly exit
+    } else {
+      // --- Development mode ---
+      console.log("Starting development build with watch...");
+      await context.watch({ // watchOptions are passed to context.watch
+        onRebuild(error, result) {
+          if (error) {
+            console.error('Watch build failed:', error);
+          } else {
+            console.log('Watch build succeeded.'); // result object is not very useful for watch
+          }
+        },
+      });
+      console.log("esbuild is watching for changes...");
+      // In watch mode, do not exit the process
+      // Manually stop with Ctrl+C or other methods if needed
+    }
+  } catch (error) {
+    console.error("esbuild context creation or initial build failed:", error);
+    process.exit(1);
+  }
+}
+
+// Run the build process
+runBuild();

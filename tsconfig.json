@@ -1,24 +1,24 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    "inlineSourceMap": true,
-    "inlineSources": true,
-    "module": "ESNext",
-    "target": "ES6",
-    "allowJs": true,
-    "noImplicitAny": true,
-    "moduleResolution": "node",
-    "importHelpers": true,
-    "isolatedModules": true,
-	"strictNullChecks": true,
-    "lib": [
-      "DOM",
-      "ES5",
-      "ES6",
-      "ES7"
-    ]
+    "inlineSourceMap": true, // Keep for development builds
+    "inlineSources": true,   // Keep for development builds
+    "module": "ESNext",      // Keep ESNext for modern module features
+    "target": "ES6",      // Update target (or ES2020, ESNext)
+    "allowJs": true,         // Keep or set to false if no JS files
+    "noImplicitAny": true,   // Keep enabled for type safety
+    "moduleResolution": "node", // Standard for Node.js/npm projects
+    "importHelpers": true,   // Use tslib helpers
+    "isolatedModules": true, // Often needed with bundlers like esbuild
+	  "strictNullChecks": true,// Keep enabled for safety
+    "esModuleInterop": true,   // **Added: Fixes default import issues**
+    "skipLibCheck": true,    // **Added: Speeds up build, avoids lib errors**
+    "forceConsistentCasingInFileNames": true, // Recommended for cross-platform consistency
+    "lib": ["DOM", "ES5", "ES6", "ES7", "ESNext.BigInt"],
+		"resolveJsonModule": true,
+		"allowSyntheticDefaultImports": true    
   },
   "include": [
-    "**/*.ts"
+    "**/*.ts" // Include all TypeScript files in the project
   ]
 }
