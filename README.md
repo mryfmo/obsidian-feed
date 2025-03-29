@@ -21,6 +21,6 @@ This plugin is currently under testing and is not guaranteed to work.
 - [ ] Added icons for each content type
 ### Extensions
 - [ ] Integration with [Obsidian Web Clipper](https://github.com/obsidianmd/obsidian-clipper)
-  - [ ] Personal knowledge management component (notes and knowledge base integration)  
-    - [ ] Automatic tagging (LLM collaboration)
-    - [ ] Chat function (LLM collaboration)
+- [ ] Personal knowledge management component (notes and knowledge base integration)  
+  - [ ] Automatic tagging (LLM collaboration)
+  - [ ] Chat function (LLM collaboration)
