@@ -5,6 +5,8 @@ In the future, I plan to integrate content feeds reader with personal knowledge 
 
 This plugin is currently under testing and is not guaranteed to work.
 
+![Screenshot of a Feed view](./images/screenshot_01.png)
+![Screenshot of a Content view](./images/screenshot_02.png)
 
 ## Acknowledgment
 
@@ -21,6 +23,6 @@ This plugin is currently under testing and is not guaranteed to work.
 - [ ] Added icons for each content type
 ### Extensions
 - [ ] Integration with [Obsidian Web Clipper](https://github.com/obsidianmd/obsidian-clipper)
-  - [ ] Personal knowledge management component (notes and knowledge base integration)  
-    - [ ] Automatic tagging (LLM collaboration)
-    - [ ] Chat function (LLM collaboration)
+  - [ ] Automatic tagging (LLM collaboration)
+- [ ] Personal knowledge management component (notes and knowledge base integration)  
+  - [ ] Chat function (LLM collaboration)
