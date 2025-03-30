@@ -34,6 +34,7 @@ export default class FeedsReader extends Plugin {
 	settings: FeedsReaderSettings;
     frViewInstance: FRView | null = null;
     feedListViewInstance: FeedListView | null = null; // Keep track of sidebar view
+    isDataLoaded: boolean = false; // Flag to track initial data load
 
 	async onload() {
 		console.log('Loading Feeds Reader Plugin');
@@ -43,6 +44,7 @@ export default class FeedsReader extends Plugin {
         this.registerView(
             VIEW_TYPE_FEEDS_READER,
             (leaf) => {
+                console.log("Creating FRView instance.");
                 this.frViewInstance = new FRView(leaf);
                 return this.frViewInstance;
             }
@@ -50,6 +52,7 @@ export default class FeedsReader extends Plugin {
         this.registerView(
             VIEW_TYPE_FEED_LIST,
             (leaf) => {
+                 console.log("Creating FeedListView instance.");
                  this.feedListViewInstance = new FeedListView(leaf);
                  return this.feedListViewInstance;
             }
@@ -57,6 +60,7 @@ export default class FeedsReader extends Plugin {
         // --- End Register BOTH views ---
 
         this.app.workspace.onLayoutReady(async () => {
+             console.log("Layout ready. Loading feed data.");
             // --- Ribbon icon logic ---
             if (!document.body.querySelector('div.app-container svg[data-icon-name="feeds-reader-icon"]')) {
                 try {
@@ -71,7 +75,7 @@ export default class FeedsReader extends Plugin {
             // --- End Ribbon icon logic ---
 
             // Initial data loading after layout is ready
-             await this.loadFeedsDataWithNotice();
+             await this.loadFeedsDataWithNotice(); // This now handles UI refresh
         });
         this.addSettingTab(new FeedReaderSettingTab(this.app, this));
         // Global listeners remain
@@ -86,51 +90,103 @@ export default class FeedsReader extends Plugin {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_FEED_LIST); // Detach sidebar view too
         this.frViewInstance = null;
         this.feedListViewInstance = null;
+        this.isDataLoaded = false; // Reset flag
     }
 
     // Modified activateView to handle both main and sidebar views
     async activateView(activateSidebar: boolean = true) {
+        console.log("activateView called. Activate sidebar:", activateSidebar);
         let mainLeaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER)[0];
         if (!mainLeaf) {
             mainLeaf = this.app.workspace.getLeaf('tab'); // Get a leaf for the main area
              if (!mainLeaf) { console.error("Feeds Reader: Failed to get main leaf."); new Notice("Failed to open main view."); return; }
+            console.log("Setting main leaf state.");
             await mainLeaf.setViewState({ type: VIEW_TYPE_FEEDS_READER, active: true });
+        } else {
+             console.log("Main leaf already exists.");
+             // Ensure view inside existing leaf is loaded if deferred
+             await mainLeaf.loadIfDeferred();
         }
         // Ensure main view is revealed and focused
+        console.log("Revealing main leaf.");
         this.app.workspace.revealLeaf(mainLeaf);
 
         if (activateSidebar) {
+            console.log("Ensuring side leaf.");
             // Use ensureSideLeaf for robust sidebar activation
+            // Reveal but don't necessarily activate (focus) it
             await this.app.workspace.ensureSideLeaf(VIEW_TYPE_FEED_LIST, 'left', { active: false, reveal: true });
+            console.log("Side leaf ensured.");
              // Ensure the sidebar view gets updated after activation
              if(this.feedListViewInstance) {
+                 console.log("Updating sidebar highlighting.");
                  // A small delay might be needed for the DOM to be ready after reveal
-                 await sleep(50); // Example delay
-                 this.feedListViewInstance.updateFeedHighlighting();
+                 await sleep(100); // Increased delay slightly
+                 // Re-render the content if it wasn't loaded initially
+                  if (this.feedListViewInstance.isLoading) {
+                       await this.feedListViewInstance.renderContent(this.feedListViewInstance.contentEl);
+                  } else {
+                       this.feedListViewInstance.updateFeedHighlighting();
+                  }
+             } else {
+                  console.warn("Sidebar instance (feedListViewInstance) not found after ensuring leaf.");
              }
         }
+
+        // Ensure main display is also refreshed after activation, especially if data loaded late
+        console.log("Refreshing main display after activation.");
+        this.refreshDisplay();
     }
 
     // Helper function for initial data loading with notices
     async loadFeedsDataWithNotice() {
+        console.log("loadFeedsDataWithNotice started.");
+        if (this.isDataLoaded) {
+             console.log("Data already loaded, skipping load.");
+             // Still refresh UI in case views were opened after data load
+             await this.refreshFeedListSidebar();
+             this.refreshDisplay();
+             return;
+        }
+
+        this.isDataLoaded = false; // Mark as loading
         const startTime = performance.now();
-        try { await this.loadSubscriptions(); } catch (e: any) {
+        let loadError = false;
+        try {
+             console.log("Loading subscriptions...");
+             await this.loadSubscriptions();
+             console.log("Subscriptions loaded.");
+         } catch (e: any) {
             console.error("Failed to load subscriptions:", e);
             new Notice(`Failed to load subscriptions: ${e.message}`, 5000);
+            loadError = true;
         }
-        try { await this.loadFeedsStoredData(); } catch (e: any) {
+        try {
+             console.log("Loading stored feed data...");
+             await this.loadFeedsStoredData();
+             console.log("Stored feed data loaded.");
+        } catch (e: any) {
             console.error("Failed to load stored feed data:", e);
-             new Notice(`Failed to load feed data: ${e.message}`, 5000);
+            new Notice(`Failed to load feed data: ${e.message}`, 5000);
+            loadError = true;
         }
         const endTime = performance.now();
         const timeSpent = (endTime - startTime) / 1e3;
-        if (timeSpent > 0.1) { // Show notice only if loading takes noticeable time
-            const tStr = timeSpent.toFixed(2);
-            new Notice(`Feeds data loaded in ${tStr} seconds.`, 2000);
+
+        if(!loadError) {
+             this.isDataLoaded = true; // Mark as loaded only if no errors
+             console.log(`Feed data loaded successfully in ${timeSpent.toFixed(2)}s.`);
+             if (timeSpent > 0.1) {
+                 new Notice(`Feeds data loaded in ${timeSpent.toFixed(2)} seconds.`, 2000);
+             }
+        } else {
+             console.error("Errors occurred during data loading.");
         }
 
 
-        // After loading data, update both views if they exist
+        // Always attempt to refresh UI after load attempt, even if errors occurred
+        // to show potentially partial data or error states.
+        console.log("Refreshing UI after data load attempt.");
         await this.refreshFeedListSidebar(); // Update sidebar content
         this.refreshDisplay(); // Update main view content
     }
@@ -293,7 +349,7 @@ export default class FeedsReader extends Plugin {
                  if (statsEl) await this.handleRefreshSingleFeed(statsEl, false);
              }));
              menu.addItem(i => i.setTitle(`Mark all read`).setIcon("check-circle").onClick(async () => {
-                 if (window.confirm(`Mark all in ${feed.name} read?`)) {
+                 if (window.confirm(`Mark all items in ${feed.name} read?`)) {
                      this.markAllRead(url);
                      await this.refreshFeedListSidebar(); // Update sidebar UI
                      if (GLB.currentFeed === url) this.refreshDisplay(); // Update main view if current
@@ -356,7 +412,8 @@ export default class FeedsReader extends Plugin {
         if (mobilePanel instanceof HTMLElement) {
              // Toggle the class based on its current state
              const isHidden = mobilePanel.classList.contains('panel-hidden');
-             mobilePanel.toggleClass('panel-hidden', !isHidden); // Use required second argument
+             // ★★★ Correctly use toggleClass with boolean argument ★★★
+             mobilePanel.toggleClass('panel-hidden', !isHidden);
              if (target) target.setText(isHidden ? '>' : '<'); // Update button text
              return; // Handled mobile case
         }
@@ -365,6 +422,7 @@ export default class FeedsReader extends Plugin {
         const leftPanel = document.getElementById('feedsReaderLeftPanel'); // Use the ID expected in desktop mode
         if (leftPanel instanceof HTMLElement) {
             const isHidden = leftPanel.classList.contains('panel-hidden');
+             // ★★★ Correctly use toggleClass with boolean argument ★★★
             leftPanel.toggleClass('panel-hidden', !isHidden);
             if (target) target.setText(isHidden ? '>' : '<');
 
@@ -427,40 +485,55 @@ export default class FeedsReader extends Plugin {
     }
 
     handleShowFeed(feedUrl:string) {
+        console.log(`handleShowFeed called with URL: ${feedUrl}`);
         if (feedUrl === GLB.STARRED_VIEW_ID) {
             this.handleShowAllStarred();
             return;
         }
-        if(feedUrl === GLB.currentFeed) return; // Don't reprocess if already selected
+        if(feedUrl === GLB.currentFeed) {
+             console.log("Feed already selected, potentially closing sidebar if mobile.");
+             // If on mobile and sidebar is open, close it even if feed doesn't change
+             if (Platform.isMobile) {
+                 this.closeMobileSidebar();
+             }
+             return;
+        }
 
         const prev = GLB.currentFeed;
         GLB.currentFeed = feedUrl;
-        if (!GLB.currentFeed) return;
+        if (!GLB.currentFeed) { console.error("handleShowFeed: currentFeed became null unexpectedly."); return; }
 
         const f = GLB.feedList.find(f => f.feedUrl === GLB.currentFeed);
         GLB.currentFeedName = f ? f.name : 'Unknown';
+        console.log(`Set current feed to: ${GLB.currentFeedName} (${GLB.currentFeed})`);
 
         // Reset state only if feed actually changed
         if (prev !== GLB.currentFeed) {
              GLB.undoList = [];
              GLB.idxItemStart = 0;
              GLB.nPage = 1;
+             console.log("Feed changed, reset undo list and pagination.");
         }
 
         // Reset filters/sort only if switching away from starred view
-        // This ensures filters stick when browsing normal feeds
         if (prev === GLB.STARRED_VIEW_ID) {
             GLB.filterMode = 'all';
             GLB.itemOrder = 'New to old';
+            console.log("Switched from starred, reset filter/sort.");
         }
 
         try {
-            this.makeDisplayList(); // Update index list based on new feed/filters
-            this.refreshDisplay(); // Render the main view content
-            this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar highlights/filters
+            console.log("Making display list...");
+            this.makeDisplayList();
+            console.log("Refreshing main display...");
+            this.refreshDisplay();
+            console.log("Refreshing sidebar highlighting...");
+            this.feedListViewInstance?.updateFeedHighlighting();
 
-            // Mobile sidebar closing is handled automatically by Obsidian when clicking links/buttons
-            // No manual closing needed here anymore.
+            // Close mobile sidebar after selection
+            if (Platform.isMobile) {
+                this.closeMobileSidebar();
+            }
 
         } catch (error) {
             console.error("Error showing feed:", error);
@@ -468,11 +541,20 @@ export default class FeedsReader extends Plugin {
         }
     }
     handleShowAllStarred(forceViewSwitch=true) {
-        if (GLB.currentFeed === GLB.STARRED_VIEW_ID && forceViewSwitch) return; // Don't reprocess if already selected
+        console.log("handleShowAllStarred called. Force switch:", forceViewSwitch);
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID && forceViewSwitch) {
+             console.log("Starred view already active, potentially closing sidebar.");
+              // If on mobile and sidebar is open, close it
+             if (Platform.isMobile) {
+                 this.closeMobileSidebar();
+             }
+             return;
+        }
 
         const prev = GLB.currentFeed;
         GLB.currentFeed = GLB.STARRED_VIEW_ID;
         GLB.currentFeedName = 'Starred Items';
+        console.log("Set current feed to Starred Items.");
         // Starred view implies these filters/sorts
         GLB.filterMode = 'starred'; // Force starred filter
         GLB.itemOrder = 'New to old'; // Reset sort order
@@ -482,23 +564,48 @@ export default class FeedsReader extends Plugin {
             GLB.undoList = [];
             GLB.idxItemStart = 0;
             GLB.nPage = 1;
+             console.log("Switched to starred, reset undo list and pagination.");
         }
 
         try {
+            console.log("Making display list for starred...");
              this.makeDisplayList(); // Generate starredItemsList
+             console.log("Refreshing main display for starred...");
              this.refreshDisplay(); // Render main view with starred items
+             console.log("Refreshing sidebar highlighting for starred...");
              this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar highlights/filters
 
             console.log(`Show ${GLB.starredItemsList.length} starred.`);
             if (GLB.starredItemsList.length === 0 && forceViewSwitch) new Notice("No starred items found.", 2000);
 
-             // Mobile sidebar closing handled by Obsidian
+             // Close mobile sidebar after selection
+             if (Platform.isMobile) {
+                 this.closeMobileSidebar();
+             }
 
         } catch (error) {
             console.error("Error showing starred:", error);
             new Notice("Failed to display starred items.", 3000);
         }
     }
+
+    // Helper to close mobile sidebar overlay
+    closeMobileSidebar() {
+        console.log("Attempting to close mobile sidebar.");
+        const mobilePanel = document.querySelector('body.is-mobile .feeds-reader-left-panel');
+        if (mobilePanel instanceof HTMLElement && !mobilePanel.classList.contains('panel-hidden')) {
+            mobilePanel.addClass('panel-hidden');
+            // Update toggle button text if needed
+            const toggleButton = document.getElementById('toggleNavi');
+            if (toggleButton) {
+                toggleButton.setText('>'); // Or appropriate icon/text
+            }
+            console.log("Closed mobile sidebar.");
+        } else {
+             console.log("Mobile sidebar not found or already hidden.");
+        }
+    }
+
 
     handleToggleDisplayMode(target:HTMLElement) {
         GLB.displayMode = GLB.displayMode === 'list' ? 'card' : 'list';
@@ -1033,43 +1140,46 @@ ${contentStr ? `## Content\n\n${contentStr}` : ''}
             isVisible = false;
         }
 
-        // Apply visibility classes
-        el.toggleClass('hidedItem', !isVisible); // Use 2nd arg for toggleClass
+        // Apply visibility classes using boolean
+        el.toggleClass('hidedItem', !isVisible);
 
         // Special class for visible deleted items in 'all' mode
-        if (item.deleted && GLB.filterMode === 'all' && isVisible) {
-             el.addClass('deleted-visible');
-        } else {
-             el.removeClass('deleted-visible');
-        }
+        el.toggleClass('deleted-visible', !!(item.deleted && GLB.filterMode === 'all' && isVisible));
 
-        // Ensure correct read/deleted classes are applied (might be redundant but safe)
+        // Ensure correct read/deleted classes are applied
         el.toggleClass('read', !!item.read && !item.deleted); // Only read if not deleted
         el.toggleClass('deleted', !!item.deleted);
     }
 
     updateFeedStatsUI() {
-        // DEPRECATED - Logic moved to refreshFeedListSidebar / createFeedBar
-        // This method might be called from older parts of the code, issue a warning.
-        console.warn("updateFeedStatsUI is deprecated and should not be called directly. Use refreshFeedListSidebar instead.");
-        // Optionally, try to update sidebar anyway if the instance exists
-        // this.refreshFeedListSidebar();
+        // DEPRECATED
+        console.warn("updateFeedStatsUI is deprecated. Use refreshFeedListSidebar.");
     }
 
     // New helper to refresh sidebar content and state
     async refreshFeedListSidebar() {
+        console.log("Refreshing feed list sidebar...");
         if (this.feedListViewInstance) {
              // Rebuild the feed list in the sidebar
              const tableElement = this.feedListViewInstance.contentEl.querySelector('#feedTable') as HTMLTableElement | null;
              await this.createFeedBar(tableElement); // Pass target table
              // Update highlights, filter, sort display
              this.feedListViewInstance.updateFeedHighlighting();
+             console.log("Sidebar refreshed.");
+        } else {
+             console.log("Sidebar instance not found, cannot refresh.");
         }
     }
     // New helper to refresh main display content
     refreshDisplay() {
-        // Rerender the main content view
-        this.frViewInstance?.renderContent();
+        console.log("Refreshing main display...");
+        // Rerender the main content view only if the instance exists
+        if (this.frViewInstance) {
+             this.frViewInstance.renderContent();
+             console.log("Main display refreshed.");
+        } else {
+             console.log("Main view instance not found, cannot refresh display.");
+        }
     }
 
     // --- Modal Window Launchers ---
@@ -1765,6 +1875,7 @@ function createCardItem(app: App, container: HTMLElement, item: RssFeedItem, ori
     // Use 'app as any' to access plugins and get the plugin instance
      let plugin: FeedsReader | null = null;
      const anyApp = app as any;
+     // ★★★ Safely access nested properties ★★★
      if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
          plugin = anyApp.plugins.plugins['feeds-reader'];
      }
@@ -1824,6 +1935,7 @@ function createListItem(app: App, container: HTMLElement, item: RssFeedItem, ori
      // Use 'app as any' to access plugins
      let plugin: FeedsReader | null = null;
       const anyApp = app as any;
+      // ★★★ Safely access nested properties ★★★
       if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
           plugin = anyApp.plugins.plugins['feeds-reader'];
       }
@@ -2813,6 +2925,7 @@ class SearchModal extends Modal {
             // Use the stored app instance to get the plugin instance (with 'any' cast)
             let pluginInstance: FeedsReader | null = null;
              const anyApp = this.app as any;
+             // ★★★ Safely access nested properties ★★★
              if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
                  pluginInstance = anyApp.plugins.plugins['feeds-reader'];
              }

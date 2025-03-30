@@ -1,0 +1,528 @@
+/* ====== General Layout & Variables ====== */
+:root {
+    --card-item-width: 280px; /* Default card width controlled by JS */
+    --left-panel-width-desktop: 220px;
+    --left-panel-width-tablet: 180px; /* Narrower for tablets */
+    --left-panel-width-mobile-overlay: 250px; /* Overlay width */
+    --header-height-guess: 45px; /* Approximate header height for positioning */
+  }
+  
+  .feeds-reader-container {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      position: relative; /* Needed for absolute positioned children like mobile overlay */
+  }
+  
+  /* ====== Desktop (Default) & Common Left Panel Styles ====== */
+  .feeds-reader-left-panel {
+    width: var(--left-panel-width-desktop);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    transition: width 0.3s ease-in-out, transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out, padding 0.3s ease-in-out; /* Added padding transition */
+    position: relative; /* Default positioning */
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex-shrink: 0; /* Prevent shrinking */
+    z-index: 10; /* Default z-index */
+  }
+  /* Hidden state (Common for all modes, adjusted per mode below) */
+  .feeds-reader-left-panel.panel-hidden {
+      width: 0;
+      border-right: none;
+      padding-left: 0;
+      padding-right: 0;
+      overflow: hidden;
+  }
+  
+  /* ====== Desktop (Default) Right Panel ====== */
+  .feeds-reader-right-panel {
+    flex-grow: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    /* overflow: hidden; */ /* Let content area handle overflow */
+    /* margin-left will be adjusted by specific classes */
+  }
+  /* Default margin for desktop */
+  .contentBoxRightpage { margin-left: var(--left-panel-width-desktop); }
+  .contentBoxFullpage { margin-left: 0px; }
+  
+  
+  /* ====== Left Panel: Toggle Button (Common) ====== */
+  .toggleNaviContainer {
+    position: absolute; /* Base positioning relative to left panel */
+    top: 0.5em;
+    left: 5px;
+    z-index: 15; /* Above left panel content, below mobile overlay potentially */
+    display: flex;
+    align-items: center;
+    /* background-color: var(--background-secondary); */ /* Removed to avoid blocking content on mobile */
+    padding: 2px 0px 5px 0px;
+  }
+  /* Fixed state for Desktop when hidden (relative to viewport) */
+  .toggleNaviContainer.fixed {
+      position: fixed;
+      left: 5px;
+      top: var(--header-height-guess); /* Adjust if needed */
+      background-color: var(--background-translucent);
+      border-radius: 4px;
+      padding: 3px 5px;
+      box-shadow: 0 1px 3px var(--shadow-color);
+      z-index: 101; /* Ensure it's high */
+  }
+  
+  .toggleNavi, .save_data_toggling {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    margin-right: 5px;
+    opacity: 0.8;
+    cursor: pointer;
+    background-color: var(--background-primary);
+    font-size: var(--font-ui-small);
+    white-space: nowrap;
+  }
+  .toggleNavi:hover, .save_data_toggling:hover {
+    opacity: 1;
+    background-color: var(--background-modifier-hover);
+  }
+  /* Hide Save button by default on mobile platforms */
+  body.is-mobile .save_data_toggling {
+      display: none;
+  }
+  
+  /* ====== Left Panel: Navigation & Management (Common) ====== */
+  .navigation {
+    padding: 35px 5px 50px 5px; /* Increased top padding to avoid toggle button */
+    overflow-y: auto;
+    flex-grow: 1;
+  }
+  .manage, .starred-items-section, .feed-list-header { padding: 5px 8px; }
+  .feed-list-header { font-size: var(--font-ui-medium); font-weight: bold; margin-top: 10px; margin-bottom: 5px; color: var(--text-normal); }
+  .nav-item { margin-bottom: 0.5em; }
+  .nav-item-link { display: block; padding: 3px 5px; cursor: pointer; border-radius: 3px; font-size: var(--font-ui-small); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-item-link:hover { background-color: var(--background-modifier-hover); color: var(--text-normal); }
+  #showStarredItems.showingFeed { background-color: var(--interactive-accent-hover); color: var(--text-on-accent); font-weight: bold; }
+  .filter-group { margin: 5px 0; }
+  .filter-label { margin-right: 0.5em; font-weight: bold; font-size: var(--font-ui-small); }
+  .filter-item { margin-right: 0.5em; padding: 2px 6px; border-radius: 10px; cursor: pointer; border: 1px solid var(--background-modifier-border); font-size: var(--font-ui-smaller); background-color: var(--background-primary); }
+  .filter-item:hover { background-color: var(--background-modifier-hover); }
+  .filter-active { background-color: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); font-weight: bold; }
+  
+  /* ====== Left Panel: Feed List (Common) ====== */
+  .feedTableDiv { margin-top: 5px; }
+  .feedTableDiv table { border-collapse: collapse; width: 100%; }
+  .feedTableDiv > table > tbody > tr { margin-bottom: 2px; display: block; }
+  .feedTableDiv > table > tbody > tr.feedFolderRow { margin-bottom: 0; display: table-row; }
+  .feedTableDiv td { padding: 0; vertical-align: middle; }
+  span.showFeed { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: var(--font-ui-small); width: 100%; box-sizing: border-box; }
+  span.showFeed:hover { background-color: var(--background-modifier-hover); }
+  span.showingFeed { background-color: var(--interactive-accent-hover); color: var(--text-on-accent); font-weight: bold; }
+  span.showFeed .feed-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; margin-right: 5px; }
+  .feed-stats { display: flex; align-items: center; font-size: 0.8em; font-weight: normal; white-space: nowrap; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
+  span.showingFeed .feed-stats { color: var(--text-on-accent); opacity: 0.8; }
+  .feed-stats:hover { color: var(--text-accent); }
+  span.showingFeed .feed-stats:hover { color: var(--text-on-accent); opacity: 1;}
+  .unreadCount { color: var(--text-accent); font-weight: bold; margin-right: 1px;}
+  span.showingFeed .unreadCount { color: var(--color-green); }
+  .totalCount { margin-left: 1px; }
+  .unreadCountSep { margin: 0 2px; }
+  .feedFolder { font-weight: bold; font-size: var(--font-ui-small); padding: 6px 8px 4px 8px; color: var(--text-muted); margin-top: 8px; display: block; border-bottom: 1px solid var(--background-modifier-border); }
+  tr.feedFolderRow td { padding: 0 !important; border: none !important; }
+  .thanks-complain { margin-top: 15px; padding: 0 8px;}
+  .thanks { font-size: var(--font-ui-smaller); font-weight: normal; width: 100%;}
+  .thanks td { padding: 0 5px; text-align: center;}
+  .thanks a { text-decoration: none; color: var(--text-faint); }
+  .thanks a:hover { color: var(--text-accent); }
+  
+  /* ====== Right Panel: Header (Common) ====== */
+  .content-header {
+      display: flex;
+      flex-wrap: wrap; /* Allow wrapping on narrow screens */
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 15px;
+      border-bottom: 1px solid var(--background-modifier-border);
+      flex-shrink: 0; /* Prevent header from shrinking vertically */
+      gap: 8px; /* Add gap between items when wrapping */
+  }
+  .feed-title-header {
+      margin: 0;
+      font-size: var(--font-ui-large);
+      font-weight: bold;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-grow: 1; /* Allow title to take space */
+      min-width: 100px; /* Prevent title from becoming too small */
+  }
+  .feed-title-header a { text-decoration: none; color: var(--text-normal); }
+  .feed-title-header a:hover { color: var(--text-accent); }
+  .header-actions {
+      display: flex;
+      flex-wrap: nowrap; /* Keep buttons in one line initially */
+      gap: 8px; /* Spacing between buttons */
+      flex-shrink: 0; /* Prevent buttons shrinking initially */
+  }
+  .header-actions button { margin-left: 0; } /* Remove default margin */
+  
+  /* ====== Right Panel: Content Area (Common) ====== */
+  .feed-content-area {
+      flex-grow: 1; /* Takes remaining vertical space */
+      overflow-y: auto; /* Enables scrolling ONLY for this area */
+      padding: 15px;
+      /* Remove height: 100% if previously set */
+  }
+  .page-actions {
+      padding: 10px 0;
+      margin-bottom: 15px; /* Space before items */
+      /* border-bottom: 1px solid var(--background-modifier-border); */ /* Removed border */
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      flex-shrink: 0; /* Prevent shrinking */
+  }
+  .bottom-page-actions {
+      border-top: 1px solid var(--background-modifier-border);
+      border-bottom: none;
+      margin-top: 15px; /* Space after items */
+      margin-bottom: 0;
+      padding-top: 10px;
+  }
+  .page-action-button { font-size: var(--font-ui-small); }
+  
+  /* ====== Items Container (Common) ====== */
+  .items-container-card { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-item-width), 1fr)); gap: 15px; }
+  .items-container-list { display: flex; flex-direction: column; gap: 12px; }
+  
+  /* Common Item Styles */
+  .card-item, .list-item { background-color: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 6px; transition: opacity 0.3s ease, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out; }
+  .card-item:hover, .list-item:hover { border-color: var(--background-modifier-border-hover); box-shadow: 0 2px 5px var(--shadow-color); }
+  .read { opacity: 0.7; }
+  .read:hover { opacity: 0.9; }
+  .deleted { display: none !important; } /* Use important to ensure hiding */
+  .hidedItem { display: none !important; }
+  .deleted-visible { opacity: 0.5; border-style: dashed; display: block !important; /* Ensure it's visible when class applied */ }
+  .starred-item { border-left: 3px solid var(--color-yellow); }
+  
+  /* ====== Card Item Styles (Common) ====== */
+  .card-item { overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+  .card-thumbnail { height: 160px; background-color: var(--background-secondary-alt); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+  .card-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+  .card-thumbnail.no-thumbnail { font-size: 3.5em; color: var(--text-faint); font-weight: bold; }
+  .card-content { padding: 12px 15px; flex-grow: 1; display: flex; flex-direction: column; }
+  .card-title { font-size: var(--font-ui-medium); font-weight: bold; margin: 0 0 8px 0; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; min-height: calc(1.35em * 3); }
+  .card-title a { color: var(--text-normal); text-decoration: none; }
+  .card-meta { font-size: var(--font-ui-small); color: var(--text-muted); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 5px; }
+  .card-feed-name { font-style: italic; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+  .card-date { white-space: nowrap; flex-shrink: 0; }
+  .card-actions { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--background-modifier-border); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .card-item-star { font-size: 1.3em; padding: 0 4px; background: none; border: none; cursor: pointer; color: var(--text-faint); line-height: 1; }
+  .card-item-star:hover { color: var(--color-yellow); }
+  .card-item-star.starred { color: var(--color-yellow); }
+  
+  /* ====== List Item Styles (Common) ====== */
+  .list-item { padding: 10px 15px; }
+  .list-item-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .list-item-star { font-size: 1.2em; cursor: pointer; color: var(--text-faint); margin-right: 5px; flex-shrink: 0;}
+  .list-item-star:hover { color: var(--color-yellow); }
+  .list-item-star.starred { color: var(--color-yellow); }
+  .list-item-title-container { flex-grow: 1; }
+  .list-item-title { font-weight: bold; font-size: var(--font-ui-medium); color: var(--text-normal); margin-bottom: 3px;}
+  .list-item-title a { text-decoration: none; color: inherit; }
+  .list-item-title a:hover { color: var(--text-accent); }
+  .list-item-meta { font-size: var(--font-ui-small); color: var(--text-muted); white-space: nowrap; display: flex; gap: 10px; flex-wrap: wrap;}
+  .item-feed-name { font-style: italic; color: var(--text-faint); }
+  .list-item-actions { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--background-modifier-border); display: flex; flex-wrap: wrap; gap: 6px; }
+  
+  /* ====== Action Buttons (Common) ====== */
+  .item-action-button { font-size: var(--font-ui-small); padding: 3px 8px; }
+  .item-action-link { font-size: var(--font-ui-small); margin-left: 8px; color: var(--text-accent); text-decoration: none; }
+  .item-action-link:hover { text-decoration: underline; }
+  
+  /* ====== Content Display & Notes (Common) ====== */
+  .item-content-container { margin-top: 10px; padding: 10px; border: 1px dashed var(--background-modifier-border); border-radius: 4px; background-color: var(--background-primary); max-height: 50vh; overflow-y: auto; }
+  .item-content-display img { max-width: 100%; height: auto; border-radius: 3px;}
+  .item-content-display p { margin-bottom: 0.8em; line-height: 1.5; }
+  .short-note-container { margin: 10px 0; }
+  .shortNote { width: 100%; resize: vertical; min-height: 70px; font-size: var(--font-ui-small); padding: 8px; border-radius: 4px; border: 1px solid var(--background-modifier-border); }
+  
+  /* ====== Pagination (Common) ====== */
+  .pagination-container { display: flex; justify-content: center; align-items: center; padding: 20px 0 10px 0; gap: 10px; flex-shrink: 0; /* Prevent shrinking */ }
+  .pagination-button { /* Use default button styles */ }
+  .page-info { font-size: var(--font-ui-small); color: var(--text-muted); margin: 0 10px; }
+  
+  /* ====== Modal Styles (Common) ====== */
+  .modal { max-width: 80vw; width: 750px; }
+  .feed-item-modal-content .modal-header-info { display: flex; flex-wrap: wrap; gap: 5px 15px; font-size: var(--font-ui-small); color: var(--text-muted); margin-bottom: 10px; padding: 0 10px; }
+  .feed-item-modal-content .modal-original-link { margin-left: auto; }
+  .feed-item-modal-content .modal-content-body { max-height: 70vh; overflow-y: auto; padding: 10px; margin-top: 10px; line-height: 1.6; }
+  .feed-item-modal-content .modal-content-body img { max-width: 100%; height: auto; border-radius: 3px; margin-bottom: 0.5em;}
+  .feed-item-modal-content .modal-content-body p { margin-bottom: 0.8em; }
+  .feed-item-modal-content .modal-content-body blockquote { border-left-color: var(--interactive-accent); margin-left: 5px; padding-left: 10px;}
+  .feed-item-modal-content .modal-content-body pre { white-space: pre-wrap; word-break: break-all;}
+  .feed-embed-modal .modal-content, .feed-fetch-modal .modal-content { padding: 0; }
+  .embedded-modal-iframe { width: 100%; height: 80vh; border: none; }
+  .fetch-modal-container { padding: 15px; max-height: 80vh; overflow: auto; }
+  .feed-gpt-modal .modal-content { padding: 15px; }
+  .feed-gpt-modal textarea { width: 100%; margin-bottom: 10px; }
+  .feed-gpt-modal .gpt-button-container { display: flex; align-items: center; gap: 10px; margin-bottom: 10px;}
+  .feed-gpt-modal .gpt-response-area { min-height: 100px; max-height: 45vh; overflow-y: auto; background-color: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 4px; padding: 10px; font-size: var(--font-ui-small); line-height: 1.5; white-space: pre-wrap; }
+  .manageFeedsModal .modal-content { max-width: 85vw; width: 900px;}
+  .manageFeedsModal .modal-content > div:first-child { margin-bottom: 10px; font-size: var(--font-ui-small);}
+  .manageFeedsModal .modal-content > div:nth-child(2) { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px;}
+  table.manageFeedsForm { width: 100%; font-size: var(--font-ui-smaller); border-collapse: collapse; margin-top: 10px;}
+  table.manageFeedsForm th, table.manageFeedsForm td { border: 1px solid var(--background-modifier-border); padding: 4px 6px; text-align: left; vertical-align: middle;}
+  .manageFeedsForm th:nth-child(n+1):nth-child(-n+7) { cursor: pointer; }
+  .manageFeedsForm th:hover { background-color: var(--background-modifier-hover); }
+  .cellNameContainer input, .cellFolderContainer input { width: 100%; border: none; background: transparent; padding: 3px;}
+  .cellNameContainer input:focus, .cellFolderContainer input:focus { background-color: var(--background-modifier-hover); outline: 1px solid var(--interactive-accent); }
+  .manageFeedsModal button { margin: 0; }
+  
+  /* ============================================================ */
+  /* ======              MOBILE STYLES (.is-mobile)         ====== */
+  /* ============================================================ */
+  body.is-mobile .feeds-reader-container {
+      /* Ensure flex works correctly on mobile root */
+      display: flex;
+  }
+  
+  body.is-mobile .feeds-reader-left-panel {
+      position: absolute; /* Changed from fixed for better context */
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--left-panel-width-mobile-overlay);
+      z-index: 110; /* Higher z-index for overlay */
+      background-color: var(--background-secondary);
+      border-right: 1px solid var(--background-modifier-border);
+      transform: translateX(-100%); /* Hide by default */
+      transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+      overflow-y: auto;
+      padding-top: 0; /* Remove top padding, nav will handle it */
+      box-shadow: none;
+  }
+  
+  body.is-mobile .feeds-reader-left-panel:not(.panel-hidden) {
+       transform: translateX(0%);
+       box-shadow: 3px 0 15px rgba(0,0,0,0.25); /* Stronger shadow when visible */
+  }
+  
+  /* Override hidden state specifically for mobile overlay */
+  body.is-mobile .feeds-reader-left-panel.panel-hidden {
+      width: var(--left-panel-width-mobile-overlay); /* Keep width defined */
+      transform: translateX(-100%);
+      border-right: none; /* Hide border when fully hidden */
+      box-shadow: none;
+      overflow: hidden; /* Hide overflow when hidden */
+      padding: 0; /* Reset padding */
+  }
+  
+  
+  body.is-mobile .toggleNaviContainer {
+    position: fixed; /* Fixed position for mobile toggle button */
+    top: calc(var(--header-height-guess) - 30px); /* Position near top */
+    left: 8px;
+    z-index: 120; /* Highest z-index */
+    background-color: var(--background-translucent);
+    padding: 3px 5px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px var(--shadow-color);
+    /* Override absolute positioning from desktop */
+    position: fixed !important;
+    background-color: var(--background-translucent) !important;
+    padding: 3px 5px !important;
+  }
+  /* Hide the non-fixed container when mobile */
+  body.is-mobile .feeds-reader-left-panel > .toggleNaviContainer {
+      display: none;
+  }
+  
+  
+  body.is-mobile .toggleNavi {
+      padding: 4px 8px; /* Larger tap target */
+  }
+  
+  body.is-mobile .feeds-reader-right-panel {
+      width: 100% !important; /* Ensure full width */
+      margin-left: 0 !important; /* No margin */
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden; /* Prevent right panel itself from scrolling */
+  }
+  body.is-mobile .contentBoxRightpage,
+  body.is-mobile .contentBoxFullpage {
+       margin-left: 0 !important;
+  }
+  
+  /* Adjust header layout */
+  body.is-mobile .content-header {
+      padding: 8px 10px;
+      flex-wrap: wrap; /* Allow wrapping */
+  }
+  body.is-mobile .feed-title-header {
+      font-size: var(--font-ui-medium);
+      white-space: normal; /* Allow title wrapping */
+      order: 1; /* Title first */
+      width: 100%; /* Take full width initially */
+      text-align: center; /* Center title */
+      margin-bottom: 8px; /* Add space below title when wrapped */
+  }
+  body.is-mobile .header-actions {
+      order: 2; /* Actions below title */
+      width: 100%; /* Take full width */
+      justify-content: center; /* Center buttons */
+      flex-wrap: wrap; /* Allow buttons to wrap */
+  }
+  
+  
+  body.is-mobile .feed-content-area {
+      padding: 10px;
+      flex-grow: 1;
+      overflow-y: auto; /* Ensure this area scrolls */
+      -webkit-overflow-scrolling: touch; /* Smoother scrolling on iOS */
+  }
+  
+  body.is-mobile .items-container-card { gap: 10px; } /* Grid adjusted further down */
+  
+  body.is-mobile .card-thumbnail { height: 100px; } /* Smaller */
+  body.is-mobile .card-thumbnail.no-thumbnail { font-size: 2.5em; }
+  body.is-mobile .card-content { padding: 8px 10px; }
+  body.is-mobile .card-title { font-size: var(--font-ui-small); -webkit-line-clamp: 2; min-height: calc(1.35em * 2); margin-bottom: 6px; }
+  body.is-mobile .card-meta { font-size: var(--font-ui-smaller); margin-bottom: 8px; gap: 5px; flex-wrap: wrap; /* Allow meta to wrap */ justify-content: flex-start; }
+  body.is-mobile .card-actions { padding-top: 8px; gap: 4px 6px; /* Row and column gap */ }
+  body.is-mobile .item-action-button { font-size: var(--font-ui-smaller); padding: 3px 6px; }
+  body.is-mobile .item-action-link { font-size: var(--font-ui-smaller); }
+  
+  body.is-mobile .list-item { padding: 8px 10px; }
+  body.is-mobile .list-item-header { gap: 8px; }
+  body.is-mobile .list-item-title { font-size: var(--font-ui-small); }
+  body.is-mobile .list-item-meta { font-size: var(--font-ui-smaller); gap: 8px; flex-wrap: wrap; }
+  body.is-mobile .list-item-actions { padding-top: 6px; gap: 4px 6px; }
+  
+  body.is-mobile .page-actions { padding: 8px 0; margin-bottom: 10px; gap: 8px; justify-content: center; }
+  body.is-mobile .page-action-button { font-size: var(--font-ui-smaller); }
+  body.is-mobile .pagination-container { padding: 15px 0 5px 0; gap: 8px; flex-wrap: wrap; justify-content: center;}
+  body.is-mobile .page-info { font-size: var(--font-ui-smaller); text-align: center; width: 100%; }
+  
+  body.is-mobile .modal { max-width: 95vw; width: auto; }
+  body.is-mobile .feed-item-modal-content .modal-content-body { max-height: 80vh; } /* Adjusted from 85vh */
+  
+  body.is-mobile .manageFeedsModal .modal-content { max-width: 95vw; width: auto; }
+  body.is-mobile table.manageFeedsForm { font-size: var(--font-ui-smaller); }
+  body.is-mobile table.manageFeedsForm th,
+  body.is-mobile table.manageFeedsForm td { padding: 3px 4px; }
+  body.is-mobile .manageFeedsModal .modal-content > div:nth-child(2) { gap: 5px; }
+  body.is-mobile .manageFeedsModal button { font-size: var(--font-ui-smaller); }
+  
+  
+  /* ============================================================ */
+  /* ======              TABLET STYLES (.is-tablet)         ====== */
+  /* ============================================================ */
+  /* Overrides .is-mobile styles for tablets */
+  
+  body.is-tablet .feeds-reader-left-panel {
+      position: relative; /* Restore relative positioning */
+      transform: translateX(0%); /* Ensure it's visible */
+      width: var(--left-panel-width-tablet); /* Use tablet width */
+      padding-top: 0;
+      box-shadow: none;
+      border-right: 1px solid var(--background-modifier-border);
+      height: 100%;
+      overflow-y: auto;
+      z-index: 10; /* Restore default z-index */
+  }
+  
+  /* Restore desktop-like toggle button positioning for tablets */
+  body.is-tablet .toggleNaviContainer {
+      position: absolute !important; /* Override fixed */
+      top: 0.5em !important;
+      left: 5px !important;
+      background-color: var(--background-secondary) !important;
+      padding: 2px 0px 5px 0px !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      z-index: 15; /* Above left panel */
+  }
+  /* Hide the mobile-specific fixed toggle button container on tablet */
+  body.is-tablet > .toggleNaviContainer {
+      /* display: none; */ /* This might be tricky if structure changes */
+  }
+  
+  
+  body.is-tablet .feeds-reader-right-panel {
+      margin-left: var(--left-panel-width-tablet) !important;
+      width: calc(100% - var(--left-panel-width-tablet));
+  }
+  
+  body.is-tablet .content-header {
+      flex-wrap: nowrap; /* Prevent wrapping on tablet */
+      padding: 8px 15px; /* Restore some padding */
+  }
+  body.is-tablet .feed-title-header {
+      order: initial; /* Restore default order */
+      width: auto; /* Restore auto width */
+      text-align: left; /* Restore left align */
+      margin-bottom: 0; /* Remove extra margin */
+  }
+  body.is-tablet .header-actions {
+       order: initial; /* Restore default order */
+       width: auto; /* Restore auto width */
+       justify-content: flex-end; /* Align buttons right */
+       flex-wrap: nowrap;
+  }
+  
+  body.is-tablet .items-container-card {
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+       gap: 12px;
+  }
+  
+  body.is-tablet .card-title { font-size: var(--font-ui-small); }
+  body.is-tablet .list-item-title { font-size: var(--font-ui-small); }
+  body.is-tablet .card-content { padding: 10px 12px; }
+  body.is-tablet .list-item { padding: 10px 12px; }
+  
+  
+  /* ============================================================ */
+  /* ======              PHONE STYLES (.is-phone)           ====== */
+  /* ============================================================ */
+  /* Overrides .is-mobile styles specifically for phones (narrow screens) */
+  
+  body.is-phone .items-container-card {
+      /* Force single column on phones */
+      grid-template-columns: 1fr;
+      gap: 12px;
+  }
+  
+  body.is-phone .card-meta {
+      /* Ensure meta wraps nicely in single column */
+      flex-wrap: wrap;
+      justify-content: flex-start;
+  }
+  
+  body.is-phone .page-info {
+      /* Maybe hide page count if too cluttered */
+      /* display: none; */
+  }
+  
+  /* Adjust manage feeds table further for phones */
+  body.is-phone table.manageFeedsForm {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+  }
+  /* Example: Hide less critical columns on phone */
+  body.is-phone table.manageFeedsForm th:nth-child(4), /* Read */
+  body.is-phone table.manageFeedsForm td:nth-child(4),
+  body.is-phone table.manageFeedsForm th:nth-child(5), /* Deleted */
+  body.is-phone table.manageFeedsForm td:nth-child(5),
+  body.is-phone table.manageFeedsForm th:nth-child(6), /* Avg Size */
+  body.is-phone table.manageFeedsForm td:nth-child(6) {
+       /* display: none; */ /* Uncomment to hide */
+  }
