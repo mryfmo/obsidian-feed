@@ -20,7 +20,8 @@ This plugin is currently under testing and is not guaranteed to work.
 - [ ] Collecting and viewing content from Podcast, YouTube, Reddit, HackerNews, Discord, Slack, and Gmail
 - [ ] Adding translation functionality
 - [ ] Adding Text-to-Speech functionality
-- [ ] Added icons for each content type
+- [ ] Adding icons for each content type
+- [ ] Adding Import/Export feeds functionality
 ### Extensions
 - [ ] Integration with [Obsidian Web Clipper](https://github.com/obsidianmd/obsidian-clipper)
   - [ ] Automatic tagging (LLM collaboration)

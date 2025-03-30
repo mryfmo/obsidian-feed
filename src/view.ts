@@ -1,249 +1,253 @@
-// --- START OF FILE view.ts ---
-
-import { ItemView, WorkspaceLeaf, Notice, App } from "obsidian"; // Import App type
+// Imports including RssFeed types and necessary Obsidian types
+import { ItemView, WorkspaceLeaf, Notice, App, Component } from "obsidian";
 import { GLB } from "./globals";
-// Removed direct imports of functions, will use plugin instance methods
-// import { saveFeedsData, loadSubscriptions, loadFeedsStoredData, createFeedBar, show_feed, makeDisplayList } from "./main";
-import FeedsReader from "./main"; // Import the plugin class itself
+import FeedsReader from "./main";
+import { RssFeedContent, RssFeedItem } from './getFeed'; // ★★★ Import RssFeed types ★★★
 
 export const VIEW_TYPE_FEEDS_READER = "feeds-reader-view";
-// ★★★ Constant Plugin ID ★★★
-const PLUGIN_ID = 'feeds-reader';
+const PLUGIN_ID = 'feeds-reader'; // Ensure consistent Plugin ID
 
 export class FRView extends ItemView {
-  // Explicitly declare app property (inherited from ItemView)
-  // app: App; // This is inherited, no need to redeclare if types are correct
+    plugin: FeedsReader | null = null; // Store plugin instance
 
-  constructor(leaf: WorkspaceLeaf) {
-    super(leaf);
-    // Ensure app is assigned (though it's usually done by Obsidian's framework)
-    // this.app is automatically assigned by the superclass (ItemView)
-  }
-
-  // Helper to get the plugin instance
-  private getPlugin(): FeedsReader | null {
-    // Access plugins via this.app (inherited from ItemView)
-    // ★★★ Check if this.app exists first ★★★
-    if (!this.app) {
-        console.error("Feeds Reader: this.app is not available in FRView.getPlugin().");
-        return null;
-    }
-    // ★★★ Since App.plugins is not defined, use (this.app as any) to avoid errors ★★★
-    const pluginsObject = (this.app as any).plugins;
-    if (!pluginsObject) { // ?.plugins は使わず、まず pluginsObject の存在を確認
-        console.error("Feeds Reader: Cannot access internal plugins object on app instance.");
-        return null;
+    constructor(leaf: WorkspaceLeaf) {
+        super(leaf);
+        this.plugin = this.getPluginInstance();
     }
 
-    // Get plugin from internal plugins object
-    // ★★★ Use hardcoded plugin ID ★★★
-    const plugin = pluginsObject.plugins?.[PLUGIN_ID] as FeedsReader | undefined;
-
-    if (plugin instanceof FeedsReader) {
-        return plugin;
-    }
-
-    // Check enabled plugins (if they exist)
-    // ★★★ Use hardcoded plugin ID ★★★
-    const enabledPlugins = pluginsObject.enabledPlugins;
-    if (enabledPlugins instanceof Set && enabledPlugins.has(PLUGIN_ID)) {
-         console.error(`Feeds Reader: Plugin instance with ID '${PLUGIN_ID}' is enabled but not found or has incorrect type!`);
-         new Notice("Feeds Reader plugin instance type error.", 3000);
-    } else if (!plugin) {
-         console.warn(`Feeds Reader: Plugin with ID '${PLUGIN_ID}' not found among loaded plugins.`);
-         // console.log("Available plugins:", pluginsObject.plugins); // For debugging
-    }
-
-
-    return null; // Return null if not found or wrong type
-  }
-
-
-  getViewType() {
-    return VIEW_TYPE_FEEDS_READER;
-  }
-
-  getDisplayText() {
-    // Dynamically update display text based on current view
-    if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
-        return "Starred Items";
-    } else if (GLB.currentFeedName) {
-        // Truncate long feed names if necessary for display
-        const maxLength = 30;
-        const name = GLB.currentFeedName.length > maxLength
-                   ? GLB.currentFeedName.substring(0, maxLength) + "..."
-                   : GLB.currentFeedName;
-        return `Feed: ${name}`;
-    }
-    return "Feeds Reader";
-  }
-
-  // Method to update the display text of the view header
-  updateHeaderText() {
-    const newTitle = this.getDisplayText();
-    // Try to find the title element within the view's container
-    // Obsidian 1.5+ uses .view-header-title-container .view-header-title
-    const titleEl = this.containerEl.querySelector('.view-header-title-container .view-header-title')
-                 || this.containerEl.querySelector('.view-header-title'); // Fallback for older versions
-    if (titleEl) {
-      titleEl.textContent = newTitle;
-    }
-    // Setting leaf display text might cause issues or be inconsistent,
-    // rely on getDisplayText() for automatic updates by Obsidian if possible.
-    // this.leaf.setDisplayText(newTitle); // Avoid if causing errors or not working reliably
-  }
-
-
-  async onOpen() {
-    const plugin = this.getPlugin();
-    if (!plugin) {
-        console.error('Feeds Reader: Could not get plugin instance in onOpen.');
-        new Notice('Feeds Reader plugin instance error.', 3000);
-        return; // Stop initialization if plugin isn't available
-    }
-
-    const startTime = performance.now();
-    // Load data with error handling using plugin methods
-    try { await plugin.loadSubscriptions(); } catch (e: any) {
-        console.error("Failed to load subscriptions:", e);
-        new Notice(`Failed to load subscriptions: ${e.message}`, 5000);
-    }
-    try { await plugin.loadFeedsStoredData(); } catch (e: any) {
-        console.error("Failed to load stored feed data:", e);
-        new Notice(`Failed to load feed data: ${e.message}`, 5000);
-    }
-
-    // Performance notice
-    const endTime = performance.now();
-    const timeSpent = (endTime - startTime) / 1e3;
-     if (timeSpent > 0.1) { // Show notice only if loading takes noticeable time
-        const tStr = timeSpent.toFixed(2);
-        new Notice(`Feeds data loaded in ${tStr} seconds.`, 2000);
-     }
-
-
-    const container = this.containerEl.children[1];
-    if (!container) {
-      console.error('Feeds Reader: Failed to get container element.');
-      new Notice('Failed to initialize Feeds Reader view.', 3000);
-      return;
-    }
-
-    container.empty();
-    container.addClass('feeds-reader-container');
-
-    // Set initial CSS variable for card width from loaded settings
-    document.documentElement.style.setProperty('--card-item-width', `${GLB.settings?.cardWidth || 280}px`);
-
-    // --- Left Panel ---
-    const leftPanel = container.createEl('div', { cls: 'feeds-reader-left-panel' });
-    leftPanel.id = 'feedsReaderLeftPanel';
-
-    // Toggle Button Container
-    const toggleNaviContainer = leftPanel.createEl('div', { cls: 'toggleNaviContainer' });
-    toggleNaviContainer.id = 'toggleNaviContainer';
-    const toggleNavi = toggleNaviContainer.createEl('span', { text: ">", cls: 'toggleNavi' });
-    toggleNavi.id = 'toggleNavi';
-    const toggleNaviAux = toggleNaviContainer.createEl('span', { cls: 'toggleNaviAux' });
-    toggleNaviAux.id = 'toggleNaviAux';
-
-    // Navigation Bar
-    const navigation = leftPanel.createEl("div", { cls: 'navigation naviBarShown' }); // Corrected 'class' to 'cls'
-    navigation.id = 'naviBar';
-
-    // --- Top Management Menu ---
-    const manage = navigation.createEl('div', { cls: 'manage' });
-
-    // Starred Items Link
-    const starredItemsDiv = manage.createEl('div', { cls: 'starred-items-section nav-item' });
-    const starredLink = starredItemsDiv.createEl('span', { text: '★ Starred Items', cls: 'nav-item-link' });
-    starredLink.id = 'showStarredItems';
-    if (GLB.currentFeed === GLB.STARRED_VIEW_ID) starredLink.addClass('showingFeed');
-
-    manage.createEl('hr');
-
-    // Filter Menu
-    const filterGroup = manage.createEl('div', { cls: 'filter-group' });
-    filterGroup.createEl('span', { text: 'View:', cls: 'filter-label' });
-    const filterAll = filterGroup.createEl('span', { text: "All", cls: 'filter-item' }); filterAll.id = 'filterAll';
-    const filterUnread = filterGroup.createEl('span', { text: "Unread", cls: 'filter-item' }); filterUnread.id = 'filterUnread';
-    const filterStarred = filterGroup.createEl('span', { text: "Starred", cls: 'filter-item' }); filterStarred.id = 'filterStarred';
-    // Set initial active filter based on GLB state
-    const activeFilterId = `filter${GLB.filterMode.charAt(0).toUpperCase() + GLB.filterMode.slice(1)}`;
-    // Wait for elements to be in DOM before adding class (or use direct reference)
-    // queueMicrotask(() => { document.getElementById(activeFilterId)?.addClass('filter-active'); });
-    if (GLB.filterMode === 'all') filterAll.addClass('filter-active');
-    else if (GLB.filterMode === 'unread') filterUnread.addClass('filter-active');
-    else if (GLB.filterMode === 'starred') filterStarred.addClass('filter-active');
-
-
-    manage.createEl('hr');
-
-    // Other Management Buttons
-    const search = manage.createEl('div').createEl('span', { text: "Search Feed", cls: 'nav-item-link' }); search.id = 'search';
-    const toggleOrder = manage.createEl('div').createEl('span', { text: `Sort: ${GLB.itemOrder}`, cls: 'nav-item-link' }); toggleOrder.id = 'toggleOrder';
-    const saveFeedsDataBtn = manage.createEl('div').createEl('span', { text: "Save Data", cls: 'nav-item-link' }); saveFeedsDataBtn.id = 'saveFeedsData';
-    const updateAll = manage.createEl('div').createEl('span', { text: "Update All Feeds", cls: 'nav-item-link' }); updateAll.id = 'updateAll';
-    const undo = manage.createEl('div').createEl('span', { text: "Undo Last Action", cls: 'nav-item-link' }); undo.id = 'undo';
-    const add = manage.createEl('div').createEl('span', { text: "Add Feed", cls: 'nav-item-link' }); add.id = 'addFeed';
-    const manageFeeds = manage.createEl('div').createEl('span', { text: "Manage Feeds", cls: 'nav-item-link' }); manageFeeds.id = 'manageFeeds';
-    manage.createEl('hr');
-
-    // --- Feed List Section ---
-    navigation.createEl('h3', {text: 'Feeds', cls: 'feed-list-header'});
-    const feedTableDiv = navigation.createEl('div', { cls: 'feedTableDiv' });
-    const feedTable = feedTableDiv.createEl('table');
-    feedTable.id = 'feedTable';
-    await plugin.createFeedBar(); // Await the creation using plugin method
-
-    // Thanks/Complain Link
-    if (GLB.feedList && GLB.feedList.length > 0) {
-      const thanksDiv = navigation.createDiv({cls: 'thanks-complain'});
-      thanksDiv.createEl('hr');
-      const thanksTable = thanksDiv.createEl('table');
-      const thanks = thanksTable.createEl('tr', {cls: 'thanks'});
-      // Corrected: Use attr for target attribute
-      thanks.createEl('td').createEl('a', { text: "Buy me a coffee", href: "https://www.buymeacoffee.com/fjdu", attr: { target: '_blank', rel: 'noopener noreferrer'} });
-      thanks.createEl('td').createEl('span', { text: "|" });
-      thanks.createEl('td').createEl('a', { text: "Report Issue", href: "https://github.com/fjdu/obsidian-feed/issues", attr: { target: '_blank', rel: 'noopener noreferrer'} });
-    }
-
-    // --- Right Panel ---
-    const rightPanel = container.createEl('div', { cls: 'feeds-reader-right-panel contentBoxRightpage' });
-    rightPanel.id = 'contentBox';
-
-    // Content Header (placeholder)
-    const contentHeader = rightPanel.createEl('div', { cls: 'content-header' });
-    contentHeader.id = 'contentHeader';
-
-    // Feed Content Area (placeholder)
-    const feed_content = rightPanel.createEl('div', { cls: 'feed-content-area' });
-    feed_content.id = 'feed_content';
-
-    // --- Initial Display Logic ---
-    if (GLB.currentFeed) {
-        plugin.makeDisplayList(); // Use plugin method
-        plugin.show_feed();      // Use plugin method
-        document.getElementById(GLB.currentFeed)?.addClass('showingFeed');
-    } else {
-      feed_content.setText('Select a feed or "Starred Items" from the left panel.');
-    }
-     this.updateHeaderText(); // Set initial header text
-  }
-
-  async onClose() {
-    const plugin = this.getPlugin();
-    try {
-        if (plugin) {
-            await plugin.saveFeedsData(); // Use plugin method
-        } else {
-            console.warn("Feeds Reader: Plugin instance not found during onClose, data might not be saved.");
+    // Helper to get the plugin instance
+    private getPluginInstance(): FeedsReader | null {
+        // Use type assertion as App.plugins is not in official obsidian.d.ts
+        const plugins = (this.app as any).plugins;
+        if (!plugins) {
+             console.error("FRView: Cannot access plugins object.");
+             return null;
         }
-    } catch(e) {
-        console.error("Error saving data on close:", e);
+        const pluginInstance = plugins.plugins?.[PLUGIN_ID];
+        if (pluginInstance instanceof FeedsReader) {
+            return pluginInstance;
+        } else {
+            console.error(`FRView: Plugin instance '${PLUGIN_ID}' not found or invalid type.`);
+            return null;
+        }
     }
-    // Clean up DOM modifications
-    document.documentElement.style.removeProperty('--card-item-width');
-    this.containerEl.empty(); // Empty the container
-  }
+
+    getViewType(): string {
+        return VIEW_TYPE_FEEDS_READER;
+    }
+
+    getDisplayText(): string {
+        // Generate title based on current feed state in GLB
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+            return "Starred Items";
+        } else if (GLB.currentFeedName) {
+            // Simple truncation, adjust as needed
+            const maxLength = 30;
+            const name = GLB.currentFeedName.length > maxLength
+                       ? GLB.currentFeedName.substring(0, maxLength) + "..."
+                       : GLB.currentFeedName;
+            return `Feed: ${name}`;
+        }
+        return "Feeds Reader"; // Default/Initial title when no feed is selected
+    }
+
+    // Method to update the display text of the view header
+    updateHeaderText() {
+        const newTitle = this.getDisplayText();
+        // Find the title element using Obsidian's recommended selectors
+        const titleEl = this.containerEl.querySelector('.view-header-title-container .view-header-title')
+                     || this.containerEl.querySelector('.view-header-title'); // Fallback
+        if (titleEl) {
+            titleEl.textContent = newTitle;
+        }
+        // ★★★ Removed this.leaf.setDisplayText(newTitle); as it's not a valid method ★★★
+        // ItemView automatically uses getDisplayText for the leaf's title.
+    }
+
+
+    async onOpen() {
+        if (!this.plugin) {
+            console.error('Feeds Reader View: Could not get plugin instance in onOpen.');
+            this.contentEl.setText("Error: Feeds Reader plugin instance not found.");
+            return; // Stop initialization
+        }
+
+        // --- Container setup ---
+        const container = this.contentEl; // Use contentEl for ItemView
+        container.empty();
+        container.addClass('feeds-reader-content-view'); // Add main class for styling
+
+        // Set initial CSS variable for card width
+        document.documentElement.style.setProperty('--card-item-width', `${GLB.settings?.cardWidth || 280}px`);
+
+        // --- Create Structure for Header and Content Area ---
+        // Content Header (will be populated by renderContent)
+        const contentHeader = container.createEl('div', { cls: 'content-header' });
+        contentHeader.id = 'contentHeader';
+
+        // Feed Content Area (will be populated by renderContent)
+        const feed_content = container.createEl('div', { cls: 'feed-content-area' });
+        feed_content.id = 'feed_content';
+
+        // --- Initial Display ---
+        // Show a loading message or initial prompt
+        feed_content.setText('Select a feed or "Starred Items" from the sidebar.');
+
+        // Trigger initial rendering *after* data is potentially loaded by the plugin
+        // The plugin's onload/onLayoutReady should call refreshDisplay after loading data.
+        this.plugin.refreshDisplay(); // Initial render based on current state
+
+        this.updateHeaderText(); // Set initial title
+    }
+
+    // Method called by the main plugin to render/update the content area
+    renderContent() {
+        if (!this.plugin) {
+            console.error("FRView.renderContent: Plugin instance not available.");
+            return;
+        }
+        if (!this.contentEl) {
+            console.error("FRView.renderContent: contentEl not available.");
+            return;
+        }
+
+
+        const contentHeader = this.contentEl.querySelector('#contentHeader') as HTMLElement;
+        const feed_content = this.contentEl.querySelector('#feed_content') as HTMLElement;
+
+        if (!contentHeader || !feed_content) {
+            console.error("Feeds Reader View: Header or content area not found during render.");
+            // Attempt to recreate if missing? Or just return.
+            // For now, return to avoid further errors.
+            return;
+        }
+
+        // --- Clear previous content ---
+        contentHeader.empty();
+        feed_content.empty();
+
+        // --- Determine what to display based on GLB state ---
+        const isStarredView = GLB.currentFeed === GLB.STARRED_VIEW_ID;
+        // Use displayIndices for regular feeds, starredItemsList for starred view
+        const itemsToDisplay = isStarredView ? GLB.starredItemsList : GLB.displayIndices;
+        // ★★★ Ensure RssFeedContent type is available ★★★
+        let feedData: RssFeedContent | null = null;
+        if (!isStarredView && GLB.currentFeed && GLB.feedsStore) {
+            feedData = GLB.feedsStore[GLB.currentFeed];
+        }
+
+        // --- Render Header ---
+        const titleH2 = contentHeader.createEl('h2');
+        titleH2.addClass('feed-title-header');
+        if (isStarredView) {
+            titleH2.setText('★ Starred Items');
+        } else if (feedData) {
+            // Use feed title or name, provide link if available
+            const titleText = feedData.title || GLB.currentFeedName || "Feed";
+            if (feedData.link) {
+                titleH2.createEl('a', { href: feedData.link, text: titleText, attr: { target: '_blank', rel: 'noopener noreferrer' } });
+            } else {
+                titleH2.setText(titleText);
+            }
+        } else {
+            // Show default text if no feed is selected
+            titleH2.setText('Select a Feed');
+        }
+
+        // Header Actions
+        const headerActions = contentHeader.createDiv({ cls: 'header-actions' });
+        // Refresh button only for non-starred feeds
+        if (!isStarredView && GLB.currentFeed) {
+            const refreshBtn = headerActions.createEl('button', { text: 'Refresh' });
+            refreshBtn.id = 'refreshCurrentFeed'; // ID for click handler in main.ts
+        }
+        // Display mode toggle
+        const viewToggleBtn = headerActions.createEl('button', { text: GLB.displayMode === 'list' ? 'Card View' : 'List View' });
+        viewToggleBtn.id = 'toggleDisplayMode'; // ID for click handler
+        // Card width controls (only in card mode)
+        if (GLB.displayMode === 'card') {
+            const widthDecBtn = headerActions.createEl('button', { text: 'W-' });
+            widthDecBtn.id = 'decreaseCardWidth';
+            const widthIncBtn = headerActions.createEl('button', { text: 'W+' });
+            widthIncBtn.id = 'increaseCardWidth';
+        }
+
+        // --- Render Content Area ---
+        const topPageActions = feed_content.createDiv({ cls: 'page-actions top-page-actions' });
+        this.plugin.createPageActionButtons(topPageActions, itemsToDisplay.length > 0); // Render top page actions
+
+        // Items Container
+        const itemsContainer = feed_content.createDiv();
+        itemsContainer.addClass(`items-container-${GLB.displayMode}`); // Apply class based on mode
+
+        const startIndex = GLB.idxItemStart;
+        const endIndex = Math.min(itemsToDisplay.length, startIndex + GLB.nItemPerPage);
+        let itemsDisplayedCount = 0;
+
+        // --- Render Items ---
+        if (itemsToDisplay.length === 0) {
+            itemsContainer.setText(isStarredView ? 'No starred items found.' : `No items match the current filter ('${GLB.filterMode}').`);
+        } else if (startIndex >= itemsToDisplay.length) {
+            itemsContainer.setText('No more items on this page.'); // Should ideally not happen with pagination logic
+        } else {
+            for (let i = startIndex; i < endIndex; i++) {
+                 // ★★★ Ensure RssFeedItem type is available ★★★
+                let item: RssFeedItem | null = null;
+                let feedUrl: string | null = null;
+                let originalIndex = -1;
+
+                if (isStarredView) {
+                    // itemsToDisplay is GLB.starredItemsList here
+                    const starredInfo = itemsToDisplay[i] as { feedUrl: string; originalIndex: number; item: RssFeedItem };
+                    if (starredInfo) {
+                        item = starredInfo.item;
+                        feedUrl = starredInfo.feedUrl;
+                        originalIndex = starredInfo.originalIndex;
+                    }
+                } else if (GLB.currentFeed) {
+                    // itemsToDisplay is GLB.displayIndices here
+                    originalIndex = itemsToDisplay[i] as number;
+                     // Check bounds before accessing
+                     if (originalIndex >= 0 && originalIndex < GLB.feedsStore[GLB.currentFeed]?.items.length) {
+                         item = GLB.feedsStore[GLB.currentFeed].items[originalIndex];
+                         feedUrl = GLB.currentFeed;
+                     } else {
+                          console.warn(`Invalid index ${originalIndex} encountered for feed ${GLB.currentFeed}`);
+                     }
+                }
+
+                // Ensure we have valid data before rendering
+                if (item && feedUrl !== null && originalIndex !== -1) {
+                    // Call plugin methods to create item elements
+                    if (GLB.displayMode === 'card') {
+                        this.plugin.createCardItem(itemsContainer, item, originalIndex, feedUrl, isStarredView);
+                    } else {
+                        this.plugin.createListItem(itemsContainer, item, originalIndex, feedUrl, isStarredView);
+                    }
+                    itemsDisplayedCount++;
+                } else {
+                     console.warn("Skipping item render due to missing data at index:", i, "Feed:", feedUrl, "Original Index:", originalIndex);
+                }
+            }
+        }
+
+        // --- Render Bottom Actions & Pagination ---
+        if (itemsDisplayedCount > 0) { // Only show if items were actually rendered
+            // Render bottom actions only if enough items displayed (e.g., 5 or more)
+            if (itemsDisplayedCount >= 5) {
+                const bottomPageActions = feed_content.createDiv({ cls: 'page-actions bottom-page-actions' });
+                this.plugin.createPageActionButtons(bottomPageActions, true);
+            }
+            // Render pagination controls
+            this.plugin.createPagination(feed_content, itemsToDisplay.length);
+        }
+
+        // Update the header text (title) after rendering
+        this.updateHeaderText();
+    }
+
+    async onClose() {
+        // Cleanup related to this view if necessary
+        this.contentEl.empty(); // Clear content when view closes
+    }
 }

@@ -1,5 +1,7 @@
-import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom, request, TFile, WorkspaceLeaf, Menu, Component, Vault, DataAdapter, Platform } from 'obsidian'; // Import Platform
+// Imports including new View and Platform
+import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom, request, TFile, WorkspaceLeaf, Menu, Component, Vault, DataAdapter, Platform} from 'obsidian';
 import { FRView, VIEW_TYPE_FEEDS_READER } from "./view";
+import { FeedListView, VIEW_TYPE_FEED_LIST } from "./feed-list-view"; // Import new view
 import { getFeedItems, RssFeedContent, RssFeedItem, nowdatetime, itemKeys, normalizeUrl } from "./getFeed";
 import { GLB, FeedsReaderSettings } from "./globals";
 import pako from 'pako';
@@ -31,62 +33,135 @@ const DEFAULT_SETTINGS: Partial<FeedsReaderSettings> = {
 export default class FeedsReader extends Plugin {
 	settings: FeedsReaderSettings;
     frViewInstance: FRView | null = null;
+    feedListViewInstance: FeedListView | null = null; // Keep track of sidebar view
 
 	async onload() {
 		console.log('Loading Feeds Reader Plugin');
         await this.loadSettings();
+
+        // --- Register BOTH views ---
+        this.registerView(
+            VIEW_TYPE_FEEDS_READER,
+            (leaf) => {
+                this.frViewInstance = new FRView(leaf);
+                return this.frViewInstance;
+            }
+        );
+        this.registerView(
+            VIEW_TYPE_FEED_LIST,
+            (leaf) => {
+                 this.feedListViewInstance = new FeedListView(leaf);
+                 return this.feedListViewInstance;
+            }
+        );
+        // --- End Register BOTH views ---
+
         this.app.workspace.onLayoutReady(async () => {
-            this.registerView(VIEW_TYPE_FEEDS_READER, (leaf) => { this.frViewInstance = new FRView(leaf); return this.frViewInstance; });
-            // Check if icon already exists before adding
+            // --- Ribbon icon logic ---
             if (!document.body.querySelector('div.app-container svg[data-icon-name="feeds-reader-icon"]')) {
                 try {
                     addIcon("feeds-reader-icon", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="currentColor" d="M10 80 Q 50 80, 90 80" stroke="currentColor" stroke-width="8" fill="none"/><path fill="currentColor" d="M10 60 Q 35 60, 60 60" stroke="currentColor" stroke-width="8" fill="none"/><path fill="currentColor" d="M10 40 Q 20 40, 30 40" stroke="currentColor" stroke-width="8" fill="none"/><circle cx="15" cy="15" r="10" fill="currentColor"/></svg>`);
-                    this.addRibbonIcon('feeds-reader-icon', 'Open Feeds Reader', () => this.activateView());
+                    this.addRibbonIcon('feeds-reader-icon', 'Open Feeds Reader', () => this.activateView(true)); // Pass true to activate sidebar too
                  } catch (e) {
-                      console.warn("Feeds Reader: Could not add ribbon icon.", e);
+                     console.warn("Feeds Reader: Could not add ribbon icon.", e);
                  }
             } else {
-                // Icon exists, just add ribbon action if needed (though usually done once)
-                 this.addRibbonIcon('feeds-reader-icon', 'Open Feeds Reader', () => this.activateView());
+                 this.addRibbonIcon('feeds-reader-icon', 'Open Feeds Reader', () => this.activateView(true)); // Pass true to activate sidebar too
             }
+            // --- End Ribbon icon logic ---
+
+            // Initial data loading after layout is ready
+             await this.loadFeedsDataWithNotice();
         });
         this.addSettingTab(new FeedReaderSettingTab(this.app, this));
+        // Global listeners remain
         this.registerDomEvent(document, 'click', this.handleClick.bind(this));
         this.registerDomEvent(document, 'contextmenu', this.handleContextMenu.bind(this));
 	}
 
-	async onunload() { console.log('Unloading Feeds Reader Plugin'); await this.saveFeedsData(); this.app.workspace.detachLeavesOfType(VIEW_TYPE_FEEDS_READER); this.frViewInstance = null; }
-    async activateView() { let leaf=this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER)[0]; if(!leaf){leaf=this.app.workspace.getLeaf('tab'); if(!leaf)leaf=this.app.workspace.getLeaf(false); if(!leaf){console.error("Feeds Reader: Failed to get leaf."); new Notice("Failed to open view."); return;} await leaf.setViewState({type:VIEW_TYPE_FEEDS_READER,active:true});} if(leaf)this.app.workspace.revealLeaf(leaf); }
+	async onunload() {
+        console.log('Unloading Feeds Reader Plugin');
+        await this.saveFeedsData(); // Save data on unload
+        this.app.workspace.detachLeavesOfType(VIEW_TYPE_FEEDS_READER);
+        this.app.workspace.detachLeavesOfType(VIEW_TYPE_FEED_LIST); // Detach sidebar view too
+        this.frViewInstance = null;
+        this.feedListViewInstance = null;
+    }
+
+    // Modified activateView to handle both main and sidebar views
+    async activateView(activateSidebar: boolean = true) {
+        let mainLeaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER)[0];
+        if (!mainLeaf) {
+            mainLeaf = this.app.workspace.getLeaf('tab'); // Get a leaf for the main area
+             if (!mainLeaf) { console.error("Feeds Reader: Failed to get main leaf."); new Notice("Failed to open main view."); return; }
+            await mainLeaf.setViewState({ type: VIEW_TYPE_FEEDS_READER, active: true });
+        }
+        // Ensure main view is revealed and focused
+        this.app.workspace.revealLeaf(mainLeaf);
+
+        if (activateSidebar) {
+            // Use ensureSideLeaf for robust sidebar activation
+            await this.app.workspace.ensureSideLeaf(VIEW_TYPE_FEED_LIST, 'left', { active: false, reveal: true });
+             // Ensure the sidebar view gets updated after activation
+             if(this.feedListViewInstance) {
+                 // A small delay might be needed for the DOM to be ready after reveal
+                 await sleep(50); // Example delay
+                 this.feedListViewInstance.updateFeedHighlighting();
+             }
+        }
+    }
+
+    // Helper function for initial data loading with notices
+    async loadFeedsDataWithNotice() {
+        const startTime = performance.now();
+        try { await this.loadSubscriptions(); } catch (e: any) {
+            console.error("Failed to load subscriptions:", e);
+            new Notice(`Failed to load subscriptions: ${e.message}`, 5000);
+        }
+        try { await this.loadFeedsStoredData(); } catch (e: any) {
+            console.error("Failed to load stored feed data:", e);
+             new Notice(`Failed to load feed data: ${e.message}`, 5000);
+        }
+        const endTime = performance.now();
+        const timeSpent = (endTime - startTime) / 1e3;
+        if (timeSpent > 0.1) { // Show notice only if loading takes noticeable time
+            const tStr = timeSpent.toFixed(2);
+            new Notice(`Feeds data loaded in ${tStr} seconds.`, 2000);
+        }
+
+
+        // After loading data, update both views if they exist
+        await this.refreshFeedListSidebar(); // Update sidebar content
+        this.refreshDisplay(); // Update main view content
+    }
+
 	async loadSettings() {
         this.settings=Object.assign({},DEFAULT_SETTINGS,await this.loadData());
         // Populate GLB from settings
         GLB.feeds_reader_dir=this.settings.feeds_reader_dir;
-        GLB.feeds_data_fname=this.settings.feeds_data_fname;
+        GLB.feeds_data_fname=this.settings.feeds_data_fname; // Legacy filename
         GLB.subscriptions_fname=this.settings.subscriptions_fname;
         GLB.saved_snippets_fname='snippets.md';
-        GLB.feeds_store_base='feeds-store';
+        GLB.feeds_store_base='feeds-store'; // Base name for storage chunks
         GLB.nItemPerPage=this.settings.nItemPerPage > 0 ? this.settings.nItemPerPage : 20;
         // Assign the whole settings object to GLB.settings for easy access
         GLB.settings = this.settings;
-        // Remove direct assignments to GLB for settings that should be accessed via GLB.settings
-        // GLB.saveContent=this.settings.saveContent; // REMOVED
-        // GLB.saveSnippetNewToOld=this.settings.saveSnippetNewToOld; // REMOVED
+        // Initialize GLB state based on settings
         GLB.displayMode=this.settings.defaultDisplayMode || 'card';
         GLB.cardWidth=this.settings.cardWidth > 100 ? this.settings.cardWidth : 280;
         GLB.itemOrder='New to old'; // Default sort order
         GLB.filterMode='all';      // Default filter mode
-        GLB.titleOnly=false;       // Default state
-        GLB.currentFeed=null;
+        GLB.titleOnly=false;       // Default state (currently unused in UI?)
+        GLB.currentFeed=null;      // No feed selected initially
         GLB.currentFeedName='';
-        GLB.nMergeLookback=10000;   // Default value
-        GLB.lenStrPerFile=1024*1024*2; // Default value
+        // Default values for internal logic (could be made settings if needed)
+        GLB.nMergeLookback=10000;
+        GLB.lenStrPerFile=1024*1024*2; // 2MB chunk size target
         GLB.feedsStoreChange=false;
         GLB.feedsStoreChangeList=new Set<string>();
-        GLB.elUnreadCount=null;
-        GLB.elTotalCount=null;
-        GLB.elSepUnreadTotal=null;
-        GLB.maxTotalnumDisplayed=1e5; // Default value
-        GLB.nThanksSep=16;          // Default value
+        GLB.maxTotalnumDisplayed=1e5; // Threshold for showing total count
+        GLB.nThanksSep=16;          // Threshold for showing thanks link
+        // Runtime state initialization
         GLB.undoList=[];
         GLB.idxItemStart=0;
         GLB.nPage=1;
@@ -120,142 +195,1048 @@ export default class FeedsReader extends Plugin {
         await this.saveData(this.settings);
     }
 
-    getNumFromId(idstr: string | null | undefined, pref: string): number { if(!idstr)return -1; const n=pref.length; const num=idstr.substring(n); return /^\d+$/.test(num)?parseInt(num,10):-1; }
+    getNumFromId(idstr: string | null | undefined, pref: string): number {
+        if(!idstr) return -1;
+        const prefixLength = pref.length;
+        const numStr = idstr.substring(prefixLength);
+        // Use regex for robust check if it's purely digits
+        return /^\d+$/.test(numStr) ? parseInt(numStr, 10) : -1;
+    }
 
     // --- Event Handlers ---
-    async handleClick(evt: MouseEvent) { const t=evt.target as HTMLElement; if(!t)return; if(t.closest('#updateAll')){await this.updateAllFeeds();return;} if(t.closest('#saveFeedsData')||t.closest('#save_data_toggling')){await this.handleSaveData();return;} if(t.closest('#addFeed')){new AddFeedModal(this.app,this).open();return;} if(t.closest('#manageFeeds')){new ManageFeedsModal(this.app,this).open();return;} if(t.closest('#search')){this.handleSearch();return;} if(t.closest('#undo')){this.handleUndo();return;} if(t.closest('#toggleOrder')){this.handleToggleOrder(t);return;} if(t.closest('.filter-item')){this.handleFilterChange(t.id);return;} if(t.closest('#showStarredItems')){this.handleShowAllStarred();return;} const sc=t.closest<HTMLElement>('.feed-stats'); if(sc){await this.handleRefreshSingleFeed(sc);return;} const fl=t.closest<HTMLElement>('.showFeed'); if(fl){this.handleShowFeed(fl.id);return;} if(t.closest('#toggleDisplayMode')){this.handleToggleDisplayMode(t);return;} if(t.closest('#refreshCurrentFeed')){await this.handleRefreshSingleFeed(t,true);return;} if(t.closest('#decreaseCardWidth')){this.adjustCardWidth(-20);return;} if(t.closest('#increaseCardWidth')){this.adjustCardWidth(20);return;} const ab=t.closest<HTMLElement>('.item-action-button, .item-action-star, .item-action-link'); const ie=t.closest<HTMLElement>('[data-idx][data-feedurl]'); if(ie){const idS=ie.getAttribute('data-idx'); const fu=ie.getAttribute('data-feedurl'); if(idS===null||fu===null)return; const idx=parseInt(idS); const tc=t.closest('.card-title a, .list-item-title a, .card-item:not(.card-actions *)'); if(tc&&ie.contains(tc)&&!ab){evt.preventDefault(); this.showItemContentInModal(idx,fu); return;} if(ab&&ie.contains(ab)){if(ab.classList.contains('item-action-star')){this.handleToggleStar(ab,idx,fu);return;} if(ab.classList.contains('toggleRead')){this.handleToggleRead(ab,idx,fu);return;} if(ab.classList.contains('toggleDelete')){this.handleToggleDelete(ab,idx,fu);return;} if(ab.classList.contains('jotNotes')){this.handleJotNotes(idx,fu);return;} if(ab.classList.contains('saveSnippet')){await this.handleSaveSnippet(idx,fu);return;} if(ab.classList.contains('noteThis')){await this.handleNoteThis(idx,fu);return;} if(ab.classList.contains('renderMath')){this.handleRenderMath(idx,fu);return;} if(ab.classList.contains('askChatGPT')){await this.handleAskChatGPT(idx,fu);return;} if(ab.classList.contains('elEmbedButton')){this.handleEmbed(idx,fu);return;} if(ab.classList.contains('elFetch')){await this.handleFetch(idx,fu);return;}}} if(t.closest('.markPageRead')){this.handleMarkPageReadOrDelete('read');return;} if(t.closest('.markPageDeleted')){this.handleMarkPageReadOrDelete('delete');return;} if(t.closest('.removePageContent')){this.handleRemovePageContent();return;} if(t.closest('#nextPage')){this.handlePageChange(1);return;} if(t.closest('#prevPage')){this.handlePageChange(-1);return;} if(t.closest('#toggleNavi')){this.handleToggleNavi(t);return;} }
-    handleContextMenu(evt: MouseEvent) { const t=evt.target as HTMLElement; const fl=t.closest<HTMLElement>('.showFeed'); if(fl){evt.preventDefault(); const url=fl.id; const f=GLB.feedList.find(f=>f.feedUrl===url); if(!f)return; const m=new Menu(); m.addItem(i=>i.setTitle(`Update "${f.name}"`).setIcon("refresh-cw").onClick(async()=>{const s=fl.querySelector<HTMLElement>('.feed-stats'); if(s)await this.handleRefreshSingleFeed(s,false);})); m.addItem(i=>i.setTitle(`Mark all read`).setIcon("check-circle").onClick(async()=>{if(window.confirm(`Mark all in ${f.name} read?`)){this.markAllRead(url); await this.createFeedBar(); if(GLB.currentFeed===url)this.updateFeedStatsUI();}})); m.addItem(i=>i.setTitle(`Manage...`).setIcon("settings").onClick(()=>{new ManageFeedsModal(this.app,this).open();})); m.addSeparator(); m.addItem(i=>i.setTitle(`Copy URL`).setIcon("link").onClick(()=>{navigator.clipboard.writeText(url); new Notice("Copied!");})); m.showAtMouseEvent(evt); return;} const ie=t.closest<HTMLElement>('[data-idx][data-feedurl]'); if(ie){evt.preventDefault(); const idS=ie.getAttribute('data-idx'); const url=ie.getAttribute('data-feedurl'); if(idS===null||url===null)return; const idx=parseInt(idS); const item=GLB.feedsStore[url]?.items[idx]; if(!item)return; const m=new Menu(); m.addItem(i=>i.setTitle(item.read?"Unread":"Read").setIcon(item.read?"circle-off":"check-circle").onClick(()=>{const b=document.getElementById(`toggleRead${idx}`); if(b)this.handleToggleRead(b,idx,url);})); m.addItem(i=>i.setTitle(item.starred?"Unstar":"Star").setIcon(item.starred?"star-off":"star").onClick(()=>{const b=ie.querySelector<HTMLElement>('.item-action-star'); if(b)this.handleToggleStar(b,idx,url);})); if(item.link){m.addItem(i=>i.setTitle("Open Original").setIcon("external-link").onClick(()=>window.open(item.link!,'_blank'))); m.addItem(i=>i.setTitle("Copy Link").setIcon("link").onClick(()=>{navigator.clipboard.writeText(item.link!); new Notice("Copied!");}));} m.addSeparator(); m.addItem(i=>i.setTitle(item.deleted?"Undelete":"Delete").setIcon(item.deleted?"undo":"trash").onClick(()=>{const b=document.getElementById(`toggleDelete${idx}`); if(b)this.handleToggleDelete(b,idx,url);})); m.showAtMouseEvent(evt);} }
+    async handleClick(evt: MouseEvent) {
+        const target = evt.target as HTMLElement;
+        if (!target) return;
+
+        const plugin = this; // Alias for clarity
+
+        // --- Sidebar View Actions ---
+        const feedListContainer = target.closest('.feeds-reader-feed-list-container');
+        if (feedListContainer) {
+            if (target.closest('#updateAll')) { await plugin.updateAllFeeds(); return; }
+            if (target.closest('#saveFeedsData')) { await plugin.handleSaveData(); return; }
+            if (target.closest('#addFeed')) { new AddFeedModal(plugin.app, plugin).open(); return; }
+            if (target.closest('#manageFeeds')) { new ManageFeedsModal(plugin.app, plugin).open(); return; }
+            if (target.closest('#search')) { plugin.handleSearch(); return; }
+            if (target.closest('#undo')) { plugin.handleUndo(); return; }
+            if (target.closest('#toggleOrder') && target instanceof HTMLElement) { plugin.handleToggleOrder(target); return; }
+            if (target.closest('.filter-item')) { plugin.handleFilterChange(target.id); return; }
+            if (target.closest('#showStarredItems')) { plugin.handleShowAllStarred(); return; }
+            const feedStatsEl = target.closest<HTMLElement>('.feed-stats');
+            if (feedStatsEl) { await plugin.handleRefreshSingleFeed(feedStatsEl); return; }
+            const showFeedEl = target.closest<HTMLElement>('.showFeed');
+            if (showFeedEl) { plugin.handleShowFeed(showFeedEl.id); return; }
+        }
+
+        // --- Main View Actions ---
+        const mainViewContainer = target.closest('.feeds-reader-content-view');
+        if (mainViewContainer) {
+             if (target.closest('#toggleDisplayMode') && target instanceof HTMLElement) { plugin.handleToggleDisplayMode(target); return; }
+             if (target.closest('#refreshCurrentFeed')) { await plugin.handleRefreshSingleFeed(target, true); return; }
+             if (target.closest('#decreaseCardWidth')) { plugin.adjustCardWidth(-20); return; }
+             if (target.closest('#increaseCardWidth')) { plugin.adjustCardWidth(20); return; }
+             if (target.closest('.markPageRead')) { plugin.handleMarkPageReadOrDelete('read'); return; }
+             if (target.closest('.markPageDeleted')) { plugin.handleMarkPageReadOrDelete('delete'); return; }
+             if (target.closest('.removePageContent')) { plugin.handleRemovePageContent(); return; }
+             if (target.closest('#nextPage')) { plugin.handlePageChange(1); return; }
+             if (target.closest('#prevPage')) { plugin.handlePageChange(-1); return; }
+
+             // Item specific actions
+             const itemActionBtn = target.closest<HTMLElement>('.item-action-button, .item-action-star, .item-action-link');
+             const itemElement = target.closest<HTMLElement>('[data-idx][data-feedurl]');
+             if (itemElement) {
+                 const idxStr = itemElement.getAttribute('data-idx');
+                 const feedUrl = itemElement.getAttribute('data-feedurl');
+                 if (idxStr === null || feedUrl === null) return;
+                 const idx = parseInt(idxStr);
+
+                 // Click on title/card itself (not buttons)
+                 const titleOrCardClick = target.closest('.card-title a, .list-item-title a, .card-item:not(.card-actions *)');
+                 if (titleOrCardClick && itemElement.contains(titleOrCardClick) && !itemActionBtn) {
+                     evt.preventDefault();
+                     plugin.showItemContentInModal(idx, feedUrl);
+                     return;
+                 }
+
+                 // Click on action buttons (ensure itemActionBtn is HTMLElement)
+                 if (itemActionBtn instanceof HTMLElement && itemElement.contains(itemActionBtn)) {
+                     if (itemActionBtn.classList.contains('item-action-star')) { plugin.handleToggleStar(itemActionBtn, idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('toggleRead')) { plugin.handleToggleRead(itemActionBtn, idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('toggleDelete')) { plugin.handleToggleDelete(itemActionBtn, idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('jotNotes')) { plugin.handleJotNotes(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('saveSnippet')) { await plugin.handleSaveSnippet(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('noteThis')) { await plugin.handleNoteThis(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('renderMath')) { plugin.handleRenderMath(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('askChatGPT')) { await plugin.handleAskChatGPT(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('elEmbedButton')) { plugin.handleEmbed(idx, feedUrl); return; }
+                     if (itemActionBtn.classList.contains('elFetch')) { await plugin.handleFetch(idx, feedUrl); return; }
+                 }
+             }
+        }
+
+        // Handle toggleNavi button if it exists outside the sidebar container (mobile fixed button)
+        if (target.closest('#toggleNavi')) { plugin.handleToggleNavi(target); return; }
+    }
+
+    handleContextMenu(evt: MouseEvent) {
+        const target = evt.target as HTMLElement;
+         // Sidebar feed item context menu
+         const showFeedEl = target.closest<HTMLElement>('.showFeed');
+         if (showFeedEl) {
+             evt.preventDefault();
+             const url = showFeedEl.id;
+             const feed = GLB.feedList.find(f => f.feedUrl === url);
+             if (!feed) return;
+             const menu = new Menu();
+             menu.addItem(i => i.setTitle(`Update "${feed.name}"`).setIcon("refresh-cw").onClick(async () => {
+                 const statsEl = showFeedEl.querySelector<HTMLElement>('.feed-stats');
+                 if (statsEl) await this.handleRefreshSingleFeed(statsEl, false);
+             }));
+             menu.addItem(i => i.setTitle(`Mark all read`).setIcon("check-circle").onClick(async () => {
+                 if (window.confirm(`Mark all in ${feed.name} read?`)) {
+                     this.markAllRead(url);
+                     await this.refreshFeedListSidebar(); // Update sidebar UI
+                     if (GLB.currentFeed === url) this.refreshDisplay(); // Update main view if current
+                 }
+             }));
+             menu.addItem(i => i.setTitle(`Manage...`).setIcon("settings").onClick(() => {
+                 new ManageFeedsModal(this.app, this).open();
+             }));
+             menu.addSeparator();
+             menu.addItem(i => i.setTitle(`Copy URL`).setIcon("link").onClick(() => {
+                 navigator.clipboard.writeText(url); new Notice("Copied!");
+             }));
+             menu.showAtMouseEvent(evt);
+             return;
+         }
+
+         // Main view feed item context menu
+         const itemElement = target.closest<HTMLElement>('[data-idx][data-feedurl]');
+         if (itemElement) {
+             evt.preventDefault();
+             const idxStr = itemElement.getAttribute('data-idx');
+             const url = itemElement.getAttribute('data-feedurl');
+             if (idxStr === null || url === null) return;
+             const idx = parseInt(idxStr);
+             const item = GLB.feedsStore[url]?.items[idx];
+             if (!item) return;
+             const menu = new Menu();
+             menu.addItem(i => i.setTitle(item.read ? "Unread" : "Read").setIcon(item.read ? "circle-off" : "check-circle").onClick(() => {
+                 // Try finding button within the item element in the main view
+                 const btn = this.frViewInstance?.contentEl.querySelector(`#toggleRead${idx}`);
+                 if (btn instanceof HTMLElement) this.handleToggleRead(btn, idx, url);
+             }));
+             menu.addItem(i => i.setTitle(item.starred ? "Unstar" : "Star").setIcon(item.starred ? "star-off" : "star").onClick(() => {
+                 const btn = itemElement.querySelector<HTMLElement>('.item-action-star'); // Check within item element
+                 if (btn) this.handleToggleStar(btn, idx, url);
+             }));
+             if (item.link) {
+                 menu.addItem(i => i.setTitle("Open Original").setIcon("external-link").onClick(() => window.open(item.link!, '_blank')));
+                 menu.addItem(i => i.setTitle("Copy Link").setIcon("link").onClick(() => { navigator.clipboard.writeText(item.link!); new Notice("Copied!"); }));
+             }
+             menu.addSeparator();
+             menu.addItem(i => i.setTitle(item.deleted ? "Undelete" : "Delete").setIcon(item.deleted ? "undo" : "trash").onClick(() => {
+                  const btn = this.frViewInstance?.contentEl.querySelector(`#toggleDelete${idx}`);
+                  if (btn instanceof HTMLElement) this.handleToggleDelete(btn, idx, url);
+             }));
+             menu.showAtMouseEvent(evt);
+         }
+     }
 
     // --- Specific Event Handler Implementations ---
     async handleSaveData() { try{const n=await this.saveFeedsData(); new Notice(n>0?`Saved ${n} chunk(s).`:"No changes.",1500);}catch(e){console.error("Save err:",e);new Notice("Save error.",2000);} }
-    handleSearch() { if(!GLB.currentFeed)new Notice("Select feed.",3000); else if(GLB.currentFeed===GLB.STARRED_VIEW_ID)new Notice("Search N/A here.",3000); else new SearchModal(this.app).open(); }
-    handleToggleNavi(target:HTMLElement) {
-        const lp=document.getElementById('feedsReaderLeftPanel');
-        if(!lp)return;
-        const hid=lp.classList.contains('panel-hidden');
-
-        // Toggle the class on the left panel
-        lp.toggleClass('panel-hidden', !hid);
-
-        // Update button text (optional, consider icons for mobile)
-        if (target) {
-            target.setText(hid ? '>' : '<');
+    handleSearch() {
+        if(!GLB.currentFeed) { new Notice("Select feed first.",3000); return; }
+        if(GLB.currentFeed===GLB.STARRED_VIEW_ID) { new Notice("Search not available for Starred Items.",3000); return; }
+        new SearchModal(this.app).open();
+    }
+    handleToggleNavi(target: HTMLElement) {
+        // Find the mobile overlay panel specifically
+        const mobilePanel = document.querySelector('body.is-mobile .feeds-reader-left-panel');
+        if (mobilePanel instanceof HTMLElement) {
+             // Toggle the class based on its current state
+             const isHidden = mobilePanel.classList.contains('panel-hidden');
+             mobilePanel.toggleClass('panel-hidden', !isHidden); // Use required second argument
+             if (target) target.setText(isHidden ? '>' : '<'); // Update button text
+             return; // Handled mobile case
         }
 
-        // Desktop-specific logic (might be overridden by mobile CSS)
-        const cb=document.getElementById('contentBox');
-        const tc=document.getElementById('toggleNaviContainer');
-        const aux=document.getElementById('toggleNaviAux');
+        // Fallback for desktop or potentially other structures
+        const leftPanel = document.getElementById('feedsReaderLeftPanel'); // Use the ID expected in desktop mode
+        if (leftPanel instanceof HTMLElement) {
+            const isHidden = leftPanel.classList.contains('panel-hidden');
+            leftPanel.toggleClass('panel-hidden', !isHidden);
+            if (target) target.setText(isHidden ? '>' : '<');
 
-        if (cb && tc && aux && !Platform.isMobile) { // Only run this part on desktop
-            if (!hid) { // Panel is being hidden
-                cb.removeClass('contentBoxRightpage');
-                cb.addClass('contentBoxFullpage');
-                tc.addClass('fixed');
-                aux.empty();
-                const sb=aux.createEl('span',{text:'Save',cls:'save_data_toggling'}); sb.id='save_data_toggling';
-            } else { // Panel is being shown
-                cb.addClass('contentBoxRightpage');
-                cb.removeClass('contentBoxFullpage');
-                tc.removeClass('fixed');
-                aux.empty();
+            // Desktop-only logic for right panel margin and aux button
+            if (!Platform.isMobile) {
+                const cb = document.getElementById('contentBox'); // Main content view div
+                const tc = document.getElementById('toggleNaviContainer'); // Toggle container
+                const aux = document.getElementById('toggleNaviAux'); // Aux button container
+
+                if (cb && tc && aux) {
+                    if (!isHidden) { // Hiding panel
+                        cb.removeClass('contentBoxRightpage');
+                        cb.addClass('contentBoxFullpage');
+                        tc.addClass('fixed');
+                        aux.empty();
+                        const sb = aux.createEl('span', { text: 'Save', cls: 'save_data_toggling' });
+                        sb.id = 'save_data_toggling';
+                    } else { // Showing panel
+                        cb.addClass('contentBoxRightpage');
+                        cb.removeClass('contentBoxFullpage');
+                        tc.removeClass('fixed');
+                        aux.empty();
+                    }
+                }
             }
+        } else {
+            console.error("Could not find left panel element to toggle.");
         }
     }
-    async handleRefreshSingleFeed(target:HTMLElement, forceCurrentViewUpdate:boolean=false) { const urlA=target.getAttribute('fdUrl'); const url=(urlA&&urlA!==GLB.STARRED_VIEW_ID)?urlA:(GLB.currentFeed&&GLB.currentFeed!==GLB.STARRED_VIEW_ID?GLB.currentFeed:null); if(url){const nameA=target.getAttribute('fdName'); const name=nameA||GLB.currentFeedName||url; new Notice(`Updating ${name}...`,1000); try{const[nNew,_]=await this.updateOneFeed(url); new Notice(`${name}: ${nNew} new.`,3000); await this.createFeedBar(); if(GLB.currentFeed===url||forceCurrentViewUpdate){this.makeDisplayList(); this.show_feed();} if(GLB.currentFeed===GLB.STARRED_VIEW_ID&&nNew>0){this.handleShowAllStarred(false);}}catch(e:any){console.error(`Update err ${name}:`,e); new Notice(`Update failed ${name}: ${e.message}`,3000);}} else if(target.closest('#refreshCurrentFeed')&&GLB.currentFeed===GLB.STARRED_VIEW_ID){new Notice("Cannot refresh Starred.",3000);}else{new Notice("Cannot find feed.",2000);}}
-    handleShowFeed(feedUrl:string) { if(feedUrl===GLB.currentFeed||feedUrl===GLB.STARRED_VIEW_ID)return; const prev=GLB.currentFeed; GLB.currentFeed=feedUrl; if(!GLB.currentFeed)return; const f=GLB.feedList.find(f=>f.feedUrl===GLB.currentFeed); GLB.currentFeedName=f?f.name:'Unknown'; document.querySelectorAll('.showFeed, #showStarredItems').forEach(el=>el.removeClass('showingFeed')); document.getElementById(GLB.currentFeed)?.addClass('showingFeed'); if(prev!==GLB.currentFeed)GLB.undoList=[]; GLB.idxItemStart=0; GLB.nPage=1; if(prev!==GLB.STARRED_VIEW_ID){GLB.filterMode='all'; GLB.itemOrder='New to old'; document.querySelectorAll('.filter-item').forEach(el=>el.removeClass('filter-active')); document.getElementById('filterAll')?.addClass('filter-active'); const toggleOrderEl = document.getElementById('toggleOrder'); if (toggleOrderEl) toggleOrderEl.setText(`Sort: ${GLB.itemOrder}`);} this.makeDisplayList(); this.show_feed(); this.frViewInstance?.updateHeaderText(); }
-    handleShowAllStarred(forceViewSwitch=true) { if(GLB.currentFeed===GLB.STARRED_VIEW_ID&&forceViewSwitch)return; const prev=GLB.currentFeed; GLB.currentFeed=GLB.STARRED_VIEW_ID; GLB.currentFeedName='Starred Items'; GLB.filterMode='starred'; GLB.itemOrder='New to old'; document.querySelectorAll('.showFeed').forEach(el=>el.removeClass('showingFeed')); document.getElementById('showStarredItems')?.addClass('showingFeed'); document.querySelectorAll('.filter-item').forEach(el=>el.removeClass('filter-active')); document.getElementById('filterStarred')?.addClass('filter-active'); const toggleOrderEl = document.getElementById('toggleOrder'); if (toggleOrderEl) toggleOrderEl.setText(`Sort: ${GLB.itemOrder}`); if(prev!==GLB.STARRED_VIEW_ID)GLB.undoList=[]; GLB.idxItemStart=0; GLB.nPage=1; this.makeDisplayList(); if(forceViewSwitch||GLB.currentFeed===GLB.STARRED_VIEW_ID){this.show_feed();} this.frViewInstance?.updateHeaderText(); console.log(`Show ${GLB.starredItemsList.length} starred.`); if(GLB.starredItemsList.length===0&&forceViewSwitch)new Notice("No starred items.",2000); }
-    handleToggleDisplayMode(target:HTMLElement) { GLB.displayMode=GLB.displayMode==='list'?'card':'list'; target.setText(GLB.displayMode==='list'?'Card View':'List View'); this.settings.defaultDisplayMode=GLB.displayMode; this.saveSettings(); this.show_feed(); }
-    adjustCardWidth(delta:number) { if(GLB.displayMode!=='card')return; const root=document.documentElement.style; let cur=parseInt(root.getPropertyValue('--card-item-width')||this.settings.cardWidth.toString()||'280'); let nW=Math.max(180,cur+delta); nW=Math.min(800,nW); root.setProperty('--card-item-width',`${nW}px`); GLB.cardWidth=nW; this.settings.cardWidth=nW; this.saveSettings(); }
-    handleFilterChange(filterId:string) { const nf=filterId.replace('filter','').toLowerCase() as typeof GLB.filterMode; if(nf===GLB.filterMode)return; if(GLB.currentFeed===GLB.STARRED_VIEW_ID&&nf!=='starred'){new Notice(`Only 'Starred' filter here.`,3000); document.getElementById(filterId)?.removeClass('filter-active'); document.getElementById('filterStarred')?.addClass('filter-active'); return;} document.querySelectorAll('.filter-item').forEach(el=>el.removeClass('filter-active')); document.getElementById(filterId)?.addClass('filter-active'); GLB.filterMode=nf; if(GLB.currentFeed){GLB.idxItemStart=0; GLB.nPage=1; this.makeDisplayList(); this.show_feed();} }
-    handleToggleOrder(target:HTMLElement) { if(GLB.itemOrder==='New to old')GLB.itemOrder='Old to new'; else if(GLB.itemOrder==='Old to new')GLB.itemOrder='Random'; else GLB.itemOrder='New to old'; target.setText(`Sort: ${GLB.itemOrder}`); if(GLB.currentFeed){this.makeDisplayList(); this.show_feed();} }
-    handlePageChange(delta:number) { const tot=(GLB.currentFeed===GLB.STARRED_VIEW_ID)?GLB.starredItemsList.length:GLB.displayIndices.length; const nS=GLB.idxItemStart+delta*GLB.nItemPerPage; if(nS>=0&&nS<tot){GLB.idxItemStart=nS; GLB.nPage+=delta; this.show_feed(); document.getElementById('feed_content')?.scrollTo(0,0);} else if(delta>0&&GLB.idxItemStart+GLB.nItemPerPage>=tot){new Notice("Last page.",1500);} else if(delta<0&&GLB.nPage<=1){new Notice("First page.",1500);} }
+    async handleRefreshSingleFeed(target: HTMLElement, forceCurrentViewUpdate: boolean = false) {
+        const statsEl = target.classList.contains('feed-stats') ? target : target.closest('.feed-stats');
+        const urlA = statsEl?.getAttribute('fdUrl') || target.getAttribute('fdUrl');
+        const url = (urlA && urlA !== GLB.STARRED_VIEW_ID) ? urlA : (GLB.currentFeed && GLB.currentFeed !== GLB.STARRED_VIEW_ID ? GLB.currentFeed : null);
+
+        if (url) {
+            const nameA = statsEl?.getAttribute('fdName') || target.getAttribute('fdName') || GLB.currentFeedName;
+            const name = nameA || url;
+            new Notice(`Updating ${name}...`, 1000);
+            try {
+                const [nNew, _] = await this.updateOneFeed(url);
+                new Notice(`${name}: ${nNew} new.`, 3000);
+                await this.refreshFeedListSidebar();
+                if (GLB.currentFeed === url || forceCurrentViewUpdate) {
+                    this.makeDisplayList(); // Recalculate display indices
+                    this.refreshDisplay(); // Update main display
+                }
+                // If starred view is active and new items came from ANY feed, refresh starred view potentially
+                 if (GLB.currentFeed === GLB.STARRED_VIEW_ID && nNew > 0) {
+                      this.makeDisplayList(); // Regenerate starred list
+                      this.refreshDisplay(); // Refresh starred view
+                 }
+            } catch (e: any) {
+                console.error(`Update err ${name}:`, e); new Notice(`Update failed ${name}: ${e.message}`, 3000);
+            }
+        } else if (target.closest('#refreshCurrentFeed') && GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+            new Notice("Cannot refresh Starred Items view.", 3000);
+        } else {
+            new Notice("Cannot find feed URL to refresh.", 2000);
+        }
+    }
+
+    handleShowFeed(feedUrl:string) {
+        if (feedUrl === GLB.STARRED_VIEW_ID) {
+            this.handleShowAllStarred();
+            return;
+        }
+        if(feedUrl === GLB.currentFeed) return; // Don't reprocess if already selected
+
+        const prev = GLB.currentFeed;
+        GLB.currentFeed = feedUrl;
+        if (!GLB.currentFeed) return;
+
+        const f = GLB.feedList.find(f => f.feedUrl === GLB.currentFeed);
+        GLB.currentFeedName = f ? f.name : 'Unknown';
+
+        // Reset state only if feed actually changed
+        if (prev !== GLB.currentFeed) {
+             GLB.undoList = [];
+             GLB.idxItemStart = 0;
+             GLB.nPage = 1;
+        }
+
+        // Reset filters/sort only if switching away from starred view
+        // This ensures filters stick when browsing normal feeds
+        if (prev === GLB.STARRED_VIEW_ID) {
+            GLB.filterMode = 'all';
+            GLB.itemOrder = 'New to old';
+        }
+
+        try {
+            this.makeDisplayList(); // Update index list based on new feed/filters
+            this.refreshDisplay(); // Render the main view content
+            this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar highlights/filters
+
+            // Mobile sidebar closing is handled automatically by Obsidian when clicking links/buttons
+            // No manual closing needed here anymore.
+
+        } catch (error) {
+            console.error("Error showing feed:", error);
+            new Notice("Failed to display feed.", 3000);
+        }
+    }
+    handleShowAllStarred(forceViewSwitch=true) {
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID && forceViewSwitch) return; // Don't reprocess if already selected
+
+        const prev = GLB.currentFeed;
+        GLB.currentFeed = GLB.STARRED_VIEW_ID;
+        GLB.currentFeedName = 'Starred Items';
+        // Starred view implies these filters/sorts
+        GLB.filterMode = 'starred'; // Force starred filter
+        GLB.itemOrder = 'New to old'; // Reset sort order
+
+        // Reset pagination only if view actually changed
+        if (prev !== GLB.STARRED_VIEW_ID) {
+            GLB.undoList = [];
+            GLB.idxItemStart = 0;
+            GLB.nPage = 1;
+        }
+
+        try {
+             this.makeDisplayList(); // Generate starredItemsList
+             this.refreshDisplay(); // Render main view with starred items
+             this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar highlights/filters
+
+            console.log(`Show ${GLB.starredItemsList.length} starred.`);
+            if (GLB.starredItemsList.length === 0 && forceViewSwitch) new Notice("No starred items found.", 2000);
+
+             // Mobile sidebar closing handled by Obsidian
+
+        } catch (error) {
+            console.error("Error showing starred:", error);
+            new Notice("Failed to display starred items.", 3000);
+        }
+    }
+
+    handleToggleDisplayMode(target:HTMLElement) {
+        GLB.displayMode = GLB.displayMode === 'list' ? 'card' : 'list';
+        target.setText(GLB.displayMode === 'list' ? 'Card View' : 'List View');
+        this.settings.defaultDisplayMode = GLB.displayMode;
+        this.saveSettings();
+        this.refreshDisplay(); // Refresh main view only
+    }
+    adjustCardWidth(delta:number) {
+        if(GLB.displayMode !== 'card') return;
+        const root=document.documentElement.style;
+        let currentWidth = parseInt(root.getPropertyValue('--card-item-width') || this.settings.cardWidth.toString() || '280');
+        let newWidth = Math.max(180, currentWidth + delta); // Min width 180
+        newWidth = Math.min(800, newWidth); // Max width 800
+        root.setProperty('--card-item-width', `${newWidth}px`);
+        GLB.cardWidth = newWidth;
+        this.settings.cardWidth = newWidth;
+        this.saveSettings();
+        // No need to call refreshDisplay just for width change, CSS handles it
+    }
+
+    handleFilterChange(filterId: string) {
+        const newFilter = filterId.replace('filter', '').toLowerCase() as typeof GLB.filterMode;
+        if (newFilter === GLB.filterMode) return;
+
+        // Special handling for starred view
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+            if (newFilter !== 'starred') {
+                 new Notice(`Only 'Starred' filter available in Starred Items view.`, 3000);
+                 // Ensure sidebar filter UI reflects this constraint
+                 this.feedListViewInstance?.updateFeedHighlighting();
+                 return;
+            }
+            // If already in starred view and clicking 'starred' filter, do nothing extra
+            // GLB.filterMode is already 'starred' in handleShowAllStarred
+        } else {
+             // For regular feeds, update the filter mode
+            GLB.filterMode = newFilter;
+        }
+
+
+        // Reset pagination and refresh display for the current feed (or starred items)
+        GLB.idxItemStart = 0;
+        GLB.nPage = 1;
+        this.makeDisplayList(); // Re-filter the display list
+        this.refreshDisplay(); // Re-render the main view
+        this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar filter UI
+    }
+
+    handleToggleOrder(target: HTMLElement) {
+        if (GLB.itemOrder === 'New to old') GLB.itemOrder = 'Old to new';
+        else if (GLB.itemOrder === 'Old to new') GLB.itemOrder = 'Random';
+        else GLB.itemOrder = 'New to old';
+
+        // Reset pagination and refresh display
+        GLB.idxItemStart = 0;
+        GLB.nPage = 1;
+        this.makeDisplayList(); // Re-sort the display list
+        this.refreshDisplay(); // Re-render the main view
+        this.feedListViewInstance?.updateFeedHighlighting(); // Update sidebar sort UI
+    }
+
+    handlePageChange(delta:number) {
+        const totalItems = (GLB.currentFeed === GLB.STARRED_VIEW_ID) ? GLB.starredItemsList.length : GLB.displayIndices.length;
+        const newStartIndex = GLB.idxItemStart + delta * GLB.nItemPerPage;
+
+        if (newStartIndex >= 0 && newStartIndex < totalItems) {
+            GLB.idxItemStart = newStartIndex;
+            GLB.nPage += delta;
+            this.refreshDisplay(); // Refresh main view to show new page
+            // Scroll main content area to top
+            this.frViewInstance?.contentEl.querySelector('.feed-content-area')?.scrollTo(0, 0);
+        } else if (delta > 0 && GLB.idxItemStart + GLB.nItemPerPage >= totalItems) {
+            new Notice("Last page.", 1500);
+        } else if (delta < 0 && GLB.nPage <= 1) {
+            new Notice("First page.", 1500);
+        }
+    }
 
     // --- Item Actions ---
-    handleToggleStar(target:HTMLElement, idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item)return; const was=item.starred; item.starred=!item.starred; target.setText(item.starred?'★':'☆'); target.toggleClass('starred',item.starred); target.closest('[data-idx]')?.toggleClass('starred-item',item.starred); GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl); if(GLB.currentFeed===GLB.STARRED_VIEW_ID){const i=GLB.starredItemsList.findIndex(si=>si.feedUrl===feedUrl&&si.originalIndex===idx); if(i>-1&&!item.starred){GLB.starredItemsList.splice(i,1); this.show_feed();} else if(i===-1&&item.starred){this.handleShowAllStarred(false);}} else if(GLB.filterMode==='starred'){this.makeDisplayList(); this.show_feed();} this.addUndoAction(feedUrl,idx,{starred:was}); }
-    handleToggleRead(target:HTMLElement, idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item)return; const prev={read:item.read,deleted:item.deleted}; let c=false; if(!item.read){if(item.deleted)item.deleted=null; item.read=nowdatetime(); target.setText('Unread'); const el = target.closest('[data-idx]'); if(el){el.addClass('read'); el.removeClass('deleted');} document.getElementById(`toggleDelete${idx}`)?.setText('Delete'); c=true;} else{item.read=null; target.setText('Read'); target.closest('[data-idx]')?.removeClass('read'); c=true;} if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl); this.updateFeedStatsUI(); this.updateItemVisibility(item,idx,feedUrl); this.addUndoAction(feedUrl,idx,prev);} }
-    handleToggleDelete(target:HTMLElement, idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item)return; const prev={read:item.read,deleted:item.deleted}; let c=false; if(!item.deleted){if(item.read)item.read=null; item.deleted=nowdatetime(); target.setText('Undelete'); const el=target.closest('[data-idx]'); if(el){el.addClass('deleted'); el.removeClass('read');} document.getElementById(`toggleRead${idx}`)?.setText('Read'); c=true;} else{item.deleted=null; target.setText('Delete'); target.closest('[data-idx]')?.removeClass('deleted'); c=true;} if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl); if(GLB.currentFeed===GLB.STARRED_VIEW_ID){const i=GLB.starredItemsList.findIndex(si=>si.feedUrl===feedUrl&&si.originalIndex===idx); if(i>-1){GLB.starredItemsList.splice(i,1); this.show_feed();}} else{this.updateFeedStatsUI(); this.updateItemVisibility(item,idx,feedUrl);} this.addUndoAction(feedUrl,idx,prev);} }
-    handleJotNotes(idx:number, feedUrl:string) { const cId=`shortNoteContainer_${feedUrl}_${idx}`; let nC=document.getElementById(cId); const iE=document.querySelector(`[data-idx="${idx}"][data-feedurl="${feedUrl}"]`); const aC=document.getElementById(`actionContainer${idx}`); if(nC){nC.style.display=nC.style.display==='none'?'block':'none'; const ta=nC.querySelector('textarea'); if(ta)ta.focus();} else if(iE){nC=iE.createDiv({cls:'short-note-container'}); nC.id=cId; const sN=nC.createEl('textarea',{cls:'shortNote'}); sN.id=`shortNote_${feedUrl}_${idx}`; sN.rows=3; sN.placeholder='Jot notes...'; if(aC)iE.insertBefore(nC,aC); else iE.appendChild(nC); sN.focus();} }
-    async handleSaveSnippet(idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item)return; const sp=`${GLB.feeds_reader_dir}/${GLB.saved_snippets_fname}`; try{if(!await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) await this.app.vault.createFolder(GLB.feeds_reader_dir); const l=item.link||''; let snC=(document.getElementById(`shortNote_${feedUrl}_${idx}`) as HTMLTextAreaElement)?.value.trim()||''; const d=`\n> <small>${formatDate(item.pubDate||item.downloaded)}</small>`; const fN=GLB.feedsStore[feedUrl]?.name?`\n> <small>${GLB.feedsStore[feedUrl].name}</small>`:''; let ct=''; if(this.settings.saveContent&&item.content){let a=item.creator?`\n> Author: ${htmlToMarkdown(item.creator)}`:''; try{ct=remedyLatex(htmlToMarkdown(item.content))+a;}catch(e){ct="[Content Error]"+a;}} const t=item.title?.trim().replace(/(<([^>]+)>)/gi," ")||'No Title'; const sc:string=`${snC?snC+'\n':''}> [!abstract]- [${t}](${l})\n> ${ct}${d}${fN}`; let fe=await this.app.vault.adapter.exists(sp); let fc=fe?await this.app.vault.adapter.read(sp):''; if(fe&&fc.includes(l)){new Notice("URL exists in snippets.",1500); return;} const cw=fe?(this.settings.saveSnippetNewToOld?`${sc}\n\n<hr>\n\n${fc}`:`${fc}\n\n<hr>\n\n${sc}`):sc; await this.app.vault.adapter.write(sp,cw); new Notice(`Snippet ${fe?'appended':'saved'}.`,1500); } catch(e){console.error("Save Snip Err:",e); new Notice("Save snippet err.",2000);} }
-    async handleNoteThis(idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item)return; const nd=GLB.feeds_reader_dir; try{if(!await this.app.vault.adapter.exists(nd))await this.app.vault.createFolder(nd); const l=item.link||''; let dff:string=(item.pubDate||item.downloaded||nowdatetime()).substring(0,10); const tff=item.title?.trim().replace(/(<([^>]+)>)/gi," ").substring(0,50)||'No Title'; const nff=GLB.feedsStore[feedUrl]?.name?str2filename(GLB.feedsStore[feedUrl].name)+'-':''; const fb:string=str2filename(`${dff}-${nff}${tff}`); let fn=`${fb}.md`; let ctr=0; while(await this.app.vault.adapter.exists(`${nd}/${fn}`)){fn=`${fb}-${++ctr}.md`;} const fp:string=`${nd}/${fn}`; let snC=(document.getElementById(`shortNote_${feedUrl}_${idx}`) as HTMLTextAreaElement)?.value.trim()||''; let ct=''; if(this.settings.saveContent&&item.content){let a=item.creator?`\n\nAuthor: ${htmlToMarkdown(item.creator)}`:''; try{ct=remedyLatex(htmlToMarkdown(item.content))+a;}catch(e){ct="[Content Error]"+a;}} const t=item.title?.trim().replace(/(<([^>]+)>)/gi," ")||'No Title'; const d=formatDate(item.pubDate||item.downloaded); const fc:string=`---
-feed: ${GLB.feedsStore[feedUrl]?.name||'Unknown'}
-url: ${l}
-date: ${item.pubDate||item.downloaded}
-starred: ${item.starred||false}
+    handleToggleStar(target: HTMLElement, idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item) return;
+        const wasStarred = item.starred;
+        item.starred = !item.starred;
+
+        // Update button appearance
+        target.setText(item.starred ? '★' : '☆');
+        target.toggleClass('starred', item.starred);
+        // Update item container appearance
+        const itemElement = target.closest('[data-idx]');
+        itemElement?.toggleClass('starred-item', item.starred);
+
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+
+        // Refresh views if necessary
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+            // Re-generate starred list and refresh main view
+            this.makeDisplayList();
+            this.refreshDisplay();
+        } else if (GLB.filterMode === 'starred') {
+            // Re-filter and refresh main view if 'Starred' filter is active
+             this.makeDisplayList();
+             this.refreshDisplay();
+        }
+
+        this.refreshFeedListSidebar(); // Update counts in sidebar regardless
+        this.addUndoAction(feedUrl, idx, { starred: wasStarred });
+    }
+
+    handleToggleRead(target: HTMLElement, idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item) return;
+        const previousState = { read: item.read, deleted: item.deleted };
+        let changed = false;
+
+        if (!item.read) { // Mark as read
+            if (item.deleted) item.deleted = null; // Undelete if marking as read
+            item.read = nowdatetime();
+            target.setText('Unread');
+            const itemElement = target.closest('[data-idx]');
+            if (itemElement) {
+                 itemElement.addClass('read');
+                 itemElement.removeClass('deleted'); // Ensure deleted class removed
+            }
+            // Update corresponding delete button text if it exists
+            this.frViewInstance?.contentEl.querySelector(`#toggleDelete${idx}`)?.setText('Delete');
+            changed = true;
+        } else { // Mark as unread
+            item.read = null;
+            target.setText('Read');
+            target.closest('[data-idx]')?.removeClass('read');
+            changed = true;
+        }
+
+        if (changed) {
+            GLB.feedsStoreChange = true;
+            GLB.feedsStoreChangeList.add(feedUrl);
+            this.updateItemVisibility(item, idx, feedUrl); // Update visibility in main view based on filters
+            this.refreshFeedListSidebar(); // Update counts in sidebar
+            this.addUndoAction(feedUrl, idx, previousState);
+        }
+    }
+
+     handleToggleDelete(target: HTMLElement, idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item) return;
+        const previousState = { read: item.read, deleted: item.deleted };
+        let changed = false;
+
+        if (!item.deleted) { // Mark as deleted
+            if (item.read) item.read = null; // Unread if marking as deleted
+            item.deleted = nowdatetime();
+            target.setText('Undelete');
+            const itemElement = target.closest('[data-idx]');
+             if (itemElement) {
+                 itemElement.addClass('deleted');
+                 itemElement.removeClass('read'); // Ensure read class removed
+            }
+            // Update corresponding read button text if it exists
+            this.frViewInstance?.contentEl.querySelector(`#toggleRead${idx}`)?.setText('Read');
+            changed = true;
+        } else { // Undelete
+            item.deleted = null;
+            target.setText('Delete');
+            target.closest('[data-idx]')?.removeClass('deleted');
+            changed = true;
+        }
+
+        if (changed) {
+            GLB.feedsStoreChange = true;
+            GLB.feedsStoreChangeList.add(feedUrl);
+
+            if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+                // Regenerate starred list and refresh if item might be affected
+                 this.makeDisplayList();
+                 this.refreshDisplay();
+            } else {
+                 // Update visibility based on filters in the main view
+                 this.updateItemVisibility(item, idx, feedUrl);
+            }
+            this.refreshFeedListSidebar(); // Update counts in sidebar
+            this.addUndoAction(feedUrl, idx, previousState);
+        }
+    }
+
+    handleJotNotes(idx:number, feedUrl:string) {
+        const containerId = `shortNoteContainer_${feedUrl}_${idx}`;
+        let noteContainer = document.getElementById(containerId);
+        // Find the item element within the main view's content area
+        const itemElement = this.frViewInstance?.contentEl.querySelector(`[data-idx="${idx}"][data-feedurl="${feedUrl}"]`);
+        const actionContainer = this.frViewInstance?.contentEl.querySelector(`#actionContainer${idx}`);
+
+        if (noteContainer) {
+            // Toggle visibility
+            noteContainer.style.display = noteContainer.style.display === 'none' ? 'block' : 'none';
+            const textarea = noteContainer.querySelector('textarea');
+            if (textarea && noteContainer.style.display === 'block') {
+                textarea.focus();
+            }
+        } else if (itemElement) {
+            // Create container and textarea
+            noteContainer = itemElement.createDiv({ cls: 'short-note-container' });
+            noteContainer.id = containerId;
+            const shortNoteArea = noteContainer.createEl('textarea', { cls: 'shortNote' });
+            shortNoteArea.id = `shortNote_${feedUrl}_${idx}`; // Keep ID for saving
+            shortNoteArea.rows = 3;
+            shortNoteArea.placeholder = 'Jot notes...';
+
+            // Insert before action buttons if they exist, otherwise append
+            if (actionContainer) {
+                itemElement.insertBefore(noteContainer, actionContainer);
+            } else {
+                itemElement.appendChild(noteContainer);
+            }
+            shortNoteArea.focus();
+        }
+    }
+    async handleSaveSnippet(idx:number, feedUrl:string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item) return;
+        const snippetFilePath = `${GLB.feeds_reader_dir}/${GLB.saved_snippets_fname}`;
+        try {
+            if (!await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
+                await this.app.vault.createFolder(GLB.feeds_reader_dir);
+            }
+            const itemLink = item.link || '';
+            let shortNoteContent = (document.getElementById(`shortNote_${feedUrl}_${idx}`) as HTMLTextAreaElement)?.value.trim() || '';
+            const dateStr = `\n> <small>${formatDate(item.pubDate || item.downloaded)}</small>`;
+            const feedNameStr = GLB.feedsStore[feedUrl]?.name ? `\n> <small>${GLB.feedsStore[feedUrl].name}</small>` : '';
+            let contentStr = '';
+            if (this.settings.saveContent && item.content) {
+                let authorStr = item.creator ? `\n> Author: ${htmlToMarkdown(item.creator)}` : '';
+                try {
+                    contentStr = remedyLatex(htmlToMarkdown(item.content)) + authorStr;
+                } catch (e) {
+                    contentStr = "[Content Error]" + authorStr;
+                }
+            }
+            const title = item.title?.trim().replace(/(<([^>]+)>)/gi, " ") || 'No Title';
+            const snippetContent: string = `${shortNoteContent ? shortNoteContent + '\n' : ''}> [!abstract]- [${title}](${itemLink})\n> ${contentStr}${dateStr}${feedNameStr}`;
+
+            let fileExists = await this.app.vault.adapter.exists(snippetFilePath);
+            let fileContent = fileExists ? await this.app.vault.adapter.read(snippetFilePath) : '';
+
+            if (fileExists && fileContent.includes(itemLink)) {
+                new Notice("URL already exists in snippets file.", 1500);
+                return;
+            }
+
+            const contentToWrite = fileExists
+                ? (this.settings.saveSnippetNewToOld ? `${snippetContent}\n\n<hr>\n\n${fileContent}` : `${fileContent}\n\n<hr>\n\n${snippetContent}`)
+                : snippetContent;
+
+            await this.app.vault.adapter.write(snippetFilePath, contentToWrite);
+            new Notice(`Snippet ${fileExists ? 'appended' : 'saved'} to ${GLB.saved_snippets_fname}.`, 1500);
+        } catch (e) {
+            console.error("Save Snippet Error:", e);
+            new Notice("Error saving snippet.", 2000);
+        }
+    }
+    async handleNoteThis(idx:number, feedUrl:string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item) return;
+        const notesDir = GLB.feeds_reader_dir;
+        try {
+            if (!await this.app.vault.adapter.exists(notesDir)) {
+                await this.app.vault.createFolder(notesDir);
+            }
+            const itemLink = item.link || '';
+            let dateForFilename: string = (item.pubDate || item.downloaded || nowdatetime()).substring(0, 10);
+            const titleForFilename = item.title?.trim().replace(/(<([^>]+)>)/gi, " ").substring(0, 50) || 'No Title';
+            const feedNameForFilename = GLB.feedsStore[feedUrl]?.name ? str2filename(GLB.feedsStore[feedUrl].name) + '-' : '';
+            const baseFilename: string = str2filename(`${dateForFilename}-${feedNameForFilename}${titleForFilename}`);
+
+            let noteFilename = `${baseFilename}.md`;
+            let counter = 0;
+            while (await this.app.vault.adapter.exists(`${notesDir}/${noteFilename}`)) {
+                noteFilename = `${baseFilename}-${++counter}.md`;
+            }
+            const noteFilepath: string = `${notesDir}/${noteFilename}`;
+
+            let shortNoteContent = (document.getElementById(`shortNote_${feedUrl}_${idx}`) as HTMLTextAreaElement)?.value.trim() || '';
+            let contentStr = '';
+             if (this.settings.saveContent && item.content) {
+                let authorStr = item.creator ? `\n\nAuthor: ${htmlToMarkdown(item.creator)}` : '';
+                try {
+                    contentStr = remedyLatex(htmlToMarkdown(item.content)) + authorStr;
+                } catch (e) {
+                    contentStr = "[Content Error]" + authorStr;
+                }
+            }
+            const title = item.title?.trim().replace(/(<([^>]+)>)/gi, " ") || 'No Title';
+            const formattedDate = formatDate(item.pubDate || item.downloaded);
+            const fileContent: string = `---
+feed: ${GLB.feedsStore[feedUrl]?.name || 'Unknown'}
+url: ${itemLink}
+date: ${item.pubDate || item.downloaded}
+starred: ${item.starred || false}
 tags: [rss, feed]
 ---
-# [${t}](${l})
+# [${title}](${itemLink})
 
-*Date: ${d}*
-${item.creator?`*Author: ${item.creator}*\n`:''}
-${snC?`## Notes\n\n${snC}\n\n---\n`:''}
-${ct?`## Content\n\n${ct}`:''}
-`; await this.app.vault.create(fp,fc); new Notice(`${fn} saved.`,1500); } catch(e){console.error("Save Note Err:",e); new Notice("Save note err.",2000);} }
-    handleRenderMath(idx: number, feedUrl: string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item?.content)return; new MathRenderModal(this.app,item,this).open(); }
-    async handleAskChatGPT(idx: number, feedUrl: string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item?.content){new Notice("No content.",1500); return;} const key=this.settings.chatGPTAPIKey; const prmpt=this.settings.chatGPTPrompt; if(!key||!prmpt){new Notice("GPT Key/Prompt not set.",2000); return;} new ChatGPTInteractionModal(this.app,item,key,prmpt,this).open(); }
-    handleEmbed(idx: number, feedUrl: string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item?.link){new Notice("No link.",1500); return;} new EmbedModal(this.app,item.link,item.title).open(); }
-    async handleFetch(idx: number, feedUrl: string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; if(!item?.link){new Notice("No link.",1500); return;} new FetchContentModal(this.app,item.link,item.title).open(); }
+*Date: ${formattedDate}*
+${item.creator ? `*Author: ${item.creator}*\n` : ''}
+${shortNoteContent ? `## Notes\n\n${shortNoteContent}\n\n---\n` : ''}
+${contentStr ? `## Content\n\n${contentStr}` : ''}
+`;
+            await this.app.vault.create(noteFilepath, fileContent);
+            new Notice(`${noteFilename} saved.`, 1500);
+        } catch (e) {
+            console.error("Save Note Error:", e);
+            new Notice("Error saving note.", 2000);
+        }
+    }
+    handleRenderMath(idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item?.content) return;
+        new MathRenderModal(this.app, item, this).open();
+    }
+    async handleAskChatGPT(idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item?.content) { new Notice("No content to send.", 1500); return; }
+        const apiKey = this.settings.chatGPTAPIKey;
+        const prompt = this.settings.chatGPTPrompt;
+        if (!apiKey || !prompt) { new Notice("ChatGPT API Key or Prompt not set in settings.", 2000); return; }
+        new ChatGPTInteractionModal(this.app, item, apiKey, prompt, this).open();
+    }
+    handleEmbed(idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item?.link) { new Notice("No link to embed.", 1500); return; }
+        new EmbedModal(this.app, item.link, item.title).open();
+    }
+    async handleFetch(idx: number, feedUrl: string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        if (!item?.link) { new Notice("No link to fetch.", 1500); return; }
+        new FetchContentModal(this.app, item.link, item.title).open();
+    }
 
     // --- Undo Logic ---
-    addUndoAction(feedUrl: string, index: number, previousState: Partial<RssFeedItem>) { GLB.undoList.unshift({ feedUrl, index, previousState }); if(GLB.undoList.length>50)GLB.undoList.pop(); }
-    handleUndo() { if(GLB.undoList.length===0){new Notice("Nothing to undo.",1000); return;} const last=GLB.undoList.shift(); if(!last)return; const{feedUrl,index,previousState}=last; if(!GLB.feedsStore[feedUrl]?.items[index]){console.warn("Undo: Item not found."); return;} const item=GLB.feedsStore[feedUrl].items[index]; let restored=false; for(const k in previousState){if(previousState.hasOwnProperty(k)){(item as any)[k]=(previousState as any)[k]; restored=true;}} if(restored){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl); new Notice("Action undone.",1000); this.createFeedBar(); if(GLB.currentFeed===feedUrl){this.updateFeedStatsUI(); const el=document.querySelector(`[data-idx="${index}"][data-feedurl="${feedUrl}"]`); if(el){const rBtn=el.querySelector<HTMLElement>(`.toggleRead`); if(rBtn)rBtn.setText(item.read?'Unread':'Read'); const dBtn=el.querySelector<HTMLElement>(`.toggleDelete`); if(dBtn)dBtn.setText(item.deleted?'Undelete':'Delete'); const sBtn=el.querySelector<HTMLElement>(`.item-action-star`); if(sBtn){sBtn.setText(item.starred?'★':'☆'); sBtn.toggleClass('starred',!!item.starred);} el.toggleClass('read',!!item.read); el.toggleClass('deleted',!!item.deleted); el.toggleClass('starred-item',!!item.starred); this.updateItemVisibility(item,index,feedUrl);} else{this.show_feed();}} else if(GLB.currentFeed===GLB.STARRED_VIEW_ID){this.handleShowAllStarred(false);}} else{new Notice("Could not restore state.",1500);} }
+    addUndoAction(feedUrl: string, index: number, previousState: Partial<RssFeedItem>) {
+        GLB.undoList.unshift({ feedUrl, index, previousState });
+        if (GLB.undoList.length > 50) GLB.undoList.pop(); // Limit undo history
+    }
+    handleUndo() {
+        if (GLB.undoList.length === 0) { new Notice("Nothing to undo.", 1000); return; }
+        const lastAction = GLB.undoList.shift();
+        if (!lastAction) return;
+
+        const { feedUrl, index, previousState } = lastAction;
+        const feed = GLB.feedsStore[feedUrl];
+        if (!feed?.items[index]) { console.warn("Undo: Item not found at index", index, "for feed", feedUrl); return; }
+
+        const item = feed.items[index];
+        let restored = false;
+        // Apply previous state properties
+        for (const key in previousState) {
+            if (previousState.hasOwnProperty(key)) {
+                (item as any)[key] = (previousState as any)[key];
+                restored = true;
+            }
+        }
+
+        if (restored) {
+            GLB.feedsStoreChange = true;
+            GLB.feedsStoreChangeList.add(feedUrl);
+            new Notice("Action undone.", 1000);
+
+            // Refresh UI
+            this.refreshFeedListSidebar(); // Update sidebar counts/state
+            // Refresh main view only if the undone action affects the current view
+            if (GLB.currentFeed === feedUrl || GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+                 this.makeDisplayList(); // Remake list in case filter/sort/starred status changed visibility
+                 this.refreshDisplay(); // Refresh main view content
+            }
+        } else {
+            new Notice("Could not restore previous state.", 1500);
+        }
+    }
 
     // --- Page Actions ---
-    handleMarkPageReadOrDelete(action:'read'|'delete'){ let items: { feedUrl: string, index: number }[]=[]; const start=GLB.idxItemStart; let end: number; if(GLB.currentFeed===GLB.STARRED_VIEW_ID){end=Math.min(GLB.starredItemsList.length,start+GLB.nItemPerPage); for(let i=start;i<end;i++)items.push({feedUrl:GLB.starredItemsList[i].feedUrl, index:GLB.starredItemsList[i].originalIndex});} else if(GLB.currentFeed){end=Math.min(GLB.displayIndices.length,start+GLB.nItemPerPage); for(let i=start;i<end;i++)items.push({feedUrl:GLB.currentFeed, index:GLB.displayIndices[i]});} else return; const now=nowdatetime(); let changed=false; let nMarked=0; const undoItems:{feedUrl:string,index:number,previousState:Partial<RssFeedItem>}[]=[]; items.forEach(({feedUrl,index})=>{ const item=GLB.feedsStore[feedUrl]?.items[index]; if(!item)return; const current={read:item.read,deleted:item.deleted}; let itemChanged=false; if(action==='read'){if(!item.read){if(item.deleted)item.deleted=null; item.read=now; itemChanged=true;}} else{if(!item.deleted){if(item.read)item.read=null; item.deleted=now; itemChanged=true;}} if(itemChanged){changed=true; nMarked++; undoItems.push({feedUrl,index,previousState:current}); GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}); if(changed){new Notice(`${nMarked} item(s) marked ${action}.`,1500); undoItems.reverse().forEach(u=>this.addUndoAction(u.feedUrl,u.index,u.previousState)); this.updateFeedStatsUI(); this.createFeedBar(); this.makeDisplayList(); this.show_feed();} else{new Notice(`No items needed marking.`,1000);} }
-    handleRemovePageContent() { if(GLB.currentFeed===GLB.STARRED_VIEW_ID){new Notice("Cannot remove content here.",2000); return;} if(!GLB.currentFeed||!GLB.feedsStore[GLB.currentFeed])return; if(!window.confirm("Remove content on THIS PAGE? Cannot be undone.")) return; const fd=GLB.feedsStore[GLB.currentFeed]; let changed=false; const start=GLB.idxItemStart; const end=Math.min(GLB.displayIndices.length,start+GLB.nItemPerPage); for(let i=start;i<end;i++){const idx=GLB.displayIndices[i]; const item=fd.items[idx]; if(!item)continue; let iChanged=false; if(item.hasOwnProperty('content')){delete (item as Partial<RssFeedItem>).content; iChanged=true;} if(item.hasOwnProperty('creator')){delete (item as Partial<RssFeedItem>).creator; iChanged=true;} if(iChanged)changed=true;} if(changed){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(GLB.currentFeed); new Notice("Content removed.",1500); this.show_feed();} else{new Notice("No content removed.",1000);} }
+    handleMarkPageReadOrDelete(action: 'read' | 'delete') {
+        let itemsToModify: { feedUrl: string, index: number }[] = [];
+        const startIndex = GLB.idxItemStart;
+        let endIndex: number;
+
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+            endIndex = Math.min(GLB.starredItemsList.length, startIndex + GLB.nItemPerPage);
+            for (let i = startIndex; i < endIndex; i++) {
+                // Ensure index exists before accessing
+                 if(GLB.starredItemsList[i]) {
+                     itemsToModify.push({ feedUrl: GLB.starredItemsList[i].feedUrl, index: GLB.starredItemsList[i].originalIndex });
+                 }
+            }
+        } else if (GLB.currentFeed) {
+            endIndex = Math.min(GLB.displayIndices.length, startIndex + GLB.nItemPerPage);
+            for (let i = startIndex; i < endIndex; i++) {
+                 // Ensure index exists before accessing
+                 if(GLB.displayIndices[i] !== undefined) {
+                    itemsToModify.push({ feedUrl: GLB.currentFeed, index: GLB.displayIndices[i] });
+                 }
+            }
+        } else {
+            // No feed selected, do nothing
+            return;
+        }
+
+        if (itemsToModify.length === 0) {
+             new Notice("No items on this page to mark.", 1000);
+             return;
+        }
+
+        const now = nowdatetime();
+        let changed = false;
+        let numMarked = 0;
+        const undoActions: { feedUrl: string, index: number, previousState: Partial<RssFeedItem> }[] = [];
+
+        itemsToModify.forEach(({ feedUrl, index }) => {
+            const item = GLB.feedsStore[feedUrl]?.items[index];
+            if (!item) return;
+
+            const currentState = { read: item.read, deleted: item.deleted };
+            let itemChanged = false;
+
+            if (action === 'read') {
+                if (!item.read || item.deleted) { // Mark read only if unread or deleted
+                    if(item.deleted) item.deleted = null; // Undelete if marking read
+                    item.read = now;
+                    itemChanged = true;
+                }
+            } else { // action === 'delete'
+                if (!item.deleted || item.read) { // Mark deleted only if not deleted or if read
+                    if(item.read) item.read = null; // Unread if marking deleted
+                    item.deleted = now;
+                    itemChanged = true;
+                }
+            }
+
+            if (itemChanged) {
+                changed = true;
+                numMarked++;
+                undoActions.push({ feedUrl, index, previousState: currentState });
+                GLB.feedsStoreChange = true;
+                GLB.feedsStoreChangeList.add(feedUrl);
+            }
+        });
+
+        if (changed) {
+            new Notice(`${numMarked} item(s) marked ${action}.`, 1500);
+            // Add undo actions in reverse order they were applied
+            undoActions.reverse().forEach(u => this.addUndoAction(u.feedUrl, u.index, u.previousState));
+
+            // Refresh UI
+            this.refreshFeedListSidebar(); // Update sidebar counts
+            this.makeDisplayList(); // Update display list for potential visibility changes
+            this.refreshDisplay(); // Refresh main view
+        } else {
+            new Notice(`No items on this page needed marking as ${action}.`, 1000);
+        }
+    }
+
+    handleRemovePageContent() {
+        if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+             new Notice("Cannot remove content from Starred Items view.", 2000);
+             return;
+        }
+        if (!GLB.currentFeed || !GLB.feedsStore[GLB.currentFeed]) {
+             new Notice("No feed selected to remove content from.", 2000);
+             return;
+        }
+        if (!window.confirm(`Remove downloaded content (descriptions, authors) for items currently VISIBLE on THIS page of '${GLB.currentFeedName}'? Titles and links remain. This action cannot be easily undone.`)) {
+            return;
+        }
+
+        const feedStore = GLB.feedsStore[GLB.currentFeed];
+        let changed = false;
+        const startIndex = GLB.idxItemStart;
+        const endIndex = Math.min(GLB.displayIndices.length, startIndex + GLB.nItemPerPage);
+
+        for (let i = startIndex; i < endIndex; i++) {
+             // Ensure index exists
+            if(GLB.displayIndices[i] === undefined) continue;
+            const itemIndex = GLB.displayIndices[i];
+            const item = feedStore.items[itemIndex];
+            if (!item) continue;
+
+            let itemChanged = false;
+            // Use delete operator for optional properties
+            if (item.hasOwnProperty('content')) {
+                delete item.content;
+                itemChanged = true;
+            }
+             if (item.hasOwnProperty('creator')) {
+                delete item.creator;
+                itemChanged = true;
+            }
+             if (item.hasOwnProperty('category')) {
+                delete item.category;
+                itemChanged = true;
+            }
+            // Keep imageUrl? Decide based on preference. Let's keep it for now.
+
+            if (itemChanged) changed = true;
+        }
+
+        if (changed) {
+            GLB.feedsStoreChange = true;
+            GLB.feedsStoreChangeList.add(GLB.currentFeed);
+            new Notice("Content removed for items on this page.", 1500);
+            this.refreshDisplay(); // Re-render main view to reflect removed content
+        } else {
+            new Notice("No content found to remove on this page.", 1000);
+        }
+    }
 
     // --- UI Update Helpers ---
-    updateItemVisibility(item:RssFeedItem, idx:number, feedUrl:string) { const el=document.querySelector(`[data-idx="${idx}"][data-feedurl="${feedUrl}"]`); if(!el)return; let vis=true; if(GLB.filterMode==='unread'&&(item.read||item.deleted))vis=false; else if(GLB.filterMode==='starred'&&!item.starred)vis=false; else if(item.deleted&&GLB.filterMode!=='all')vis=false; else if(item.deleted&&GLB.filterMode==='all'){el.addClass('deleted-visible'); vis=true;} el.toggleClass('hidedItem',!vis); if(!vis)el.removeClass('deleted-visible'); }
-    updateFeedStatsUI() { if(!GLB.currentFeed||GLB.currentFeed===GLB.STARRED_VIEW_ID)return; const stats=this.getFeedStats(GLB.currentFeed); const ucEl=document.getElementById(`unreadCount${GLB.currentFeed}`); if(ucEl)ucEl.innerText=stats.unread.toString(); const tcEl=document.getElementById(`totalCount${GLB.currentFeed}`); const sepEl=document.getElementById(`sepUnreadTotal${GLB.currentFeed}`); if(tcEl&&sepEl){if(stats.total<GLB.maxTotalnumDisplayed){tcEl.innerText=stats.total.toString(); sepEl.style.display='';}else{tcEl.innerText=''; sepEl.style.display='none';}} }
+    updateItemVisibility(item: RssFeedItem, idx: number, feedUrl: string) {
+        // This function now primarily targets elements within the main FRView
+        const el = this.frViewInstance?.contentEl.querySelector(`[data-idx="${idx}"][data-feedurl="${feedUrl}"]`);
+        if (!el) return; // Element not found in the main view
+
+        let isVisible = true;
+
+        // Filter logic
+        if (GLB.filterMode === 'unread' && (item.read || item.deleted)) {
+            isVisible = false;
+        } else if (GLB.filterMode === 'starred' && !item.starred) {
+            isVisible = false;
+        } else if (item.deleted && GLB.filterMode !== 'all') {
+            // Hide deleted unless 'all' filter is active
+            isVisible = false;
+        }
+
+        // Apply visibility classes
+        el.toggleClass('hidedItem', !isVisible); // Use 2nd arg for toggleClass
+
+        // Special class for visible deleted items in 'all' mode
+        if (item.deleted && GLB.filterMode === 'all' && isVisible) {
+             el.addClass('deleted-visible');
+        } else {
+             el.removeClass('deleted-visible');
+        }
+
+        // Ensure correct read/deleted classes are applied (might be redundant but safe)
+        el.toggleClass('read', !!item.read && !item.deleted); // Only read if not deleted
+        el.toggleClass('deleted', !!item.deleted);
+    }
+
+    updateFeedStatsUI() {
+        // DEPRECATED - Logic moved to refreshFeedListSidebar / createFeedBar
+        // This method might be called from older parts of the code, issue a warning.
+        console.warn("updateFeedStatsUI is deprecated and should not be called directly. Use refreshFeedListSidebar instead.");
+        // Optionally, try to update sidebar anyway if the instance exists
+        // this.refreshFeedListSidebar();
+    }
+
+    // New helper to refresh sidebar content and state
+    async refreshFeedListSidebar() {
+        if (this.feedListViewInstance) {
+             // Rebuild the feed list in the sidebar
+             const tableElement = this.feedListViewInstance.contentEl.querySelector('#feedTable') as HTMLTableElement | null;
+             await this.createFeedBar(tableElement); // Pass target table
+             // Update highlights, filter, sort display
+             this.feedListViewInstance.updateFeedHighlighting();
+        }
+    }
+    // New helper to refresh main display content
+    refreshDisplay() {
+        // Rerender the main content view
+        this.frViewInstance?.renderContent();
+    }
 
     // --- Modal Window Launchers ---
-    showItemContentInModal(idx:number, feedUrl:string) { const item=GLB.feedsStore[feedUrl]?.items[idx]; const feedName=GLB.feedsStore[feedUrl]?.name||'Unknown'; if(!item)return; new ItemContentModal(this.app,item,feedName,this).open(); }
+    showItemContentInModal(idx:number, feedUrl:string) {
+        const item = GLB.feedsStore[feedUrl]?.items[idx];
+        const feedName = GLB.feedsStore[feedUrl]?.name || 'Unknown Feed';
+        if (!item) {
+            new Notice("Cannot find item data.", 2000);
+            return;
+        }
+        new ItemContentModal(this.app, item, feedName, this).open();
+    }
 
     // --- Feed Update ---
-     async updateAllFeeds() { new Notice("Starting all feeds update...",2000); let totalNew=0; const promises=GLB.feedList.map(async(f)=>{try{const[nNew,_]=await this.updateOneFeed(f.feedUrl); if(nNew>0)totalNew+=nNew;}catch(e:any){console.error(`Update fail ${f.name}:`,e); new Notice(`Update failed: ${f.name}`,2000);}}); await Promise.allSettled(promises); new Notice(`Update finished. ${totalNew} new items found.`,totalNew>0?3000:1500); await this.createFeedBar(); if(GLB.currentFeed===GLB.STARRED_VIEW_ID)this.handleShowAllStarred(false); else if(GLB.currentFeed){this.makeDisplayList(); this.show_feed();} }
+    async updateAllFeeds() {
+         new Notice("Starting all feeds update...", 2000);
+         let totalNew = 0;
+         const promises = GLB.feedList.map(async (feed) => {
+             try {
+                 const [nNew, _] = await this.updateOneFeed(feed.feedUrl);
+                 if (nNew > 0) totalNew += nNew;
+             } catch (e: any) {
+                 console.error(`Update fail ${feed.name}:`, e);
+                 new Notice(`Update failed: ${feed.name}`, 2000);
+             }
+         });
+         await Promise.allSettled(promises);
+         new Notice(`Update finished. ${totalNew} new items found.`, totalNew > 0 ? 3000 : 1500);
 
-    // --- Feed Data Handling (Moved inside class) ---
+         // Refresh UI after updates
+         await this.refreshFeedListSidebar(); // Update sidebar counts and list
+         // Refresh main view if it's relevant
+         if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+             this.makeDisplayList(); // Regenerate starred list
+             this.refreshDisplay(); // Refresh starred view
+         } else if (GLB.currentFeed) {
+             this.makeDisplayList(); // Regenerate display indices
+             this.refreshDisplay(); // Refresh current feed view
+         }
+     }
+
+    // --- Feed Data Handling ---
     async loadSubscriptions() { await loadSubscriptions(this.app.vault.adapter); }
-    // Use app.vault for folder creation
     async saveSubscriptions() { await saveSubscriptions(this.app, this.app.vault.adapter); }
-    // Corrected: Remove argument from call to standalone createFeedBar
-    async createFeedBar() { await createFeedBar(); }
+    async createFeedBar(targetTableElement: HTMLTableElement | null) {
+        const t = targetTableElement; // Use passed element directly
+        if (!t) { console.error("Target table element not provided for createFeedBar"); return; }
+        t.empty(); // Clear previous content
+        let currentFolder = "%%%NO_FOLDER_YET%%%";
+
+        // Handle empty feed list
+        if (!GLB.feedList?.length) {
+             const row = t.createTBody().createEl('tr');
+             row.createEl('td').setText('No feeds subscribed.');
+             return;
+        }
+
+        const tbody = t.createTBody();
+        GLB.feedList.forEach(feed => {
+             if (!feed?.feedUrl || !feed.name) return; // Skip invalid entries
+             const folder = feed.folder || ""; // Default to empty string if no folder
+
+             // Add Folder Header Row if folder changes
+             if (folder !== currentFolder) {
+                 currentFolder = folder;
+                 const row = tbody.createEl('tr', { cls: 'feedFolderRow' });
+                 const cell = row.createEl('td'); cell.colSpan = 2; // Span full width
+                 cell.createEl('span', { text: currentFolder || "Uncategorized", cls: 'feedFolder' });
+             }
+
+             // Add Feed Item Row
+             const tr = tbody.createEl('tr');
+             const nameTd = tr.createEl('td');
+             const showFeedSpan = nameTd.createEl('span', { cls: 'showFeed' });
+             showFeedSpan.id = feed.feedUrl; // ID for click handler and highlighting
+
+             showFeedSpan.createSpan({ text: feed.name, cls: 'feed-name' }); // Feed Name
+
+             // Stats Span (right-aligned)
+             const statsSpan = showFeedSpan.createSpan({ cls: 'feed-stats' });
+             statsSpan.setAttrs({ 'fdUrl': feed.feedUrl, 'fdName': feed.name }); // Attributes for refresh handler
+
+             const stats = this.getFeedStats(feed.feedUrl); // Use class method
+
+             // Unread Count
+             const unreadSpan = statsSpan.createEl('span', { text: stats.unread.toString(), cls: 'unreadCount' });
+             // Total Count (optional based on threshold)
+             if (stats.total < GLB.maxTotalnumDisplayed) {
+                 statsSpan.createEl('span', { text: '/', cls: 'unreadCountSep' }); // Separator
+                 statsSpan.createEl('span', { text: stats.total.toString(), cls: 'totalCount' }); // Total
+             }
+        });
+        // Highlighting is handled separately by FeedListView.updateFeedHighlighting
+    }
     async saveFeedsData(): Promise<number> {
-        // Ensure base folder exists before saving chunks
-        const folder = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
+        let numSavedChunks = 0;
+        if (!GLB.feedsStoreChange || GLB.feedsStoreChangeList.size === 0) return 0;
+
+        const storeFolder = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
         try {
-            if (!await this.app.vault.adapter.exists(folder)) {
-                await this.app.vault.createFolder(folder);
-                console.log(`Created feed store folder: ${folder}`);
+            if (!await this.app.vault.adapter.exists(storeFolder)) {
+                await this.app.vault.createFolder(storeFolder);
             }
         } catch (e) {
-            console.error(`Error ensuring feed store folder exists (${folder}):`, e);
+            console.error(`Error ensuring feed store folder exists (${storeFolder}):`, e);
             new Notice("Error creating feed store directory. Cannot save data.", 5000);
-            return 0; // Prevent further save attempts if folder fails
+            return 0;
         }
-        // Pass app to saveStringSplitted (indirectly via saveStringToFileGzip/saveStringToFile)
-        return saveFeedsData(this.app, this.app.vault.adapter);
+
+        const savePromises: Promise<number>[] = [];
+        const changedFeedUrls = Array.from(GLB.feedsStoreChangeList);
+
+        for (const feedUrl of changedFeedUrls) {
+            const feedInfo = GLB.feedList.find(f => f.feedUrl === feedUrl);
+            const feedName = feedInfo?.name;
+            const feedData = GLB.feedsStore[feedUrl];
+
+            if (!feedData) { console.warn(`Save Skip: Feed data missing for ${feedUrl}`); continue; }
+            if (!feedName) { console.warn(`Save Skip (no name associated): ${feedUrl}`); continue; }
+
+            try {
+                const dataString = JSON.stringify(feedData);
+                // Pass app instance down to saveStringSplitted
+                savePromises.push(this.saveStringSplitted(dataString, storeFolder, feedName, GLB.lenStrPerFile));
+            } catch (e) {
+                console.error(`Stringify error for feed ${feedName} (${feedUrl}):`, e);
+            }
+        }
+
+        const results = await Promise.allSettled(savePromises);
+        results.forEach(result => {
+            if (result.status === 'fulfilled') {
+                numSavedChunks += result.value;
+            } else {
+                console.error("Chunk save error:", result.reason);
+            }
+        });
+
+        // Reset change flags only after attempting all saves
+        GLB.feedsStoreChange = false;
+        GLB.feedsStoreChangeList.clear();
+
+        if (numSavedChunks > 0) console.log(`Saved ${numSavedChunks} data chunks.`);
+        return numSavedChunks;
     }
     async loadFeedsStoredData() { await loadFeedsStoredData(this.app.vault.adapter); }
     async loadOldCombinedDataFile() { await loadOldCombinedDataFile(this.app.vault.adapter); }
     mergeStoreWithNewData(newdata: RssFeedContent, key: string): number { return mergeStoreWithNewData(newdata, key); }
-    // Pass app to updateOneFeed -> saveFeedsData
     async updateOneFeed(feedUrl: string): Promise<[number, number]> { return updateOneFeed(this.app, feedUrl, this.app.vault.adapter); }
 
-    // --- Display List & View Rendering (Moved inside class) ---
-    makeDisplayList() { makeDisplayList(); }
-    show_feed() { show_feed(this.app, this); }
+    // --- Display List & View Rendering ---
+    makeDisplayList() { makeDisplayList(); } // Global function call
+    show_feed() { // Deprecated wrapper
+         console.warn("FeedsReader.show_feed() is deprecated, use FeedsReader.refreshDisplay()");
+         this.refreshDisplay();
+    }
     createPageActionButtons(container: HTMLElement, hasItems: boolean) { createPageActionButtons(container, hasItems); }
     createPagination(container: HTMLElement, totalItems: number) { createPagination(container, totalItems); }
-    createCardItem(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) { createCardItem(this.app, container, item, originalIndex, feedUrl, isStarredView); } // Pass app
-    createListItem(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) { createListItem(this.app, container, item, originalIndex, feedUrl, isStarredView); } // Pass app
+    createCardItem(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) { createCardItem(this.app, container, item, originalIndex, feedUrl, isStarredView); }
+    createListItem(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) { createListItem(this.app, container, item, originalIndex, feedUrl, isStarredView); }
     createActionButtons(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, viewType: 'list' | 'card') { createActionButtons(container, item, originalIndex, feedUrl, viewType); }
 
-    // --- Statistics (Moved inside class) ---
+    // --- Statistics ---
     getFeedStats(feedUrl: string): { total: number; read: number; deleted: number; unread: number; starred: number } { return getFeedStats(feedUrl); }
     getFeedStorageInfo(feedUrl: string): [string, string, number, number] { return getFeedStorageInfo(feedUrl); }
 
-    // --- Feed Management Actions (Moved inside class) ---
+    // --- Feed Management Actions ---
     markAllRead(feedUrl: string) { markAllRead(feedUrl); }
     purgeDeleted(feedUrl: string) { purgeDeleted(feedUrl); }
     removeContent(feedUrl: string) { removeContent(feedUrl); }
@@ -264,16 +1245,12 @@ ${ct?`## Content\n\n${ct}`:''}
     purgeAll(feedUrl: string) { purgeAll(feedUrl); }
     purgeOldHalf(feedUrl: string) { purgeOldHalf(feedUrl); }
     deduplicate(feedUrl: string): number { return deduplicate(feedUrl); }
-    // Pass app to removeFeed -> saveSubscriptions
     async removeFeed(feedUrl: string) { await removeFeed(this.app, this.app.vault.adapter, feedUrl, this); }
 
-    // --- File I/O Helpers (Moved inside class) ---
+    // --- File I/O Helpers ---
     makeFilename(fname_base: string, iPostfix: number): string { return makeFilename(fname_base, iPostfix); }
-    // Pass app to saveStringToFileGzip -> saveStringToFile for folder creation
     async saveStringToFileGzip(s: string, folder: string, fname: string): Promise<boolean> { return saveStringToFileGzip(this.app, this.app.vault.adapter, s, folder, fname); }
-    // Pass app to saveStringToFile for folder creation
     async saveStringToFile(s: string, folder: string, fname: string): Promise<boolean> { return saveStringToFile(this.app, this.app.vault.adapter, s, folder, fname); }
-    // Pass app to saveStringSplitted -> saveStringToFileGzip/saveStringToFile
     async saveStringSplitted(s: string, folder: string, fname_base: string, nCharPerFile: number): Promise<number> { return saveStringSplitted(this.app, this.app.vault.adapter, s, folder, fname_base, nCharPerFile); }
     async loadStringSplitted_Gzip(folder: string, fname_base: string): Promise<string> { return loadStringSplitted_Gzip(this.app.vault.adapter, folder, fname_base); }
     async loadStringSplitted(folder: string, fname_base: string): Promise<string> { return loadStringSplitted(this.app.vault.adapter, folder, fname_base); }
@@ -284,522 +1261,2070 @@ ${ct?`## Content\n\n${ct}`:''}
 // ============================================================
 // --- Global Helper Functions & Modal Definitions          ---
 // ============================================================
-// Moved implementations inside the class or made them accept adapter/app
+// These functions operate on GLB or require App/Adapter instances
 
 // --- Feed Data Handling ---
-async function loadSubscriptions(adapter: DataAdapter) { const p=`${GLB.feeds_reader_dir}/${GLB.subscriptions_fname}`; GLB.feedList=[]; try{if(await adapter.exists(p)){const d=await adapter.read(p); if(d){GLB.feedList=JSON.parse(d); if(!Array.isArray(GLB.feedList))throw new Error("Not array."); GLB.feedList=GLB.feedList.filter(f=>f?.name&&f.feedUrl);}}}catch(e:any){console.error("Load Sub Error:",e); new Notice(`Load Subs Error: ${e.message}`,3000); GLB.feedList=[];} sort_feed_list(); }
-// Modified: Accept App object to access vault for createFolder
-async function saveSubscriptions(app: App, adapter: DataAdapter) {
-    const d = GLB.feeds_reader_dir;
-    const p = `${d}/${GLB.subscriptions_fname}`;
+async function loadSubscriptions(adapter: DataAdapter) {
+    const path = `${GLB.feeds_reader_dir}/${GLB.subscriptions_fname}`;
+    GLB.feedList = [];
     try {
-        // Use app.vault.createFolder for directory creation
-        if (!await adapter.exists(d)) await app.vault.createFolder(d);
-        const v = GLB.feedList.filter(f => f?.name && f.feedUrl);
-        await adapter.write(p, JSON.stringify(v, null, 2));
+        if (await adapter.exists(path)) {
+            const data = await adapter.read(path);
+            if (data) {
+                const parsedData = JSON.parse(data);
+                if (!Array.isArray(parsedData)) throw new Error("Subscriptions data is not an array.");
+                // Filter for valid feed entries (basic check)
+                GLB.feedList = parsedData.filter(f => f?.name && f.feedUrl);
+            }
+        }
     } catch (e: any) {
-        console.error("Save Subs Error:", e);
-        new Notice(`Save Subs Error: ${e.message}`, 2000);
+        console.error("Load Subscriptions Error:", e);
+        new Notice(`Error loading subscriptions: ${e.message}`, 3000);
+        GLB.feedList = []; // Reset on error
+    }
+    sort_feed_list(); // Sort after loading
+}
+
+async function saveSubscriptions(app: App, adapter: DataAdapter) {
+    const dirPath = GLB.feeds_reader_dir;
+    const filePath = `${dirPath}/${GLB.subscriptions_fname}`;
+    try {
+        if (!await adapter.exists(dirPath)) {
+             await app.vault.createFolder(dirPath); // Use vault API for folder creation
+        }
+        // Filter for valid items before saving
+        const validFeedList = GLB.feedList.filter(f => f?.name && f.feedUrl);
+        await adapter.write(filePath, JSON.stringify(validFeedList, null, 2)); // Pretty print JSON
+    } catch (e: any) {
+        console.error("Save Subscriptions Error:", e);
+        new Notice(`Error saving subscriptions: ${e.message}`, 2000);
     }
 }
-async function createFeedBar() {
-    // Cast to HTMLTableElement after null check
-    const t = document.getElementById('feedTable') as HTMLTableElement | null;
-    if (!t) return;
-    t.empty();
-    let cur = "%%%NO_FOLDER_YET%%%";
-    if (!GLB.feedList?.length) {
-        t.createEl('tr').createEl('td').setText('No feeds.');
+
+// createFeedBar is now a class method in FeedsReader
+
+// saveFeedsData is now a class method in FeedsReader
+
+async function loadFeedsStoredData(adapter: DataAdapter) {
+    GLB.feedsStore = {}; // Initialize/clear the store
+    if (!GLB.feedList) {
+        console.warn("loadFeedsStoredData: feedList is not loaded.");
         return;
     }
-    // Use createTBody on the table element
-    const b = t.createTBody();
-    GLB.feedList.forEach(i => {
-        if (!i?.feedUrl || !i.name) return;
-        const fld = i.folder || "";
-        if (fld !== cur) {
-            cur = fld;
-            const r = b.createEl('tr', { cls: 'feedFolderRow' });
-            const c = r.createEl('td');
-            c.colSpan = 2;
-            c.createEl('span', { text: cur || "Uncategorized", cls: 'feedFolder' }); // Changed "Uncat."
-        }
-        const tr = b.createEl('tr');
-        const nTd = tr.createEl('td');
-        const sF = nTd.createEl('span', { cls: 'showFeed' });
-        sF.id = i.feedUrl;
-        if (i.feedUrl === GLB.currentFeed) sF.addClass('showingFeed');
-        sF.createSpan({ text: i.name, cls: 'feed-name' });
-        const sC = sF.createSpan({ cls: 'feed-stats' });
-        sC.setAttrs({ 'fdUrl': i.feedUrl, 'fdName': i.name });
-        const s = getFeedStats(i.feedUrl);
-        const uc = sC.createEl('span', { text: s.unread.toString(), cls: 'unreadCount' });
-        uc.id = `unreadCount${i.feedUrl}`;
-        if (s.total < GLB.maxTotalnumDisplayed) {
-            const sep = sC.createEl('span', { text: '/', cls: 'unreadCountSep' });
-            sep.id = `sepUnreadTotal${i.feedUrl}`;
-            const tc = sC.createEl('span', { text: s.total.toString(), cls: 'totalCount' });
-            tc.id = `totalCount${i.feedUrl}`;
+
+    const loadPromises = GLB.feedList.map(async (feedInfo) => {
+        const dir = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
+        try {
+            // Try loading gzipped first
+            let dataString = await loadStringSplitted_Gzip(adapter, dir, feedInfo.name);
+            let wasGzipped = true;
+            if (dataString === '') { // If gzip load failed or returned empty
+                dataString = await loadStringSplitted(adapter, dir, feedInfo.name); // Try plain text
+                wasGzipped = false;
+            }
+
+            if (dataString) {
+                try {
+                    const feedContent: RssFeedContent = JSON.parse(dataString);
+                    // Assign metadata from feedList
+                    feedContent.name = feedInfo.name;
+                    feedContent.folder = feedInfo.folder || '';
+
+                    // Normalize items
+                    if (feedContent?.items) {
+                        feedContent.items.forEach(item => {
+                            if (item) { // Ensure item is not null/undefined
+                                item.starred ??= false; // Default starred to false
+                                if (item.read === '') item.read = null; // Normalize empty read string
+                                if (item.deleted === '') item.deleted = null; // Normalize empty deleted string
+                                item.downloaded ??= nowdatetime(); // Default downloaded time
+                            }
+                        });
+                        // Filter out any null/undefined items just in case
+                        feedContent.items = feedContent.items.filter(Boolean);
+                    } else {
+                        feedContent.items = []; // Ensure items array exists
+                    }
+
+                    GLB.feedsStore[feedInfo.feedUrl] = feedContent;
+
+                    // Mark for resaving as gzip if loaded as plain text
+                    if (!wasGzipped) {
+                        GLB.feedsStoreChange = true;
+                        GLB.feedsStoreChangeList.add(feedInfo.feedUrl);
+                    }
+
+                } catch (e: any) {
+                    console.error(`Parse Error for feed ${feedInfo.name}:`, e, "Data:", dataString.substring(0, 200));
+                    new Notice(`Error parsing data for feed: ${feedInfo.name}`, 3000);
+                }
+            } else {
+                // No data found, initialize empty store for this feed
+                 console.log(`No stored data found for feed: ${feedInfo.name}, initializing empty store.`);
+                 GLB.feedsStore[feedInfo.feedUrl] = {
+                      name: feedInfo.name,
+                      folder: feedInfo.folder || '',
+                      title: feedInfo.name, // Use feed name as initial title
+                      subtitle: '',
+                      link: feedInfo.feedUrl, // Use feed URL as link
+                      image: '',
+                      description: '',
+                      pubDate: '',
+                      items: []
+                 };
+            }
+        } catch (e: any) {
+            console.error(`Load Error for feed ${feedInfo.name}:`, e);
+            new Notice(`Error loading data for feed: ${feedInfo.name}`, 3000);
         }
     });
+
+    await Promise.allSettled(loadPromises);
+    console.log("Feed data loading process completed.");
+    // After loading individual feeds, attempt to load legacy combined file
+    await loadOldCombinedDataFile(adapter);
 }
 
-// Modified: Accept App object for folder creation check before saving chunks
-async function saveFeedsData(app: App, adapter: DataAdapter): Promise<number> {
-    let nS = 0;
-    if (!GLB.feedsStoreChange || GLB.feedsStoreChangeList.size === 0) return 0;
-
-    // Folder check moved to the calling class method (FeedsReader.saveFeedsData)
-
-    const p: Promise<number>[] = [];
-    const ch = Array.from(GLB.feedsStoreChangeList);
-    for (const k of ch) {
-        const i = GLB.feedList.find(f => f.feedUrl === k);
-        const n = i?.name;
-        if (!GLB.feedsStore[k]) { console.warn(`Save Skip: Feed data missing for ${k}`); continue; }
-        if (!n) { console.warn(`Save Skip (no name associated): ${k}`); continue; }
-        try {
-            const dS = JSON.stringify(GLB.feedsStore[k]);
-            // Pass app down to saveStringSplitted
-            p.push(saveStringSplitted(app, adapter, dS, `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`, n, GLB.lenStrPerFile));
-        } catch (e) { console.error(`Stringify error for feed ${n} (${k}):`, e); }
-    }
-    const res = await Promise.allSettled(p);
-    res.forEach(r => { if (r.status === 'fulfilled') nS += r.value; else console.error("Save chunk error:", r.reason); });
-    GLB.feedsStoreChange = false;
-    GLB.feedsStoreChangeList.clear();
-    if (nS > 0) console.log(`Saved ${nS} chunks.`);
-    return nS;
-}
-async function loadFeedsStoredData(adapter: DataAdapter) { GLB.feedsStore={}; if(!GLB.feedList)return; const p=GLB.feedList.map(async(f)=>{const dir=`${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`; try{let res=await loadStringSplitted_Gzip(adapter,dir,f.name); let gz=true; if(res===''){res=await loadStringSplitted(adapter,dir,f.name); gz=false;} if(res){try{const d:RssFeedContent=JSON.parse(res); d.name=f.name; d.folder=f.folder || ''; if(d?.items){d.items.forEach(i=>{if(i){i.starred??=false; if(i.read==='')i.read=null; if(i.deleted==='')i.deleted=null; i.downloaded??=nowdatetime();}}); d.items=d.items.filter(Boolean);}else d.items=[]; GLB.feedsStore[f.feedUrl]=d; if(!gz){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(f.feedUrl);}}catch(e:any){console.error(`Parse Err ${f.name}:`,e,res.substring(0,200)); new Notice(`Parse error: ${f.name}`,3000);}}else console.log(`No stored data found for feed: ${f.name}`);}catch(e:any){console.error(`Load Err ${f.name}:`,e); new Notice(`Load error: ${f.name}`,3000);}}); await Promise.allSettled(p); console.log("Feed data loading process completed."); await loadOldCombinedDataFile(adapter); }
-async function loadOldCombinedDataFile(adapter: DataAdapter) { const op=`${GLB.feeds_reader_dir}/${GLB.feeds_data_fname}`; try{if(await adapter.exists(op)){new Notice(`Loading legacy data file...`,5000); const od=await adapter.read(op); if(od){const p=JSON.parse(od); for(const u in p){if(!GLB.feedsStore[u]&&p.hasOwnProperty(u)){const i=GLB.feedList.find(f=>f.feedUrl===u); const d=p[u] as RssFeedContent; if(d?.items){d.name=i?.name||u; d.folder=i?.folder||''; d.items.forEach(it=>{if(it){it.starred??=false; if(it.read==='')it.read=null; if(it.deleted==='')it.deleted=null; it.downloaded??=nowdatetime();}}); d.items=d.items.filter(Boolean); GLB.feedsStore[u]=d; GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(u);}else console.warn(`Invalid legacy data structure for: ${u}`);}} // Optionally remove the old file after successful migration
-        // Consider adding a confirmation or setting before removing
-        // console.log("Attempting to remove legacy data file:", op);
-        // await adapter.remove(op);
-        // new Notice("Legacy data migrated and file removed.", 2000);
-        }
-      }
-    }catch(e:any){console.error("Legacy load error:",e); new Notice(`Legacy load error: ${e.message}`,3000);} }
-function mergeStoreWithNewData(newdata:RssFeedContent, key:string):number{ if(!newdata?.items)return 0; if(!GLB.feedsStore[key]){const i=GLB.feedList.find(f=>f.feedUrl===key); newdata.name=i?.name||key; newdata.folder=i?.folder||''; newdata.items.forEach(it=>{if(it){it.starred??=false; it.read=null; it.deleted=null; it.downloaded??=nowdatetime();}}); GLB.feedsStore[key]=newdata; GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(key); return newdata.items.length;} const ex=GLB.feedsStore[key]; ex.title=newdata.title||ex.title; ex.subtitle=newdata.subtitle||ex.subtitle; ex.description=newdata.description||ex.description; ex.pubDate=newdata.pubDate||ex.pubDate; if(newdata.image)ex.image=newdata.image; let nNew=0; const exL=new Set(ex.items.slice(0,GLB.nMergeLookback).map(i=>i?.link).filter(Boolean)); const toAdd:RssFeedItem[]=[]; for(let j=newdata.items.length-1;j>=0;j--){const nI=newdata.items[j]; if(!nI)continue; if(nI.link&&!exL.has(nI.link)){nI.starred=false; nI.read=null; nI.deleted=null; nI.downloaded??=nowdatetime(); toAdd.push(nI); nNew++;}else if(!nI.link)console.warn(`Skip new item with no link: ${key}`);} if(nNew>0){ex.items.unshift(...toAdd); GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(key);} return nNew; }
-// Modified: Accept app for saveFeedsData call
-async function updateOneFeed(app: App, feedUrl: string, adapter: DataAdapter): Promise<[number, number]> {
-    let nN = 0, nT = 0;
+async function loadOldCombinedDataFile(adapter: DataAdapter) {
+    const oldPath = `${GLB.feeds_reader_dir}/${GLB.feeds_data_fname}`;
     try {
-        const r = await getFeedItems(feedUrl);
-        if (r?.items) {
-            nN = mergeStoreWithNewData(r, feedUrl);
-            nT = GLB.feedsStore[feedUrl]?.items?.length || 0;
-            // Pass app to saveFeedsData if new items were added
-            if (nN > 0) await saveFeedsData(app, adapter);
-        } else {
-            nT = GLB.feedsStore[feedUrl]?.items?.length || 0;
+        if (await adapter.exists(oldPath)) {
+            new Notice(`Importing legacy data file ('${GLB.feeds_data_fname}')...`, 5000);
+            const oldDataContent = await adapter.read(oldPath);
+            if (oldDataContent) {
+                const parsedOldData = JSON.parse(oldDataContent);
+                let importedCount = 0;
+                for (const feedUrl in parsedOldData) {
+                    // Import only if not already loaded and data seems valid
+                    if (!GLB.feedsStore[feedUrl] && parsedOldData.hasOwnProperty(feedUrl)) {
+                        const feedInfo = GLB.feedList.find(f => f.feedUrl === feedUrl);
+                        const oldFeedData = parsedOldData[feedUrl] as RssFeedContent;
+
+                        if (oldFeedData?.items) {
+                            // Assign metadata and normalize items
+                            oldFeedData.name = feedInfo?.name || feedUrl; // Use name from feedList if possible
+                            oldFeedData.folder = feedInfo?.folder || '';
+                            oldFeedData.items.forEach(item => {
+                                if (item) {
+                                    item.starred ??= false;
+                                    if (item.read === '') item.read = null;
+                                    if (item.deleted === '') item.deleted = null;
+                                    item.downloaded ??= nowdatetime();
+                                }
+                            });
+                            oldFeedData.items = oldFeedData.items.filter(Boolean);
+
+                            GLB.feedsStore[feedUrl] = oldFeedData;
+                            // Mark for saving in new format
+                            GLB.feedsStoreChange = true;
+                            GLB.feedsStoreChangeList.add(feedUrl);
+                            importedCount++;
+                        } else {
+                            console.warn(`Invalid legacy data structure for: ${feedUrl}`);
+                        }
+                    }
+                }
+                if (importedCount > 0) {
+                     console.log(`Imported data for ${importedCount} feeds from legacy file.`);
+                }
+
+                // **Consider adding a setting before automatically removing the old file**
+                // Example: if (this.settings.removeLegacyFileAfterImport) { ... }
+                 try {
+                     console.log("Attempting to remove legacy data file:", oldPath);
+                     await adapter.remove(oldPath);
+                     new Notice("Legacy data imported and old file removed.", 2000);
+                 } catch (removeError) {
+                      console.error("Failed to remove legacy data file:", removeError);
+                      new Notice("Failed to remove legacy data file. Please remove it manually if desired.", 3000);
+                 }
+            }
         }
     } catch (e: any) {
-        console.error(`UpdateOneFeed Err ${feedUrl}:`, e);
+        console.error("Error loading or processing legacy data file:", e);
+        new Notice(`Error handling legacy data file: ${e.message}`, 3000);
+    }
+}
+
+function mergeStoreWithNewData(newdata: RssFeedContent, feedUrl: string): number {
+    if (!newdata?.items) return 0; // No new items to merge
+
+    // If store doesn't exist for this feed, initialize it
+    if (!GLB.feedsStore[feedUrl]) {
+        const feedInfo = GLB.feedList.find(f => f.feedUrl === feedUrl);
+        newdata.name = feedInfo?.name || feedUrl;
+        newdata.folder = feedInfo?.folder || '';
+        newdata.items.forEach(item => {
+            if (item) {
+                item.starred = false; // New items are never starred initially
+                item.read = null;
+                item.deleted = null;
+                item.downloaded ??= nowdatetime();
+            }
+        });
+        GLB.feedsStore[feedUrl] = newdata;
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        return newdata.items.length; // All items are new
+    }
+
+    // Store exists, merge new items
+    const existingStore = GLB.feedsStore[feedUrl];
+    // Update feed metadata (prefer new data if available)
+    existingStore.title = newdata.title || existingStore.title;
+    existingStore.subtitle = newdata.subtitle || existingStore.subtitle;
+    existingStore.description = newdata.description || existingStore.description;
+    existingStore.pubDate = newdata.pubDate || existingStore.pubDate;
+    if (newdata.image) existingStore.image = newdata.image; // Only update image if new one exists
+
+    let newItemsCount = 0;
+    // Create a set of recent existing links for efficient lookup
+    const existingLinks = new Set(
+        existingStore.items.slice(0, GLB.nMergeLookback).map(item => item?.link).filter(Boolean)
+    );
+
+    const itemsToAdd: RssFeedItem[] = [];
+    // Iterate new items from newest to oldest (assuming typical feed order)
+    for (let i = 0; i < newdata.items.length; i++) {
+        const newItem = newdata.items[i];
+        if (!newItem) continue;
+
+        // Check if the item link exists in recent items
+        if (newItem.link && !existingLinks.has(newItem.link)) {
+            // Item is considered new
+            newItem.starred = false;
+            newItem.read = null;
+            newItem.deleted = null;
+            newItem.downloaded ??= nowdatetime();
+            itemsToAdd.push(newItem);
+            newItemsCount++;
+        } else if (!newItem.link) {
+            // Handle items without links (e.g., log warning, skip, or use GUID if available)
+            console.warn(`Skipping new item with no link in feed: ${feedUrl}`, newItem.title);
+        }
+        // If link exists, assume it's not new and skip
+    }
+
+    // Add new items to the beginning of the existing items array
+    if (newItemsCount > 0) {
+        existingStore.items.unshift(...itemsToAdd);
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        console.log(`Added ${newItemsCount} new items to feed: ${existingStore.name}`);
+    }
+
+    return newItemsCount;
+}
+
+async function updateOneFeed(app: App, feedUrl: string, adapter: DataAdapter): Promise<[number, number]> {
+    let numNew = 0;
+    let totalItems = 0;
+    try {
+        const feedContent = await getFeedItems(feedUrl); // Fetch new items
+        if (feedContent?.items) {
+            numNew = mergeStoreWithNewData(feedContent, feedUrl); // Merge with existing store
+            totalItems = GLB.feedsStore[feedUrl]?.items?.length || 0;
+            // Save data immediately if new items were added
+            if (numNew > 0) {
+                 // Use the class method for saving - Cast app to any to access plugins
+                 const pluginInstance = (app as any).plugins?.plugins?.['feeds-reader'];
+                 if (pluginInstance instanceof FeedsReader) {
+                      await pluginInstance.saveFeedsData();
+                 } else {
+                      console.error("updateOneFeed: Could not get plugin instance to save data.");
+                 }
+            }
+        } else {
+            // Feed fetch might have failed or returned no items
+            totalItems = GLB.feedsStore[feedUrl]?.items?.length || 0; // Get count from existing store
+            // Optionally log this case, but don't treat as error
+            // console.warn(`No new items found or fetch failed for ${feedUrl}`);
+        }
+    } catch (e: any) {
+        console.error(`Error in updateOneFeed for ${feedUrl}:`, e);
+        // Re-throw the error so the caller (e.g., updateAllFeeds) can handle it
         throw e;
     }
-    return [nN, nT];
+    return [numNew, totalItems];
 }
 
 
 // --- Display List Generation & Sorting ---
-function makeDisplayList() { GLB.displayIndices=[]; GLB.starredItemsList=[]; if(GLB.currentFeed===GLB.STARRED_VIEW_ID){for(const url in GLB.feedsStore){if(GLB.feedsStore.hasOwnProperty(url)){const f=GLB.feedsStore[url]; if(f?.items){f.items.forEach((i,idx)=>{if(i?.starred&&!i.deleted)GLB.starredItemsList.push({feedUrl:url,originalIndex:idx,item:i});});}}} GLB.starredItemsList.sort((a,b)=>{const dA=new Date(a.item.pubDate||a.item.downloaded||0).getTime(); const dB=new Date(b.item.pubDate||b.item.downloaded||0).getTime(); return(GLB.itemOrder==='Old to new')?dA-dB:dB-dA;});} else if(GLB.currentFeed&&GLB.feedsStore[GLB.currentFeed]){const fd=GLB.feedsStore[GLB.currentFeed]; if(!fd?.items)return; for(let i=0; i<fd.items.length; i++){const item=fd.items[i]; if(!item)continue; let d=false; switch(GLB.filterMode){case 'all':d=!item.deleted;break; case 'unread':d=!item.read&&!item.deleted;break; case 'starred':d=!!item.starred&&!item.deleted;break; default:d=!item.deleted;} if(d)GLB.displayIndices.push(i);} if(GLB.itemOrder==='Old to new')GLB.displayIndices.reverse();} if(GLB.itemOrder==='Random'){const list=(GLB.currentFeed===GLB.STARRED_VIEW_ID)?GLB.starredItemsList:GLB.displayIndices; for(let i=list.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [list[i],list[j]]=[list[j],list[i]];}} }
-function sort_feed_list() { if (!GLB.feedList) return; GLB.feedList.sort((a, b) => { const fA = a.folder || "zzz"; const fB = b.folder || "zzz"; if (fA < fB) return -1; if (fA > fB) return 1; const nA = a.name || ""; const nB = b.name || ""; return nA.localeCompare(nB); }); }
+function makeDisplayList() {
+    GLB.displayIndices = [];
+    GLB.starredItemsList = [];
 
-// --- Main View Rendering ---
-function show_feed(app: App, plugin: FeedsReader) { const fE=document.getElementById('feed_content'); const hE=document.getElementById('contentHeader'); if(!fE||!hE)return; fE.empty(); hE.empty(); const iS=GLB.currentFeed===GLB.STARRED_VIEW_ID; const list=iS?GLB.starredItemsList:GLB.displayIndices; let fD:RssFeedContent|null=null; if(!iS&&GLB.currentFeed)fD=GLB.feedsStore[GLB.currentFeed]; const tH=hE.createEl('h2'); tH.addClass('feed-title-header'); if(iS)tH.setText('★ Starred Items'); else if(fD){if(fD.link)tH.createEl('a',{href:fD.link,text:fD.title||GLB.currentFeedName, attr: {target: '_blank', rel: 'noopener noreferrer'}}); else tH.setText(fD.title||GLB.currentFeedName);} else tH.setText('Select Feed'); const acts=hE.createDiv({cls:'header-actions'}); if(!iS&&GLB.currentFeed){const r=acts.createEl('button',{text:'Refresh'}); r.id='refreshCurrentFeed';} const v=acts.createEl('button',{text:GLB.displayMode==='list'?'Card View':'List View'}); v.id='toggleDisplayMode'; if(GLB.displayMode==='card'){const wd=acts.createEl('button',{text:'W-'}); wd.id='decreaseCardWidth'; const wi=acts.createEl('button',{text:'W+'}); wi.id='increaseCardWidth';} const tA=fE.createDiv({cls:'page-actions top-page-actions'}); createPageActionButtons(tA,list.length>0); const iC=fE.createDiv(); iC.addClass(`items-container-${GLB.displayMode}`); const start=GLB.idxItemStart; const end=Math.min(list.length,start+GLB.nItemPerPage); let nD=0; if(list.length===0)iC.setText(iS?'No starred items.':`No items for filter ('${GLB.filterMode}').`); else if(start>=list.length)iC.setText('No more items.'); else{for(let i=start; i<end; i++){let item:RssFeedItem|null=null; let url:string|null=null; let idx=-1; if(iS){const si=GLB.starredItemsList[i]; item=si.item; url=si.feedUrl; idx=si.originalIndex;}else if(GLB.currentFeed){idx=GLB.displayIndices[i]; item=GLB.feedsStore[GLB.currentFeed]?.items[idx]; url=GLB.currentFeed;} if(!item||!url)continue; // Pass app to createCardItem and createListItem
-            if(GLB.displayMode==='card')createCardItem(app, iC,item,idx,url,iS); else createListItem(app, iC,item,idx,url,iS); nD++;}} if(nD>=5){const bA=fE.createDiv({cls:'page-actions bottom-page-actions'}); createPageActionButtons(bA,true);} createPagination(fE,list.length); if(!iS)plugin.updateFeedStatsUI(); plugin.frViewInstance?.updateHeaderText(); }
-function createPageActionButtons(container:HTMLElement, hasItems:boolean){ if(hasItems){container.createEl('button',{text:'Mark Page Read',cls:'markPageRead page-action-button'}); container.createEl('button',{text:'Mark Page Delete',cls:'markPageDeleted page-action-button'}); if(GLB.currentFeed!==GLB.STARRED_VIEW_ID)container.createEl('button',{text:'Remove Content',cls:'removePageContent page-action-button'}); container.style.display='flex';}else container.hide(); }
-function createPagination(container:HTMLElement, totalItems:number){ const pC=container.createDiv({cls:'pagination-container'}); let hP=false,hN=false; const tP=totalItems>0?Math.ceil(totalItems/GLB.nItemPerPage):0; if(GLB.nPage>1){const p=pC.createEl('button',{text:"◀ Prev",cls:"prevPage pagination-button"}); p.id="prevPage"; hP=true;} if(GLB.idxItemStart+GLB.nItemPerPage<totalItems){const n=pC.createEl('button',{text:"Next ▶",cls:"nextPage pagination-button"}); n.id="nextPage"; hN=true;} if(tP>0){const pi=pC.createSpan({cls:'page-info'}); pi.setText(`Page ${GLB.nPage} of ${tP} (${totalItems} items)`);} else if(totalItems===0&&!hP&&!hN)pC.hide(); }
-// Modified: Accept app argument and check app.plugins
-function createCardItem(app: App, container:HTMLElement, item:RssFeedItem, idx:number, url:string, isS:boolean){
-    const c=container.createDiv({cls:'card-item'});
-    c.setAttrs({'data-idx':idx.toString(),'data-feedurl':url,'data-link':item.link||''});
-    const th=c.createDiv({cls:'card-thumbnail'});
-    const imgUrl=item.imageUrl||GLB.feedsStore[url]?.image;
-    const placeholderText = item.title?.substring(0,1)||'?'; // Cache placeholder text
+    if (GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+        // Generate list of starred items across all feeds
+        for (const feedUrl in GLB.feedsStore) {
+            if (GLB.feedsStore.hasOwnProperty(feedUrl)) {
+                const feed = GLB.feedsStore[feedUrl];
+                if (feed?.items) {
+                    feed.items.forEach((item, index) => {
+                        if (item?.starred && !item.deleted) { // Only include non-deleted starred items
+                            GLB.starredItemsList.push({
+                                feedUrl: feedUrl,
+                                originalIndex: index,
+                                item: item
+                            });
+                        }
+                    });
+                }
+            }
+        }
+        // Sort starred items (default New to old based on pubDate/downloaded)
+        GLB.starredItemsList.sort((a, b) => {
+            const dateA = new Date(a.item.pubDate || a.item.downloaded || 0).getTime();
+            const dateB = new Date(b.item.pubDate || b.item.downloaded || 0).getTime();
+             // Assuming 'New to old' is default, 'Old to new' reverses
+             return (GLB.itemOrder === 'Old to new') ? dateA - dateB : dateB - dateA;
+        });
 
-    if(imgUrl){
-        const img=th.createEl('img');
-        img.src=imgUrl;
-        img.alt='Thumbnail'; // Use more descriptive alt text if possible
-        img.loading = 'lazy'; // Add lazy loading
-        img.onerror=()=>{
-            const thumbDiv = img.parentElement;
-            if (thumbDiv) {
+    } else if (GLB.currentFeed && GLB.feedsStore[GLB.currentFeed]) {
+        // Generate list of indices for the current feed based on filters
+        const currentFeedStore = GLB.feedsStore[GLB.currentFeed];
+        if (!currentFeedStore?.items) return; // No items in this feed
+
+        for (let i = 0; i < currentFeedStore.items.length; i++) {
+            const item = currentFeedStore.items[i];
+            if (!item) continue; // Skip null/undefined items
+
+            let includeItem = false;
+            switch (GLB.filterMode) {
+                case 'all':
+                    // Include all non-deleted items. Deleted handled by visibility check/CSS.
+                    includeItem = true; // Include index, visibility check handles actual display
+                    break;
+                case 'unread':
+                    includeItem = !item.read && !item.deleted;
+                    break;
+                case 'starred':
+                    includeItem = !!item.starred && !item.deleted;
+                    break;
+                default: // Should not happen, but default to including non-deleted
+                    includeItem = !item.deleted;
+            }
+
+            if (includeItem) {
+                GLB.displayIndices.push(i);
+            }
+        }
+
+        // Sort indices based on itemOrder (Default 'New to old' is already chronological)
+        if (GLB.itemOrder === 'Old to new') {
+            // Reverse the array of indices for 'Old to new'
+            GLB.displayIndices.reverse();
+        }
+        // 'Random' sorting applied after initial filtering/sorting
+    }
+
+     // Apply Random sort if selected, AFTER filtering and initial sort
+     if (GLB.itemOrder === 'Random') {
+         const listToSort = (GLB.currentFeed === GLB.STARRED_VIEW_ID) ? GLB.starredItemsList : GLB.displayIndices;
+         // Fisher-Yates shuffle algorithm
+         for (let i = listToSort.length - 1; i > 0; i--) {
+             const j = Math.floor(Math.random() * (i + 1));
+             [listToSort[i], listToSort[j]] = [listToSort[j], listToSort[i]]; // Swap elements
+         }
+     }
+}
+
+function sort_feed_list() {
+    if (!GLB.feedList) return;
+    GLB.feedList.sort((a, b) => {
+        const folderA = a.folder || "zzz"; // Place uncategorized last ('zzz' sorts after letters)
+        const folderB = b.folder || "zzz";
+        if (folderA < folderB) return -1;
+        if (folderA > folderB) return 1;
+        // If folders are the same, sort by name
+        const nameA = a.name || "";
+        const nameB = b.name || "";
+        return nameA.localeCompare(nameB); // Case-insensitive compare for names
+    });
+}
+
+// --- Main View Rendering (Logic moved to FRView.renderContent) ---
+// show_feed is deprecated
+
+// --- Helper functions called by Views ---
+function createPageActionButtons(container: HTMLElement, hasItems: boolean) {
+     // Clear previous buttons if any
+    // container.empty(); // Container should be emptied by caller if needed
+
+    if (hasItems) {
+        container.createEl('button', { text: 'Mark Page Read', cls: 'markPageRead page-action-button' });
+        container.createEl('button', { text: 'Mark Page Delete', cls: 'markPageDeleted page-action-button' });
+        // Only show "Remove Content" if not in starred view
+        if (GLB.currentFeed !== GLB.STARRED_VIEW_ID) {
+            container.createEl('button', { text: 'Remove Content', cls: 'removePageContent page-action-button' });
+        }
+        container.style.display = 'flex'; // Ensure container is visible
+    } else {
+        container.hide(); // Hide if no items
+    }
+}
+
+function createPagination(container: HTMLElement, totalItems: number) {
+    // Find or create pagination container
+    let paginationContainer = container.querySelector('.pagination-container') as HTMLElement;
+    if (paginationContainer) {
+        paginationContainer.empty(); // Clear existing pagination
+    } else {
+        paginationContainer = container.createDiv({ cls: 'pagination-container' });
+    }
+
+
+    const totalPages = totalItems > 0 ? Math.ceil(totalItems / GLB.nItemPerPage) : 0;
+    let hasPrev = false;
+    let hasNext = false;
+
+    // Previous Button
+    if (GLB.nPage > 1) {
+        const prevButton = paginationContainer.createEl('button', { text: "◀ Prev", cls: "prevPage pagination-button" });
+        prevButton.id = "prevPage"; // ID for click handler
+        hasPrev = true;
+    }
+
+    // Next Button
+    if (GLB.idxItemStart + GLB.nItemPerPage < totalItems) {
+        const nextButton = paginationContainer.createEl('button', { text: "Next ▶", cls: "nextPage pagination-button" });
+        nextButton.id = "nextPage"; // ID for click handler
+        hasNext = true;
+    }
+
+    // Page Info
+    if (totalPages > 0) {
+        const pageInfo = paginationContainer.createSpan({ cls: 'page-info' });
+        pageInfo.setText(`Page ${GLB.nPage} of ${totalPages} (${totalItems} items)`);
+    } else if (totalItems === 0 && !hasPrev && !hasNext) {
+        // Hide container completely if no items and no buttons needed (e.g., empty feed)
+        paginationContainer.hide();
+    } else {
+         // Show container if there are buttons, even with 0 total items (e.g., empty page > 1)
+         paginationContainer.style.display = 'flex';
+    }
+}
+
+function createCardItem(app: App, container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) {
+    const cardElement = container.createDiv({ cls: 'card-item' });
+    cardElement.setAttrs({
+        'data-idx': originalIndex.toString(),
+        'data-feedurl': feedUrl,
+        'data-link': item.link || ''
+    });
+
+    // Thumbnail
+    const thumbnailDiv = cardElement.createDiv({ cls: 'card-thumbnail' });
+    const imageUrl = item.imageUrl || GLB.feedsStore[feedUrl]?.image; // Prefer item image, fallback to feed image
+    const placeholderText = item.title?.substring(0, 1) || '?';
+
+    if (imageUrl) {
+        const img = thumbnailDiv.createEl('img');
+        img.src = imageUrl;
+        img.alt = `Thumbnail for ${item.title || 'feed item'}`;
+        img.loading = 'lazy';
+        img.onerror = () => {
+            const parent = img.parentElement;
+            if (parent) {
                 img.remove();
-                thumbDiv.addClass('no-thumbnail');
-                thumbDiv.setText(placeholderText);
+                parent.addClass('no-thumbnail');
+                parent.setText(placeholderText);
             }
         };
     } else {
-        th.addClass('no-thumbnail');
-        th.setText(placeholderText);
+        thumbnailDiv.addClass('no-thumbnail');
+        thumbnailDiv.setText(placeholderText);
     }
-    const cc=c.createDiv({cls:'card-content'});
-    const tE=cc.createEl('h3',{cls:'card-title'});
-    tE.createEl('a',{href:item.link||'#', text:item.title||'No Title', attr: { target: '_blank', rel: 'noopener noreferrer' }});
-    const mI=cc.createDiv({cls:'card-meta'});
-    const fN=GLB.feedsStore[url]?.name||url;
-    if(isS)mI.createSpan({cls:'card-feed-name',text:fN});
-    const dt=item.pubDate||item.downloaded||'';
-    if(dt)mI.createSpan({cls:'card-date',text:formatDate(dt)});
-    const acts=cc.createDiv({cls:'card-actions'});
-    acts.id=`actionContainer${idx}`;
-    createActionButtons(acts,item,idx,url,'card');
-    if(item.read)c.addClass('read');
-    // Apply deleted class correctly
-    if(item.deleted) c.addClass('deleted'); else c.removeClass('deleted');
-    if(item.starred)c.addClass('starred-item');
 
-    // Apply visibility filter initially
-    let plugin: FeedsReader | null = null;
-    if (app && app.plugins && typeof app.plugins.getPlugin === 'function') {
-        plugin = app.plugins.getPlugin('feeds-reader') as FeedsReader | null;
+    // Content
+    const contentDiv = cardElement.createDiv({ cls: 'card-content' });
+    const titleElement = contentDiv.createEl('h3', { cls: 'card-title' });
+    titleElement.createEl('a', { href: item.link || '#', text: item.title || 'No Title', attr: { target: '_blank', rel: 'noopener noreferrer' } });
+
+    const metaDiv = contentDiv.createDiv({ cls: 'card-meta' });
+    if (isStarredView) {
+        const feedName = GLB.feedsStore[feedUrl]?.name || feedUrl;
+        metaDiv.createSpan({ cls: 'card-feed-name', text: feedName });
     }
-    if(plugin) plugin.updateItemVisibility(item, idx, url);
-}
+    const dateStr = item.pubDate || item.downloaded || '';
+    if (dateStr) {
+        metaDiv.createSpan({ cls: 'card-date', text: formatDate(dateStr) });
+    }
 
-// Modified: Accept app argument and check app.plugins
-function createListItem(app: App, container:HTMLElement, item:RssFeedItem, idx:number, url:string, isS:boolean){
-    const iE=container.createDiv({cls:'list-item'});
-    iE.setAttrs({'data-idx':idx.toString(),'data-feedurl':url,'data-link':item.link||''});
-    const h=iE.createDiv({cls:'list-item-header'});
-    const s=h.createEl('span',{text:item.starred?'★':'☆',cls:'item-action-star list-item-star'});
-    s.setAttrs({'data-idx':idx.toString(),'data-feedurl':url});
-    if(item.starred)s.addClass('starred');
-    const tC=h.createDiv({cls:'list-item-title-container'});
-    const t=tC.createEl('div',{cls:'list-item-title'});
-    t.createEl('a',{href:item.link||'#',text:item.title||'No Title', attr: { target: '_blank', rel: 'noopener noreferrer' }});
-    const m=h.createDiv({cls:'list-item-meta'});
-    const fN=GLB.feedsStore[url]?.name||url;
-    if(isS)m.createSpan({cls:'item-feed-name',text:`(${fN})`});
-    if(item.creator)m.createSpan({cls:'item-creator',text:item.creator});
-    const dt=item.pubDate||item.downloaded||'';
-    if(dt)m.createSpan({cls:'item-date',text:formatDate(dt)});
-    const a=iE.createDiv({cls:'list-item-actions'});
-    a.id=`actionContainer${idx}`;
-    createActionButtons(a,item,idx,url,'list');
-    const cC=iE.createDiv({cls:'item-content-container'});
-    cC.id=`itemContentContainer_${url}_${idx}`;
-    cC.hide();
-    if(item.read)iE.addClass('read');
-    // Apply deleted class correctly
-    if(item.deleted) iE.addClass('deleted'); else iE.removeClass('deleted');
-    if(item.starred)iE.addClass('starred-item');
+    // Actions (Buttons)
+    const actionsDiv = contentDiv.createDiv({ cls: 'card-actions' });
+    actionsDiv.id = `actionContainer${originalIndex}`; // Use originalIndex for unique ID
+    createActionButtons(actionsDiv, item, originalIndex, feedUrl, 'card'); // Call helper
 
-    // Apply visibility filter initially
+    // Apply state classes
+    cardElement.toggleClass('read', !!item.read && !item.deleted);
+    cardElement.toggleClass('deleted', !!item.deleted); // This class should hide the element via CSS
+    cardElement.toggleClass('starred-item', !!item.starred);
+
+    // Apply visibility based on current filters
+    // Use 'app as any' to access plugins and get the plugin instance
      let plugin: FeedsReader | null = null;
-     if (app && app.plugins && typeof app.plugins.getPlugin === 'function') {
-        plugin = app.plugins.getPlugin('feeds-reader') as FeedsReader | null;
-    }
-    if(plugin) plugin.updateItemVisibility(item, idx, url);
+     const anyApp = app as any;
+     if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
+         plugin = anyApp.plugins.plugins['feeds-reader'];
+     }
+    if (plugin) plugin.updateItemVisibility(item, originalIndex, feedUrl);
 }
-function createActionButtons(container: HTMLElement, item: RssFeedItem, idx: number, feedUrl: string, viewType: 'list' | 'card') {
-    const s = GLB.settings;
-    const star=container.createEl('button',{text:item.starred?'★':'☆',cls:`item-action-button item-action-star ${viewType}-item-star`});
-    star.setAttrs({'data-idx':idx.toString(),'data-feedurl':feedUrl});
-    if(item.starred)star.addClass('starred');
 
-    if(s.showRead){const b=container.createEl('button',{text:item.read?'Unread':'Read',cls:'item-action-button toggleRead'});b.id=`toggleRead${idx}`;}
-    if(s.showDelete){const b=container.createEl('button',{text:item.deleted?'Undelete':'Delete',cls:'item-action-button toggleDelete'});b.id=`toggleDelete${idx}`;}
-    if(s.showJot){const b=container.createEl('button',{text:'Jot',cls:'item-action-button jotNotes'});b.id=`jotNotes${idx}`;}
-    if(s.showSnippet){const b=container.createEl('button',{text:'Snippet',cls:'item-action-button saveSnippet'});b.id=`saveSnippet${idx}`;}
-    if(s.showSave){const b=container.createEl('button',{text:'Save Note',cls:'item-action-button noteThis'});b.id=`noteThis${idx}`;}
-    if(s.showMath){const b=container.createEl('button',{text:'Math',cls:'item-action-button renderMath'});b.id=`renderMath${idx}`;}
-    if(s.showGPT&&s.chatGPTAPIKey&&s.chatGPTPrompt){const b=container.createEl('button',{text:'GPT',cls:'item-action-button askChatGPT'});b.id=`askChatGPT${idx}`;}
-    if(s.showEmbed){container.createEl('button',{text:'Embed',cls:'item-action-button elEmbedButton'});}
-    if(s.showFetch){container.createEl('button',{text:'Fetch',cls:'item-action-button elFetch'});}
-    if(s.showLink&&item.link){container.createEl('a',{text:'Link',href:item.link,cls:'item-action-link',attr:{target:'_blank', rel:'noopener noreferrer'}});}
+function createListItem(app: App, container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, isStarredView: boolean) {
+    const itemElement = container.createDiv({ cls: 'list-item' });
+    itemElement.setAttrs({
+        'data-idx': originalIndex.toString(),
+        'data-feedurl': feedUrl,
+        'data-link': item.link || ''
+    });
+
+    const headerDiv = itemElement.createDiv({ cls: 'list-item-header' });
+
+    // Star (as part of the header)
+    const starSpan = headerDiv.createEl('span', { text: item.starred ? '★' : '☆', cls: 'item-action-star list-item-star' });
+    starSpan.setAttrs({ 'data-idx': originalIndex.toString(), 'data-feedurl': feedUrl });
+    if (item.starred) starSpan.addClass('starred');
+
+    // Title container
+    const titleContainer = headerDiv.createDiv({ cls: 'list-item-title-container' });
+    const titleDiv = titleContainer.createEl('div', { cls: 'list-item-title' });
+    titleDiv.createEl('a', { href: item.link || '#', text: item.title || 'No Title', attr: { target: '_blank', rel: 'noopener noreferrer' } });
+
+    // Meta container (sibling to title container)
+    const metaDiv = headerDiv.createDiv({ cls: 'list-item-meta' });
+    if (isStarredView) {
+        const feedName = GLB.feedsStore[feedUrl]?.name || feedUrl;
+        metaDiv.createSpan({ cls: 'item-feed-name', text: `(${feedName})` });
+    }
+    if (item.creator) {
+        metaDiv.createSpan({ cls: 'item-creator', text: item.creator });
+    }
+    const dateStr = item.pubDate || item.downloaded || '';
+    if (dateStr) {
+        metaDiv.createSpan({ cls: 'item-date', text: formatDate(dateStr) });
+    }
+
+    // Actions below header
+    const actionsDiv = itemElement.createDiv({ cls: 'list-item-actions' });
+    actionsDiv.id = `actionContainer${originalIndex}`; // Unique ID
+    createActionButtons(actionsDiv, item, originalIndex, feedUrl, 'list'); // Call helper
+
+    // Hidden content container (for jot notes, etc.)
+    const contentContainer = itemElement.createDiv({ cls: 'item-content-container' });
+    contentContainer.id = `itemContentContainer_${feedUrl}_${originalIndex}`;
+    contentContainer.hide();
+
+    // Apply state classes
+    itemElement.toggleClass('read', !!item.read && !item.deleted);
+    itemElement.toggleClass('deleted', !!item.deleted); // Should hide via CSS
+    itemElement.toggleClass('starred-item', !!item.starred);
+
+     // Apply visibility based on current filters
+     // Use 'app as any' to access plugins
+     let plugin: FeedsReader | null = null;
+      const anyApp = app as any;
+      if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
+          plugin = anyApp.plugins.plugins['feeds-reader'];
+      }
+     if (plugin) plugin.updateItemVisibility(item, originalIndex, feedUrl);
+}
+
+function createActionButtons(container: HTMLElement, item: RssFeedItem, originalIndex: number, feedUrl: string, viewType: 'list' | 'card') {
+    const settings = GLB.settings;
+
+    // Star button - Handled separately in list view header, added here for card view consistency if needed
+    if (viewType === 'card') {
+        const starBtn = container.createEl('button', { text: item.starred ? '★' : '☆', cls: `item-action-button item-action-star card-item-star` });
+        starBtn.setAttrs({ 'data-idx': originalIndex.toString(), 'data-feedurl': feedUrl });
+        if (item.starred) starBtn.addClass('starred');
+    }
+
+    // Other action buttons based on settings
+    if (settings.showRead) {
+        const btn = container.createEl('button', { text: item.read ? 'Unread' : 'Read', cls: 'item-action-button toggleRead' });
+        btn.id = `toggleRead${originalIndex}`; // Use originalIndex
+    }
+    if (settings.showDelete) {
+        const btn = container.createEl('button', { text: item.deleted ? 'Undelete' : 'Delete', cls: 'item-action-button toggleDelete' });
+        btn.id = `toggleDelete${originalIndex}`; // Use originalIndex
+    }
+    if (settings.showJot) {
+        const btn = container.createEl('button', { text: 'Jot', cls: 'item-action-button jotNotes' });
+        btn.id = `jotNotes${originalIndex}`;
+    }
+    if (settings.showSnippet) {
+        const btn = container.createEl('button', { text: 'Snippet', cls: 'item-action-button saveSnippet' });
+        btn.id = `saveSnippet${originalIndex}`;
+    }
+    if (settings.showSave) {
+        const btn = container.createEl('button', { text: 'Save Note', cls: 'item-action-button noteThis' });
+        btn.id = `noteThis${originalIndex}`;
+    }
+    if (settings.showMath && item.content) { // Only show if content exists potentially
+        const btn = container.createEl('button', { text: 'Math', cls: 'item-action-button renderMath' });
+        btn.id = `renderMath${originalIndex}`;
+    }
+    if (settings.showGPT && settings.chatGPTAPIKey && settings.chatGPTPrompt && item.content) {
+        const btn = container.createEl('button', { text: 'GPT', cls: 'item-action-button askChatGPT' });
+        btn.id = `askChatGPT${originalIndex}`;
+    }
+    if (settings.showEmbed && item.link) { // Only show if link exists
+        container.createEl('button', { text: 'Embed', cls: 'item-action-button elEmbedButton' });
+    }
+    if (settings.showFetch && item.link) { // Only show if link exists
+        container.createEl('button', { text: 'Fetch', cls: 'item-action-button elFetch' });
+    }
+    if (settings.showLink && item.link) { // Only show if link exists
+        container.createEl('a', { text: 'Link', href: item.link, cls: 'item-action-link', attr: { target: '_blank', rel: 'noopener noreferrer' } });
+    }
 }
 
 
 // --- Utility & Formatting ---
-function formatDate(dateString:string):string{if(!dateString)return'';try{const d=new Date(dateString); if(isNaN(d.getTime()))return dateString; const n=new Date(); const s=Math.floor((n.getTime()-d.getTime())/1000); const dy=Math.floor(s/(60*60*24)); if(s<0)return d.toLocaleDateString(); if(s<60)return"just now"; if(s<3600)return`${Math.floor(s/60)}m ago`; if(s<86400)return`${Math.floor(s/3600)}h ago`; if(dy===1)return"Yesterday"; if(dy<7)return`${dy}d ago`; return d.toLocaleDateString();}catch(e){return dateString;}}
-function str2filename(s:string):string{if(!s)return'untitled'; const ill=/[\/\?<>\\:\*\|"]/g; const ctrl=/[\x00-\x1f\x80-\x9f]/g; const res=/^\.+$/; const winR=/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i; const winT=/[\. ]+$/; const r='_'; return s.replace(ill,r).replace(ctrl,r).replace(res,r).replace(winR,r).replace(winT,r).replace(/[\[\]]/g,'').replace(/[#^;]/g,'').replace(/\s+/g,'_').substring(0,100);}
-function unEscape(htmlStr:string):string{if(!htmlStr)return''; return htmlStr.replace(/</g,"<").replace(/>/g,">").replace(/"/g,"\"").replace(/�*39;/g,"'").replace(/'/g,"'").replace(/&/g,"&").replace(/ /g," ");}
-function remedyLatex(s:string):string{if(!s)return''; return s.replace(/\$(\\[a-zA-Z]+)\$([0-9+\-.]+)/g,'\${\$1}$2\$').replace(/\\micron/g,'\\mu{}m').replace(/\\Msun/g,'M_\\odot').replace(/\\Mstar/g,'M_\\ast').replace(/_\*/g,'_\\ast').replace(/_{\*}/g,'_{\\ast}').replace(/(?<!\\)\*/g,'\\*');}
+function formatDate(dateString: string): string {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        // Check if date is valid
+        if (isNaN(date.getTime())) return dateString; // Return original string if invalid
+
+        const now = new Date();
+        const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+        const days = Math.floor(seconds / (60 * 60 * 24));
+
+        if (seconds < 0) return date.toLocaleDateString(); // Future date? Show full date.
+        if (seconds < 60) return "just now";
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        if (days === 1) return "Yesterday";
+        if (days < 7) return `${days}d ago`;
+        return date.toLocaleDateString(); // Older than a week, show full date
+    } catch (e) {
+        return dateString; // Return original string on error
+    }
+}
+function str2filename(s: string): string {
+    if (!s) return 'untitled';
+    const illegalRe = /[\/\?<>\\:\*\|"]/g; // illegal characters for filenames
+    const controlRe = /[\x00-\x1f\x80-\x9f]/g; // control characters
+    const reservedRe = /^\.+$/; // filenames consisting only of dots
+    const windowsReservedRe = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i; // Windows reserved names
+    const windowsTrailingRe = /[\. ]+$/; // trailing dots and spaces
+    const replacement = '_'; // Character to replace illegal chars with
+
+    let sanitized = s
+        .replace(illegalRe, replacement)
+        .replace(controlRe, replacement)
+        .replace(reservedRe, replacement)
+        .replace(windowsReservedRe, replacement)
+        .replace(windowsTrailingRe, replacement)
+        .replace(/[\[\]]/g, '') // Remove brackets commonly used in links
+        .replace(/[#^;]/g, '') // Remove other potentially problematic chars
+        .replace(/\s+/g, '_'); // Replace whitespace sequences with underscore
+
+    // Limit filename length (e.g., to 100 chars)
+    return sanitized.substring(0, 100);
+}
+function unEscape(htmlStr: string): string {
+    if (!htmlStr) return '';
+    // Basic unescaping, order matters for &amp;
+    return htmlStr
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, "\"")
+        .replace(/&#0?39;/g, "'") // Handle &#39; and &#039;
+        .replace(/&apos;/g, "'")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&"); // Ampersand must be last
+}
+function remedyLatex(s: string): string {
+    if (!s) return '';
+    // Apply specific LaTeX fixes, careful not to over-correct
+    return s
+        // Example fixes (adjust based on common issues in your feeds):
+        // .replace(/\$(\\[a-zA-Z]+)\$([0-9+\-.]+)/g, '\${\$1}$2\$') // Fix like $e$2.718 -> ${e}$2.718$
+        .replace(/\\micron/g, '\\mu{}m')
+        .replace(/\\Msun/g, 'M_\\odot')
+        .replace(/\\Mstar/g, 'M_\\ast')
+        // Escape markdown chars that might conflict inside LaTeX if not already escaped
+        .replace(/_(?![^$]*\$)/g, '\\_') // Escape underscore outside math
+        .replace(/\*(?![^$]*\$)/g, '\\*'); // Escape asterisk outside math
+}
 
 // --- Markdown/HTML Helpers ---
-function handle_img_tag(s:string):string{if(!s)return''; return s.replace(/<img src="\/\//g,"<img src=\"https://").replace(/<img\s+[^>]*src="([^"]+)"[^>]*>/gi,"\n![]($1)\n");}
-function handle_a_tag(s:string):string{if(!s)return''; return s.replace(/<a\s+[^>]*href="\/\//g,"<a href=\"https://").replace(/<a\s+[^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi,"[$2]($1)");}
-function handle_tags(s:string):string{if(!s)return''; return s.replace(/<\/?(p|div|span|br)\/?>/gi,' ');}
+// Basic replacements, consider a more robust library for complex HTML
+function handle_img_tag(s: string): string {
+    if (!s) return '';
+    // Convert relative protocol // to https:// and basic img to markdown
+    return s
+        .replace(/<img src="\/\//g, "<img src=\"https://")
+        .replace(/<img\s+[^>]*src="([^"]+)"[^>]*>/gi, "\n![]($1)\n");
+}
+function handle_a_tag(s: string): string {
+    if (!s) return '';
+    // Convert relative protocol // to https:// and basic links to markdown
+    return s
+        .replace(/<a\s+[^>]*href="\/\//g, "<a href=\"https://")
+        .replace(/<a\s+[^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, "[$2]($1)");
+}
+function handle_tags(s: string): string {
+    if (!s) return '';
+    // Basic removal of common block/inline tags, replace with space
+    return s.replace(/<\/?(p|div|span|br|i|b|strong|em)\/?>/gi, ' ');
+}
 
 // --- Statistics ---
-function getFeedStats(feedUrl:string):{total:number;read:number;deleted:number;unread:number;starred:number}{let t=0,r=0,d=0,u=0,s=0; const f=GLB.feedsStore[feedUrl]; if(f?.items){t=f.items.length; for(const i of f.items){if(!i)continue; if(i.read)r++; if(i.deleted)d++; if(!i.read&&!i.deleted)u++; if(i.starred)s++;}} return{total:t,read:r,deleted:d,unread:u,starred:s};}
-function getFeedStorageInfo(feedUrl:string):[string,string,number,number]{const f=GLB.feedsStore[feedUrl]; if(!f?.items||f.items.length===0)return['0','0B',0,0]; try{const s=JSON.stringify(f); const l=s.length; const z=new Blob([s]).size; const a=f.items.length === 0 ? 0 : Math.floor(l/f.items.length); const zs=getStoreSizeStr(z); return[a.toString(),zs,l,z];}catch(e){return['Err','Err',0,0];}}
-function getStoreSizeStr(sz:number):string{if(sz<=0)return'0B'; const i=Math.floor(Math.log(sz)/Math.log(1024)); return`${(sz/Math.pow(1024,i)).toFixed(i===0?0:1)}${['B','KB','MB','GB','TB'][i]}`;}
-
-// --- Feed Management Actions ---
-function markAllRead(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items)return; const now=nowdatetime(); let c=false; f.items.forEach(i=>{if(i&&!i.read){i.read=now; i.deleted=null; c=true;}}); if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function purgeDeleted(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items)return; const l=f.items.length; f.items=f.items.filter(i=>i&&!i.deleted); if(f.items.length!==l){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function removeContent(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items)return; let c=false; f.items.forEach(i=>{if(i){if(i.hasOwnProperty('content')){delete (i as Partial<RssFeedItem>).content;c=true;} if(i.hasOwnProperty('creator')){delete (i as Partial<RssFeedItem>).creator;c=true;}}}); if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function removeEmptyFields(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items)return; let c=false; f.items.forEach(i=>{if(i){for(const k in i){if((i as any)[k]===''){delete (i as any)[k];c=true;}} }}); if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function removeContentOld(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items||f.items.length<2)return; let d=Math.floor(f.items.length/3); d=Math.min(d,200); let c=false; for(let i=d; i<f.items.length; i++){const t=f.items[i]; if(t){if(t.hasOwnProperty('content')){delete (t as Partial<RssFeedItem>).content;c=true;} if(t.hasOwnProperty('creator')){delete (t as Partial<RssFeedItem>).creator;c=true;}}} if(c){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function purgeAll(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(f?.items?.length>0){f.items=[]; GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}}
-function purgeOldHalf(feedUrl:string){const f=GLB.feedsStore[feedUrl]; if(!f?.items||f.items.length<2)return; const d=Math.floor(f.items.length/2); f.items.splice(d); GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);}
-function deduplicate(feedUrl:string):number{const f=GLB.feedsStore[feedUrl]; if(!f?.items||f.items.length<2)return 0; const nB=f.items.length; const seen=new Set<string>(); f.items=f.items.filter(i=>{if(!i?.link||seen.has(i.link))return false; seen.add(i.link); return true;}); const nA=f.items.length; if(nB>nA){GLB.feedsStoreChange=true; GLB.feedsStoreChangeList.add(feedUrl);} return nB-nA;}
-// Modified: Accept app for saveSubscriptions
-async function removeFeed(app: App, adapter: DataAdapter, feedUrl: string, plugin: FeedsReader) {
-    const idx = GLB.feedList.findIndex(f => f.feedUrl === feedUrl);
-    if (idx === -1) return;
-    const name = GLB.feedList[idx].name;
-    GLB.feedList.splice(idx, 1);
-    if (GLB.feedsStore[feedUrl]) delete GLB.feedsStore[feedUrl];
-    // Pass app to saveSubscriptions
-    await saveSubscriptions(app, adapter);
-    const folder = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
-    if (await adapter.exists(folder)) {
-        for (let i = 0; ; i++) {
-            const fn = makeFilename(name, i);
-            const gz = `${folder}/${fn}.gzip`;
-            const pl = `${folder}/${fn}`;
-            let rm = false;
-            try { if (await adapter.exists(gz)) { await adapter.remove(gz); rm = true; } } catch (e) { console.warn(`Cannot rm ${gz}`, e); }
-            try { if (await adapter.exists(pl)) { await adapter.remove(pl); rm = true; } } catch (e) { console.warn(`Cannot rm ${pl}`, e); }
-            if (!rm) break;
-            new Notice(`Removed stored data chunk for ${name}...`, 1000);
+function getFeedStats(feedUrl: string): { total: number; read: number; deleted: number; unread: number; starred: number } {
+    let total = 0, read = 0, deleted = 0, unread = 0, starred = 0;
+    const feed = GLB.feedsStore[feedUrl];
+    if (feed?.items) {
+        total = feed.items.length;
+        for (const item of feed.items) {
+            if (!item) continue; // Skip if item is null/undefined
+            if (item.read && !item.deleted) read++; // Count read only if not deleted
+            if (item.deleted) deleted++;
+            if (!item.read && !item.deleted) unread++; // Unread and not deleted
+            if (item.starred && !item.deleted) starred++; // Starred and not deleted
         }
     }
-    await plugin.createFeedBar();
-    if (GLB.currentFeed === feedUrl) { GLB.currentFeed = null; GLB.currentFeedName = ''; plugin.show_feed(); }
+    return { total, read, deleted, unread, starred };
+}
+function getFeedStorageInfo(feedUrl: string): [string, string, number, number] {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items || feed.items.length === 0) return ['0', '0B', 0, 0]; // Avg size, Size Str, raw length, blob size
+    try {
+        const dataString = JSON.stringify(feed);
+        const rawLength = dataString.length;
+        // Use Blob size for a potentially more accurate representation of storage cost
+        const blobSize = new Blob([dataString]).size;
+        const avgSizePerItem = feed.items.length === 0 ? 0 : Math.floor(rawLength / feed.items.length);
+        const sizeString = getStoreSizeStr(blobSize); // Use blob size for display string
+        return [avgSizePerItem.toString(), sizeString, rawLength, blobSize];
+    } catch (e) {
+        console.error(`Error calculating storage info for ${feedUrl}:`, e);
+        return ['Err', 'Err', 0, 0];
+    }
+}
+function getStoreSizeStr(sizeBytes: number): string {
+    if (sizeBytes <= 0) return '0B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(sizeBytes) / Math.log(1024));
+    // Show 1 decimal place for KB and MB, 0 for Bytes
+    const precision = i === 0 ? 0 : 1;
+    return `${(sizeBytes / Math.pow(1024, i)).toFixed(precision)}${units[i]}`;
+}
+
+// --- Feed Management Actions ---
+function markAllRead(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items) return;
+    const now = nowdatetime();
+    let changed = false;
+    feed.items.forEach(item => {
+        if (item && !item.read) {
+            item.read = now;
+            item.deleted = null; // Undelete if marking read
+            changed = true;
+        }
+    });
+    if (changed) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller (e.g., refreshFeedListSidebar, refreshDisplay)
+    }
+}
+function purgeDeleted(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items) return;
+    const originalLength = feed.items.length;
+    feed.items = feed.items.filter(item => item && !item.deleted); // Keep non-deleted items
+    if (feed.items.length !== originalLength) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller
+    }
+}
+function removeContent(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items) return;
+    let changed = false;
+    feed.items.forEach(item => {
+        if (item) {
+            if (item.hasOwnProperty('content')) { delete item.content; changed = true; }
+            if (item.hasOwnProperty('creator')) { delete item.creator; changed = true; }
+            if (item.hasOwnProperty('category')) { delete item.category; changed = true; }
+        }
+    });
+    if (changed) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller (usually refreshDisplay)
+    }
+}
+function removeEmptyFields(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items) return;
+    let changed = false;
+    feed.items.forEach(item => {
+        if (item) {
+            for (const key in item) {
+                if ((item as any)[key] === '') { // Remove keys with empty string values
+                    delete (item as any)[key];
+                    changed = true;
+                }
+            }
+        }
+    });
+    if (changed) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+    }
+}
+function removeContentOld(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items || feed.items.length < 2) return; // Need at least 2 items to remove older ones
+    // Remove content from roughly the older two-thirds, capped at 200 items
+    const startIndex = Math.max(0, Math.min(Math.floor(feed.items.length / 3), 200));
+    let changed = false;
+    for (let i = startIndex; i < feed.items.length; i++) {
+        const item = feed.items[i];
+        if (item) {
+             if (item.hasOwnProperty('content')) { delete item.content; changed = true; }
+             if (item.hasOwnProperty('creator')) { delete item.creator; changed = true; }
+             if (item.hasOwnProperty('category')) { delete item.category; changed = true; }
+        }
+    }
+    if (changed) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+    }
+}
+function purgeAll(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (feed?.items?.length > 0) {
+        feed.items = []; // Clear all items
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller
+    }
+}
+function purgeOldHalf(feedUrl: string) {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items || feed.items.length < 2) return;
+    const numberToRemove = Math.floor(feed.items.length / 2);
+    if (numberToRemove > 0) {
+         // Remove items from the end (older items, assuming new items are added to the front)
+        feed.items.splice(-numberToRemove);
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller
+    }
+}
+function deduplicate(feedUrl: string): number {
+    const feed = GLB.feedsStore[feedUrl];
+    if (!feed?.items || feed.items.length < 2) return 0; // No duplicates possible
+
+    const originalCount = feed.items.length;
+    const seenLinks = new Set<string>();
+    // Filter items, keeping only the first occurrence of each unique link
+    feed.items = feed.items.filter(item => {
+        if (!item?.link || seenLinks.has(item.link)) {
+             return false; // Remove if no link or link already seen
+        }
+        seenLinks.add(item.link); // Add link to set
+        return true; // Keep this item
+    });
+
+    const removedCount = originalCount - feed.items.length;
+    if (removedCount > 0) {
+        GLB.feedsStoreChange = true;
+        GLB.feedsStoreChangeList.add(feedUrl);
+        // UI update handled by caller
+    }
+    return removedCount; // Return the number of removed items
+}
+
+async function removeFeed(app: App, adapter: DataAdapter, feedUrl: string, plugin: FeedsReader) {
+    const index = GLB.feedList.findIndex(f => f.feedUrl === feedUrl);
+    if (index === -1) return; // Feed not found
+
+    const feedName = GLB.feedList[index].name;
+
+    // Remove from feedList
+    GLB.feedList.splice(index, 1);
+
+    // Remove from feedsStore
+    if (GLB.feedsStore[feedUrl]) {
+        delete GLB.feedsStore[feedUrl];
+    }
+
+    // Save updated subscriptions list
+    await plugin.saveSubscriptions(); // Use class method
+
+    // Remove stored data files (gzipped and plain)
+    const storeFolder = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
+    if (await adapter.exists(storeFolder)) {
+        let i = 0;
+        while (true) {
+            const filenameBase = plugin.makeFilename(feedName, i); // Use class method
+            const gzPath = `${storeFolder}/${filenameBase}.gzip`;
+            const plainPath = `${storeFolder}/${filenameBase}`;
+            let removedGz = false;
+            let removedPlain = false;
+
+            try { if (await adapter.exists(gzPath)) { await adapter.remove(gzPath); removedGz = true; } }
+            catch (e) { console.warn(`Cannot remove ${gzPath}`, e); }
+
+            try { if (await adapter.exists(plainPath)) { await adapter.remove(plainPath); removedPlain = true; } }
+            catch (e) { console.warn(`Cannot remove ${plainPath}`, e); }
+
+            // If neither file existed for this index, assume no more chunks
+            if (!removedGz && !removedPlain) break;
+            if (removedGz || removedPlain) console.log(`Removed stored data chunk ${i} for ${feedName}...`);
+            i++;
+        }
+    }
+
+    // Refresh sidebar UI
+    await plugin.refreshFeedListSidebar();
+
+    // If the removed feed was the current one, clear the main view
+    if (GLB.currentFeed === feedUrl) {
+        GLB.currentFeed = null;
+        GLB.currentFeedName = '';
+        plugin.refreshDisplay(); // Refresh main view to show default state
+    }
 }
 
 
 // --- File I/O Helpers ---
-function makeFilename (fname_base:string, iPostfix:number):string{const s=str2filename(fname_base); return`${s}-${iPostfix.toString()}.json.frag`;}
-// Modified: Accept app for potential folder creation in fallback
+function makeFilename (fname_base:string, iPostfix:number):string{
+    const safeBase = str2filename(fname_base); // Ensure base name is safe
+    return `${safeBase}-${iPostfix.toString().padStart(3, '0')}.json.frag`; // Pad index for sorting
+}
 async function saveStringToFileGzip(app: App, adapter: DataAdapter, s:string, folder:string, fname:string): Promise<boolean>{
-    let w = false;
-    const p = `${folder}/${fname}.gzip`;
+    let writeSuccess = false;
+    const gzipPath = `${folder}/${fname}.gzip`;
     try {
-        // Folder creation is expected to happen *before* calling this,
-        // but keep the check in fallback for robustness.
-        // if(!await adapter.exists(folder))await app.vault.createFolder(folder); // Use vault
-        const d = await compress(s);
-        await adapter.writeBinary(p, d.buffer);
-        w = true;
-        const pl = `${folder}/${fname}`;
-        if (await adapter.exists(pl)) await adapter.remove(pl);
+        // Ensure folder exists (redundant if checked before calling, but safe)
+        // if (!await adapter.exists(folder)) await app.vault.createFolder(folder);
+        const compressedData = await compress(s);
+        await adapter.writeBinary(gzipPath, compressedData.buffer);
+        writeSuccess = true;
+        // Remove plain text version if it exists
+        const plainPath = `${folder}/${fname}`;
+        if (await adapter.exists(plainPath)) {
+            try { await adapter.remove(plainPath); } catch (e) { console.warn(`Could not remove plain file ${plainPath}`, e); }
+        }
     } catch (e) {
-        console.error(`Gzip Save ${fname} Err:`, e);
-        // Pass app to fallback saveStringToFile
-        w = await saveStringToFile(app, adapter, s, folder, fname);
+        console.error(`Gzip Save Error for ${fname}:`, e);
+        // Fallback to plain text save
+        writeSuccess = await saveStringToFile(app, adapter, s, folder, fname);
     }
-    return w;
+    return writeSuccess;
 }
-// Modified: Accept app for potential folder creation
 async function saveStringToFile(app: App, adapter: DataAdapter, s:string, folder:string, fname:string): Promise<boolean>{
-    let w = false;
-    const p = `${folder}/${fname}`;
+    let writeSuccess = false;
+    const plainPath = `${folder}/${fname}`;
     try {
-        // Ensure folder exists using vault API
+        // Ensure folder exists
         if (!await adapter.exists(folder)) await app.vault.createFolder(folder);
-        const ex = await adapter.exists(p);
-        let cur = ex ? await adapter.read(p) : null;
-        if (cur !== s) { await adapter.write(p, s); w = true; }
+        const fileExists = await adapter.exists(plainPath);
+        let currentContent = fileExists ? await adapter.read(plainPath) : null;
+        // Write only if content differs or file doesn't exist
+        if (currentContent !== s) {
+            await adapter.write(plainPath, s);
+            writeSuccess = true;
+        } else {
+            writeSuccess = true; // Considered success if content is already the same
+        }
     } catch (e: any) {
-        console.error(`Plain Save ${fname} Err:`, e);
-        w = false;
+        console.error(`Plain Text Save Error for ${fname}:`, e);
+        writeSuccess = false;
     }
-    return w;
+    return writeSuccess;
 }
-// Modified: Accept app to pass down to saveStringToFileGzip
 async function saveStringSplitted(app: App, adapter: DataAdapter, s:string, folder:string, fname_base:string, nCharPerFile:number): Promise<number>{
-    const l = s.length;
-    let nS = 0;
-    const p: Promise<boolean>[] = [];
-    const rF = new Set<string>();
+    const totalLength = s.length;
+    let numSavedChunks = 0;
+    const savePromises: Promise<boolean>[] = [];
+    const requiredFragments = new Set<string>();
+
+    // Determine required fragments and create save promises
     for (let i = 0; ; i++) {
-        const iS = i * nCharPerFile;
-        if (iS >= l) break;
-        const iE = Math.min((i + 1) * nCharPerFile, l);
-        const c = s.substring(iS, iE);
-        const fn = makeFilename(fname_base, i);
-        rF.add(fn);
-        // Pass app down
-        p.push(saveStringToFileGzip(app, adapter, c, folder, fn));
+        const startIndex = i * nCharPerFile;
+        if (startIndex >= totalLength) break; // Reached end of string
+        const endIndex = Math.min(startIndex + nCharPerFile, totalLength);
+        const chunkContent = s.substring(startIndex, endIndex);
+        const fragmentFilename = makeFilename(fname_base, i); // Get fragment filename
+        requiredFragments.add(fragmentFilename);
+        // Pass app instance down to save function
+        savePromises.push(saveStringToFileGzip(app, adapter, chunkContent, folder, fragmentFilename));
     }
-    const res = await Promise.allSettled(p);
-    res.forEach(r => { if (r.status === 'fulfilled' && r.value === true) nS++; else if (r.status === 'rejected') console.error("Chunk save err:", r.reason); });
+
+    // Execute all save operations concurrently
+    const results = await Promise.allSettled(savePromises);
+    results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value === true) {
+            numSavedChunks++;
+        } else if (result.status === 'rejected') {
+            console.error("Chunk save error:", result.reason);
+        }
+    });
+
+    // Clean up obsolete fragments
     try {
         if (await adapter.exists(folder)) {
             const { files } = await adapter.list(folder);
-            const bP = makeFilename(fname_base, 0).split('-0.')[0];
-            for (const fp of files) {
-                const fnWE = fp.split('/').pop();
-                if (!fnWE) continue;
-                const isGz = fnWE.endsWith('.gzip');
-                const fn = isGz ? fnWE.slice(0, -5) : fnWE;
-                if (fn.startsWith(bP) && fn.endsWith('.json.frag') && !rF.has(fn)) {
-                    console.log(`Rm obsolete chunk: ${fp}`);
-                    try { await adapter.remove(fp); } catch (rmErr) { console.warn(`Cannot rm ${fp}`, rmErr); }
+            const basePrefix = makeFilename(fname_base, 0).split('-000.')[0]; // Get prefix before index
+
+            for (const filePath of files) {
+                 const filenameWithExt = filePath.split('/').pop();
+                 if (!filenameWithExt) continue;
+
+                 const isGz = filenameWithExt.endsWith('.gzip');
+                 const baseFilename = isGz ? filenameWithExt.slice(0, -5) : filenameWithExt; // Remove .gzip if present
+
+                 // Check if it's a fragment for this feed and if it's obsolete
+                 if (baseFilename.startsWith(basePrefix) && baseFilename.endsWith('.json.frag') && !requiredFragments.has(baseFilename)) {
+                     console.log(`Removing obsolete chunk: ${filePath}`);
+                     try { await adapter.remove(filePath); } catch (rmErr) { console.warn(`Cannot remove ${filePath}`, rmErr); }
+                 }
+            }
+        }
+    } catch (e) {
+        console.error("Error cleaning up obsolete chunks:", e);
+    }
+
+    return numSavedChunks;
+}
+async function loadStringSplitted_Gzip(adapter: DataAdapter, folder:string, fname_base:string): Promise<string>{
+    let contentChunks: string[] = [];
+    try {
+        if (await adapter.exists(folder)) {
+            for (let i = 0; ; i++) {
+                const fragmentFilename = makeFilename(fname_base, i);
+                const filePath = `${folder}/${fragmentFilename}.gzip`;
+                if (!await adapter.exists(filePath)) break; // No more fragments for this index
+
+                try {
+                    const binaryData = await adapter.readBinary(filePath);
+                    contentChunks[i] = await decompress(binaryData); // Decompress chunk
+                } catch (e: any) {
+                    console.error(`Gzip Load/Decompress Error for ${fragmentFilename}:`, e);
+                    // If one chunk fails, maybe stop loading this feed? Or try plain text?
+                    // For now, break the loop for this feed.
+                    contentChunks = []; // Reset to indicate failure
+                    break;
                 }
             }
         }
-    } catch (e) { console.error("Obsolete chunk rm err:", e); }
-    return nS;
+    } catch (e) {
+        console.error(`Gzip Directory Error for ${fname_base}:`, e);
+         contentChunks = []; // Reset on directory error
+    }
+    return contentChunks.join(''); // Join chunks or return empty if error occurred
 }
-async function loadStringSplitted_Gzip(adapter: DataAdapter, folder:string, fname_base:string): Promise<string>{let c:string[]=[]; try{if(await adapter.exists(folder)){for(let i=0;;i++){const fn=makeFilename(fname_base,i); const p=`${folder}/${fn}.gzip`; if(!await adapter.exists(p))break; try{c[i]=await decompress(await adapter.readBinary(p));}catch(e:any){console.error(`Gzip Load ${fn} Err:`,e); break;}}}}catch(e){console.error(`Gzip Dir ${fname_base} Err:`,e);} return c.join('');}
-async function loadStringSplitted(adapter: DataAdapter, folder:string, fname_base:string): Promise<string>{let c:string[]=[]; try{if(await adapter.exists(folder)){for(let i=0;;i++){const fn=makeFilename(fname_base,i); const p=`${folder}/${fn}`; if(!await adapter.exists(p))break; try{c[i]=await adapter.read(p);}catch(e:any){console.error(`Plain Load ${fn} Err:`,e); break;}}}}catch(e){console.error(`Plain Dir ${fname_base} Err:`,e);} return c.join('');}
+async function loadStringSplitted(adapter: DataAdapter, folder:string, fname_base:string): Promise<string>{
+    let contentChunks: string[] = [];
+     try {
+        if (await adapter.exists(folder)) {
+            for (let i = 0; ; i++) {
+                const fragmentFilename = makeFilename(fname_base, i);
+                const filePath = `${folder}/${fragmentFilename}`; // Plain text path
+                if (!await adapter.exists(filePath)) break;
+
+                try {
+                    contentChunks[i] = await adapter.read(filePath); // Read plain text chunk
+                } catch (e: any) {
+                    console.error(`Plain Text Load Error for ${fragmentFilename}:`, e);
+                    contentChunks = [];
+                    break;
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`Plain Text Directory Error for ${fname_base}:`, e);
+        contentChunks = [];
+    }
+    return contentChunks.join('');
+}
 
 // --- External APIs ---
-async function fetchChatGPT(apiKey:string, temperature:number, text:string): Promise<string>{try{const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-3.5-turbo',temperature,messages:[{role:"user",content:text}]})}); if(!r.ok){const ed=await r.json().catch(()=>({})); throw new Error(`GPT API Err: ${r.status} ${r.statusText}. ${ed?.error?.message||''}`);} const d=await r.json(); const m=d?.choices?.[0]?.message?.content; if(!m){console.error("Invalid GPT response:",d); throw new Error("Invalid response from GPT.");} return m;}catch(e:any){console.error("GPT fetch error:",e); throw e;}}
+async function fetchChatGPT(apiKey:string, temperature:number, text:string): Promise<string>{
+    try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'gpt-3.5-turbo', // Specify model, adjust if needed
+                temperature,
+                messages: [{ role: "user", content: text }]
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({})); // Try to parse error details
+            throw new Error(`ChatGPT API Error: ${response.status} ${response.statusText}. ${errorData?.error?.message || ''}`);
+        }
+
+        const data = await response.json();
+        const messageContent = data?.choices?.[0]?.message?.content;
+
+        if (!messageContent) {
+            console.error("Invalid response structure from ChatGPT:", data);
+            throw new Error("Invalid response received from ChatGPT.");
+        }
+        return messageContent;
+
+    } catch (e: any) {
+        console.error("ChatGPT fetch error:", e);
+        // Re-throw the error to be handled by the caller (modal)
+        throw e;
+    }
+}
 
 // --- Modal Window Class Definitions ---
-class ItemContentModal extends Modal { item: RssFeedItem; feedName: string; plugin: Component; constructor(app: App, item: RssFeedItem, feedName: string, plugin: Component) { super(app); this.item = item; this.feedName = feedName; this.plugin = plugin; } onOpen() { const { contentEl, titleEl } = this; contentEl.addClass('feed-item-modal-content'); titleEl.setText(this.item.title || 'Item Detail'); const headerInfo = contentEl.createDiv({ cls: 'modal-header-info' }); headerInfo.createSpan({ cls: 'modal-feed-name', text: `Feed: ${this.feedName}` }); headerInfo.createSpan({ cls: 'modal-item-date', text: `Date: ${formatDate(this.item.pubDate || this.item.downloaded)}` }); // Corrected: Moved target into attr
-        if (this.item.link) headerInfo.createEl('a', { href: this.item.link, text: 'Open Original', cls: 'modal-original-link', attr: { target: '_blank', rel: 'noopener noreferrer' }}); if (this.item.creator) headerInfo.createSpan({cls: 'modal-item-author', text: `Author: ${this.item.creator}`}); contentEl.createEl('hr'); const bodyDiv = contentEl.createDiv({ cls: 'modal-content-body' }); if (this.item.content) { try { const s = this.item.content.replace(/ src="\/\//g, ' src="https://'); const m = htmlToMarkdown(s); const p = remedyLatex(m); MarkdownRenderer.render(this.app, p, bodyDiv, this.item.link || this.feedName, this.plugin); } catch (e) { console.error("Render modal err:", e); try { const f = sanitizeHTMLToDom(this.item.content.replace(/ src="\/\//g, ' src="https://')); bodyDiv.empty(); bodyDiv.appendChild(f); } catch (se) { console.error("Sanitize modal err:", se); bodyDiv.empty(); bodyDiv.setText('Failed display content.'); } } } else bodyDiv.setText('No content available.'); } onClose() { this.contentEl.empty(); } }
-class EmbedModal extends Modal { url: string; itemTitle?: string; constructor(app: App, url: string, itemTitle?: string){ super(app); this.url = url; this.itemTitle = itemTitle; } onOpen(){ this.titleEl.setText(this.itemTitle || "Embed"); this.contentEl.addClass('feed-embed-modal'); const iframe = this.contentEl.createEl('iframe'); iframe.src = this.url; iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms'); iframe.addClass('embedded-modal-iframe'); } onClose(){ this.contentEl.empty(); } }
-class FetchContentModal extends Modal { url: string; itemTitle?: string; constructor(app: App, url: string, itemTitle?: string){ super(app); this.url = url; this.itemTitle = itemTitle; } async onOpen(){ this.titleEl.setText(this.itemTitle || "Fetched Content"); this.contentEl.addClass('feed-fetch-modal'); const load = this.contentEl.createEl('p',{text:`Fetching ${this.url}...`}); try{ const src=await request({url:this.url,method:"GET"}); load.remove(); const cont=this.contentEl.createDiv({cls:'fetch-modal-container'}); const frag=sanitizeHTMLToDom(src); cont.appendChild(frag); } catch(e:any){ load.setText(`Fetch Failed: ${e.message}`); console.error("Fetch content err:",e); } } onClose(){ this.contentEl.empty(); } }
-class MathRenderModal extends Modal { item: RssFeedItem; plugin: Component; constructor(app: App, item: RssFeedItem, plugin: Component) { super(app); this.item = item; this.plugin = plugin; } onOpen() { const { contentEl, titleEl } = this; titleEl.setText(`Math Preview: ${this.item.title||''}`); contentEl.addClass('feed-math-modal'); if(this.item.content){ try{ const m=remedyLatex(htmlToMarkdown(this.item.content)); MarkdownRenderer.render(this.app,m,contentEl,this.item.link||'',this.plugin); } catch(e){contentEl.setText("Error rendering math content."); console.error("Math render err:",e);} } else contentEl.setText("No content to render."); } onClose(){ this.contentEl.empty(); } }
-class ChatGPTInteractionModal extends Modal { item:RssFeedItem; apiKey:string; promptText:string; textArea:HTMLTextAreaElement; responseArea:HTMLElement; plugin:Component; constructor(app:App, item:RssFeedItem, apiKey:string, promptText:string, plugin:Component){ super(app); this.item=item; this.apiKey=apiKey; this.promptText=promptText; this.plugin=plugin; } async onOpen(){ const {contentEl,titleEl}=this; titleEl.setText(`Ask GPT: ${this.item.title||''}`); contentEl.addClass('feed-gpt-modal'); contentEl.createEl('h4',{text:'Content Snippet:'}); const snip=(htmlToMarkdown(this.item.content||'')||'').substring(0,300); contentEl.createEl('p',{text:snip+(snip.length===300?'...':'')}); contentEl.createEl('h4',{text:'Your Prompt:'}); this.textArea=contentEl.createEl('textarea'); this.textArea.rows=4; this.textArea.value=this.promptText; const btnCont=contentEl.createDiv({cls:'gpt-button-container'}); const subBtn=btnCont.createEl('button',{text:'Send to GPT'}); const loadInd=btnCont.createSpan({cls:'gpt-loading',text:' Sending...'}); loadInd.style.display='none'; contentEl.createEl('h4',{text:'GPT Response:'}); this.responseArea=contentEl.createDiv({cls:'gpt-response-area'}); this.responseArea.setText('Awaiting prompt submission...'); subBtn.onclick=async ()=>{ const uP=this.textArea.value.trim(); if(!uP){new Notice("Prompt cannot be empty."); return;} const fullP=`${uP}\n\n---\n\n${htmlToMarkdown(this.item.content||'')}`; subBtn.disabled=true; loadInd.style.display='inline-block'; this.responseArea.setText('Waiting for response from OpenAI...'); try{ const reply=await fetchChatGPT(this.apiKey,0.5,fullP); this.responseArea.empty(); MarkdownRenderer.render(this.app,reply,this.responseArea,'',this.plugin); } catch(e:any){this.responseArea.setText(`Error: ${e.message||'Failed to get response.'}`); console.error("GPT interaction err:",e);} finally{ subBtn.disabled=false; loadInd.style.display='none'; }}; } onClose(){ this.contentEl.empty(); } }
-class AddFeedModal extends Modal { plugin: FeedsReader; constructor(app: App, plugin: FeedsReader) { super(app); this.plugin = plugin; } onOpen() { const {contentEl}=this; this.titleEl.innerText="Add New Feed"; const f=contentEl.createEl('form'); const t=f.createEl('table',{cls:'addFeedTable'}); const b=t.createTBody(); let r=b.createEl('tr'); r.createEl('td',{text:"Name"}); const nI=r.createEl('td').createEl('input',{attr:{required:true}}); nI.id='newFeedName'; nI.type='text'; nI.placeholder = 'e.g., My Favorite Blog'; r=b.createEl('tr'); r.createEl('td',{text:"URL"}); const uI=r.createEl('td').createEl('input',{attr:{required:true}}); uI.id='newFeedUrl'; uI.type='url'; uI.placeholder = 'https://example.com/feed'; r=b.createEl('tr'); r.createEl('td',{text:"Folder (Optional)"}); const fI=r.createEl('td').createEl('input'); fI.id='newFeedFolder'; fI.type='text'; fI.placeholder = 'e.g., News'; r=b.createEl('tr'); r.createEl('td'); const btnTd=r.createEl('td'); const saveBtn=btnTd.createEl('button',{text:"Add Feed"}); saveBtn.type='submit'; f.onsubmit=async(e)=>{ e.preventDefault(); const name=nI.value.trim(); const url=uI.value.trim(); const folder=fI.value.trim(); if(!name||!url){new Notice("Feed Name and URL are required.",2000); return;} try{new URL(url);}catch(_){new Notice("The entered URL is invalid.",2000); return;} if(GLB.feedList.some(f=>f.feedUrl===url)){new Notice("This feed URL already exists.",2000); return;} if(GLB.feedList.some(f=>f.name===name)){new Notice("This feed name is already used.",2000); return;} GLB.feedList.push({name,feedUrl:url,folder,unread:0,updated:0}); sort_feed_list(); await this.plugin.saveSubscriptions(); await this.plugin.createFeedBar(); new Notice(`Feed "${name}" added successfully!`,2000); this.close(); }; } onClose(){this.contentEl.empty();} }
-// Modified: Store app instance in constructor
-class SearchModal extends Modal {
-    app: App; // Store app instance
+class ItemContentModal extends Modal {
+    item: RssFeedItem;
+    feedName: string;
+    // Store the component instance for Markdown rendering context
+    pluginComponent: Component;
 
-    constructor(app: App){
+    constructor(app: App, item: RssFeedItem, feedName: string, pluginComponent: Component) {
         super(app);
-        this.app = app; // Assign app to instance variable
+        this.item = item;
+        this.feedName = feedName;
+        this.pluginComponent = pluginComponent; // Store parent component
+    }
+
+    onOpen() {
+        const { contentEl, titleEl } = this;
+        contentEl.addClass('feed-item-modal-content');
+        titleEl.setText(this.item.title || 'Item Detail');
+
+        const headerInfo = contentEl.createDiv({ cls: 'modal-header-info' });
+        headerInfo.createSpan({ cls: 'modal-feed-name', text: `Feed: ${this.feedName}` });
+        headerInfo.createSpan({ cls: 'modal-item-date', text: `Date: ${formatDate(this.item.pubDate || this.item.downloaded)}` });
+        if (this.item.link) {
+             headerInfo.createEl('a', { href: this.item.link, text: 'Open Original', cls: 'modal-original-link', attr: { target: '_blank', rel: 'noopener noreferrer' }});
+        }
+        if (this.item.creator) {
+             headerInfo.createSpan({cls: 'modal-item-author', text: `Author: ${this.item.creator}`});
+        }
+
+        contentEl.createEl('hr');
+
+        const bodyDiv = contentEl.createDiv({ cls: 'modal-content-body' });
+        if (this.item.content) {
+            try {
+                // Ensure relative // links are converted
+                const contentWithHttps = this.item.content.replace(/ src="\/\//g, ' src="https://');
+                // Convert HTML to Markdown, then fix LaTeX
+                const markdownContent = htmlToMarkdown(contentWithHttps);
+                const latexFixedContent = remedyLatex(markdownContent);
+                // Render Markdown using the plugin component as context
+                MarkdownRenderer.render(this.app, latexFixedContent, bodyDiv, this.item.link || this.feedName, this.pluginComponent);
+            } catch (renderError) {
+                console.error("Markdown rendering error in modal:", renderError);
+                // Fallback 1: Try sanitizing and appending HTML directly
+                try {
+                    const sanitizedFragment = sanitizeHTMLToDom(this.item.content.replace(/ src="\/\//g, ' src="https://'));
+                    bodyDiv.empty(); // Clear potential error message
+                    bodyDiv.appendChild(sanitizedFragment);
+                } catch (sanitizeError) {
+                    console.error("HTML sanitization error in modal fallback:", sanitizeError);
+                    // Fallback 2: Display plain text error
+                    bodyDiv.empty();
+                    bodyDiv.setText('Failed to display content.');
+                }
+            }
+        } else {
+            bodyDiv.setText('No content available for this item.');
+        }
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class EmbedModal extends Modal {
+    url: string;
+    itemTitle?: string;
+
+    constructor(app: App, url: string, itemTitle?: string){
+        super(app);
+        this.url = url;
+        this.itemTitle = itemTitle;
     }
 
     onOpen(){
-        const {contentEl} = this;
-        this.titleEl.innerText="Search Current Feed";
-        const f=contentEl.createEl('form');
-        const t=f.createEl('table',{cls:'searchForm'});
-        const b=t.createTBody();
-        let r=b.createEl('tr');
-        r.createEl('td',{text:'Search Terms'});
-        const i=r.createEl('td').createEl('input',{cls:'searchTerms'});
-        i.id='searchTerms'; i.type='search'; i.placeholder='Enter keywords...';
-        r=b.createEl('tr');
-        r.createEl('td',{text:"Whole Word Only"});
-        const c=r.createEl('td').createEl('input',{attr:{type:'checkbox'}});
-        c.id='checkBoxWordwise';
-        r=b.createEl('tr');
-        r.createEl('td');
-        const sB=r.createEl('td').createEl('button',{text:"Search"});
-        sB.type='submit';
+        this.titleEl.setText(this.itemTitle || "Embed");
+        this.contentEl.addClass('feed-embed-modal');
+        const iframe = this.contentEl.createEl('iframe');
+        iframe.src = this.url;
+        // Restrictive sandbox for security
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms');
+        iframe.addClass('embedded-modal-iframe');
+    }
 
-        // Use arrow function to maintain 'this' context
-        f.onsubmit = (e) => {
+    onClose(){
+        this.contentEl.empty();
+    }
+}
+
+class FetchContentModal extends Modal {
+    url: string;
+    itemTitle?: string;
+
+    constructor(app: App, url: string, itemTitle?: string){
+        super(app);
+        this.url = url;
+        this.itemTitle = itemTitle;
+    }
+
+    async onOpen(){
+        this.titleEl.setText(this.itemTitle || "Fetched Content");
+        this.contentEl.addClass('feed-fetch-modal');
+        const loadingIndicator = this.contentEl.createEl('p',{text:`Fetching content from ${this.url}...`});
+        try{
+            // Use Obsidian's request function for network requests
+            const htmlSource = await request({url: this.url, method: "GET"});
+            loadingIndicator.remove(); // Remove loading message
+            const contentContainer = this.contentEl.createDiv({cls:'fetch-modal-container'});
+            // Sanitize the fetched HTML before appending
+            const sanitizedFragment = sanitizeHTMLToDom(htmlSource);
+            contentContainer.appendChild(sanitizedFragment);
+        } catch(e:any){
+            loadingIndicator.setText(`Fetch Failed: ${e.message}`);
+            console.error("Fetch content error:",e);
+        }
+    }
+    onClose(){
+        this.contentEl.empty();
+    }
+}
+
+class MathRenderModal extends Modal {
+    item: RssFeedItem;
+    pluginComponent: Component;
+
+    constructor(app: App, item: RssFeedItem, pluginComponent: Component) {
+        super(app);
+        this.item = item;
+        this.pluginComponent = pluginComponent;
+    }
+
+    onOpen() {
+        const { contentEl, titleEl } = this;
+        titleEl.setText(`Math Preview: ${this.item.title || ''}`);
+        contentEl.addClass('feed-math-modal');
+
+        if (this.item.content) {
+            try {
+                const markdownContent = htmlToMarkdown(this.item.content);
+                const latexFixedContent = remedyLatex(markdownContent);
+                // Render potentially math-heavy content
+                MarkdownRenderer.render(this.app, latexFixedContent, contentEl, this.item.link || '', this.pluginComponent);
+            } catch (e) {
+                contentEl.setText("Error rendering math content.");
+                console.error("Math render error in modal:", e);
+            }
+        } else {
+            contentEl.setText("No content available to render.");
+        }
+    }
+    onClose(){
+        this.contentEl.empty();
+    }
+}
+
+class ChatGPTInteractionModal extends Modal {
+    item: RssFeedItem;
+    apiKey: string;
+    promptText: string;
+    textArea: HTMLTextAreaElement;
+    responseArea: HTMLElement;
+    pluginComponent: Component;
+
+    constructor(app: App, item: RssFeedItem, apiKey: string, promptText: string, pluginComponent: Component){
+        super(app);
+        this.item = item;
+        this.apiKey = apiKey;
+        this.promptText = promptText;
+        this.pluginComponent = pluginComponent;
+    }
+
+    async onOpen(){
+        const { contentEl, titleEl } = this;
+        titleEl.setText(`Ask GPT: ${this.item.title || ''}`);
+        contentEl.addClass('feed-gpt-modal');
+
+        contentEl.createEl('h4', { text: 'Content Snippet (for context):' });
+        // Extract and display a snippet of the content
+        const contentSnippet = (this.item.content ? htmlToMarkdown(this.item.content) : '').substring(0, 300);
+        contentEl.createEl('p', { text: contentSnippet + (contentSnippet.length === 300 ? '...' : '') });
+
+        contentEl.createEl('h4', { text: 'Your Prompt:' });
+        this.textArea = contentEl.createEl('textarea');
+        this.textArea.rows = 4;
+        this.textArea.value = this.promptText; // Pre-fill with default prompt
+        this.textArea.placeholder = "Enter your prompt here...";
+
+        const buttonContainer = contentEl.createDiv({ cls: 'gpt-button-container' });
+        const submitButton = buttonContainer.createEl('button', { text: 'Send to GPT' });
+        const loadingIndicator = buttonContainer.createSpan({ cls: 'gpt-loading', text: ' Sending...' });
+        loadingIndicator.style.display = 'none'; // Hide initially
+
+        contentEl.createEl('h4', { text: 'GPT Response:' });
+        this.responseArea = contentEl.createDiv({ cls: 'gpt-response-area' });
+        this.responseArea.setText('Awaiting prompt submission...');
+
+        submitButton.onclick = async () => {
+            const userPrompt = this.textArea.value.trim();
+            if (!userPrompt) {
+                new Notice("Prompt cannot be empty.");
+                return;
+            }
+            // Combine user prompt with item content for context
+            const fullPrompt = `${userPrompt}\n\n---\n\n${this.item.content ? htmlToMarkdown(this.item.content) : ''}`;
+
+            // Disable button, show loading
+            submitButton.disabled = true;
+            loadingIndicator.style.display = 'inline-block';
+            this.responseArea.setText('Waiting for response from OpenAI...');
+
+            try {
+                const reply = await fetchChatGPT(this.apiKey, 0.5, fullPrompt); // Use helper function
+                this.responseArea.empty(); // Clear waiting message
+                // Render the response as Markdown
+                MarkdownRenderer.render(this.app, reply, this.responseArea, '', this.pluginComponent);
+            } catch (e: any) {
+                this.responseArea.setText(`Error: ${e.message || 'Failed to get response.'}`);
+                console.error("ChatGPT interaction error:", e);
+            } finally {
+                // Re-enable button, hide loading
+                submitButton.disabled = false;
+                loadingIndicator.style.display = 'none';
+            }
+        };
+    }
+
+    onClose(){
+        this.contentEl.empty();
+    }
+}
+
+class AddFeedModal extends Modal {
+    plugin: FeedsReader; // Reference to the main plugin instance
+
+    constructor(app: App, plugin: FeedsReader) {
+        super(app);
+        this.plugin = plugin;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        this.titleEl.innerText = "Add New Feed";
+
+        const form = contentEl.createEl('form');
+        const table = form.createEl('table', { cls: 'addFeedTable' });
+        const tbody = table.createTBody();
+
+        // Feed Name Input
+        let row = tbody.createEl('tr');
+        row.createEl('td', { text: "Name" });
+        const nameInput = row.createEl('td').createEl('input', { attr: { required: true } });
+        nameInput.id = 'newFeedName';
+        nameInput.type = 'text';
+        nameInput.placeholder = 'e.g., My Favorite Blog';
+
+        // Feed URL Input
+        row = tbody.createEl('tr');
+        row.createEl('td', { text: "URL" });
+        const urlInput = row.createEl('td').createEl('input', { attr: { required: true } });
+        urlInput.id = 'newFeedUrl';
+        urlInput.type = 'url'; // Use 'url' type for basic validation
+        urlInput.placeholder = 'https://example.com/feed';
+
+        // Folder Input (Optional)
+        row = tbody.createEl('tr');
+        row.createEl('td', { text: "Folder (Optional)" });
+        const folderInput = row.createEl('td').createEl('input');
+        folderInput.id = 'newFeedFolder';
+        folderInput.type = 'text';
+        folderInput.placeholder = 'e.g., News';
+
+        // Submit Button
+        row = tbody.createEl('tr');
+        row.createEl('td'); // Empty cell for alignment
+        const buttonTd = row.createEl('td');
+        const saveButton = buttonTd.createEl('button', { text: "Add Feed" });
+        saveButton.type = 'submit';
+
+        form.onsubmit = async (e) => {
             e.preventDefault();
-            const wW=c.checked;
-            const tms=([...new Set(i.value.toLowerCase().split(/[ ,;\t\n]+/).filter(term=>term))].sort((a,b)=>b.length-a.length));
-            if(tms.length===0){ new Notice("Please enter search terms."); return; }
-            if(!GLB.currentFeed||GLB.currentFeed===GLB.STARRED_VIEW_ID){ new Notice("Search not available for this view."); return; }
-            const its=GLB.feedsStore[GLB.currentFeed]?.items;
-            if(!its){ new Notice("Feed data not loaded."); return; }
-            const sep=/\s+/;
-            GLB.displayIndices=[];
-            for(let itemIndex=0; itemIndex<its.length; itemIndex++){
-                let it=its[itemIndex];
-                if(!it)continue;
-                let hS:string|string[];
-                const ti=it.title?.toLowerCase()||'';
-                const cr=it.creator?.toLowerCase()||'';
-                const co=it.content ? htmlToMarkdown(it.content).toLowerCase() : ''; // Search markdown content
+            const name = nameInput.value.trim();
+            const url = urlInput.value.trim();
+            const folder = folderInput.value.trim();
 
-                if(wW){hS=[...ti.split(sep), ...cr.split(sep), ...co.split(sep)].filter(s => s);} // Combine and filter empty strings
-                else {hS=`${ti} ${cr} ${co}`;}
+            // Validation
+            if (!name || !url) {
+                new Notice("Feed Name and URL are required.", 2000);
+                return;
+            }
+            try {
+                new URL(url); // Basic URL format validation
+            } catch (_) {
+                new Notice("The entered URL is invalid.", 2000);
+                return;
+            }
+            if (GLB.feedList.some(f => f.feedUrl === url)) {
+                new Notice("This feed URL already exists.", 2000);
+                return;
+            }
+            if (GLB.feedList.some(f => f.name === name)) {
+                // Consider making this a warning instead of error? Or allow duplicates?
+                 new Notice(`A feed named "${name}" already exists. Please choose a unique name.`, 2500);
+                return;
+            }
 
-                let found=tms.every(tm => {
-                    if (wW && Array.isArray(hS)) {
-                        return hS.includes(tm);
-                    } else if (!wW && typeof hS === 'string') {
-                        return hS.includes(tm);
+            // Add to global list
+            GLB.feedList.push({ name, feedUrl: url, folder, unread: 0, updated: 0 }); // Initial counts
+            sort_feed_list(); // Keep the list sorted
+
+            // Save and update UI
+            await this.plugin.saveSubscriptions(); // Save the updated list
+            await this.plugin.refreshFeedListSidebar(); // Update the sidebar view
+            new Notice(`Feed "${name}" added successfully!`, 2000);
+            this.close(); // Close the modal
+        };
+    }
+
+    onClose() {
+        this.contentEl.empty();
+    }
+}
+
+class SearchModal extends Modal {
+    // Store app instance, passed in constructor
+    app: App;
+
+    constructor(app: App){
+        super(app);
+        this.app = app; // Store app reference
+    }
+
+    onOpen(){
+        const { contentEl } = this;
+        this.titleEl.innerText = "Search Current Feed";
+
+        const form = contentEl.createEl('form');
+        const table = form.createEl('table', { cls: 'searchForm' });
+        const tbody = table.createTBody();
+
+        // Search Terms Input
+        let row = tbody.createEl('tr');
+        row.createEl('td', { text: 'Search Terms' });
+        const inputEl = row.createEl('td').createEl('input', { cls: 'searchTerms' });
+        inputEl.id = 'searchTerms';
+        inputEl.type = 'search';
+        inputEl.placeholder = 'Enter keywords...';
+
+        // Whole Word Checkbox
+        row = tbody.createEl('tr');
+        row.createEl('td', { text: "Whole Word Only" });
+        const checkboxEl = row.createEl('td').createEl('input', { attr: { type: 'checkbox' } });
+        checkboxEl.id = 'checkBoxWordwise';
+
+        // Submit Button
+        row = tbody.createEl('tr');
+        row.createEl('td'); // Empty cell for alignment
+        const submitButton = row.createEl('td').createEl('button', { text: "Search" });
+        submitButton.type = 'submit';
+
+        form.onsubmit = (e) => {
+            e.preventDefault();
+            const wholeWord = checkboxEl.checked;
+            // Process search terms: lowercase, split, unique, non-empty, sort by length desc
+            const terms = [...new Set(inputEl.value.toLowerCase().split(/[ ,;\t\n]+/).filter(term => term))].sort((a, b) => b.length - a.length);
+
+            if (terms.length === 0) {
+                new Notice("Please enter search terms.");
+                return;
+            }
+            if (!GLB.currentFeed || GLB.currentFeed === GLB.STARRED_VIEW_ID) {
+                 new Notice("Search is not available for this view.", 3000);
+                 return;
+            }
+
+            const items = GLB.feedsStore[GLB.currentFeed]?.items;
+            if (!items) {
+                new Notice("Current feed data not loaded.", 3000);
+                return;
+            }
+
+            const spaceSeparator = /\s+/;
+            GLB.displayIndices = []; // Reset previous search results
+
+            for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+                const item = items[itemIndex];
+                if (!item) continue;
+
+                let haystack: string | string[];
+                const title = item.title?.toLowerCase() || '';
+                const creator = item.creator?.toLowerCase() || '';
+                // Convert content to markdown before searching
+                const content = item.content ? htmlToMarkdown(item.content).toLowerCase() : '';
+
+                if (wholeWord) {
+                    // Combine fields, split into words, filter empty
+                    haystack = [...title.split(spaceSeparator), ...creator.split(spaceSeparator), ...content.split(spaceSeparator)].filter(s => s);
+                } else {
+                    // Combine fields into a single string
+                    haystack = `${title} ${creator} ${content}`;
+                }
+
+                // Check if ALL terms are found
+                let allTermsFound = terms.every(term => {
+                    if (wholeWord && Array.isArray(haystack)) {
+                        return haystack.includes(term);
+                    } else if (!wholeWord && typeof haystack === 'string') {
+                        return haystack.includes(term);
                     }
-                    return false;
+                    return false; // Should not happen
                 });
-                if(found)GLB.displayIndices.push(itemIndex);
-            }
-            GLB.idxItemStart=0; GLB.nPage=1; new Notice(`Found ${GLB.displayIndices.length} matching items.`);
 
-            // Use the stored app instance (this.app) and check for plugin availability
-            let pluginInstance: FeedsReader | null = null;
-             if (this.app && this.app.plugins && typeof this.app.plugins.getPlugin === 'function') {
-                pluginInstance = this.app.plugins.getPlugin('feeds-reader') as FeedsReader | null;
+                if (allTermsFound) {
+                    GLB.displayIndices.push(itemIndex); // Add index if all terms match
+                }
             }
+
+            // Reset pagination and refresh the main view
+            GLB.idxItemStart = 0;
+            GLB.nPage = 1;
+            new Notice(`Found ${GLB.displayIndices.length} matching items.`);
+
+            // Use the stored app instance to get the plugin instance (with 'any' cast)
+            let pluginInstance: FeedsReader | null = null;
+             const anyApp = this.app as any;
+             if (anyApp.plugins?.plugins?.['feeds-reader'] instanceof FeedsReader) {
+                 pluginInstance = anyApp.plugins.plugins['feeds-reader'];
+             }
 
             if (pluginInstance) {
-                pluginInstance.show_feed();
+                pluginInstance.refreshDisplay(); // Call the new refresh method
             } else {
                 console.error("Could not find FeedsReader plugin instance in SearchModal");
             }
-            this.close();
+            this.close(); // Close the search modal
         };
     }
-    onClose(){this.contentEl.empty();}
+
+    onClose() {
+        this.contentEl.empty();
+    }
 }
-class ManageFeedsModal extends Modal { plugin: FeedsReader; asc: boolean = true; constructor(app: App, plugin: FeedsReader) { super(app); this.plugin = plugin; } onOpen() { const {contentEl}=this; this.titleEl.innerText="Manage Feeds"; contentEl.addClass('manageFeedsModal'); contentEl.createDiv({cls:'manage-feeds-warning'}).innerHTML = '<b>CAUTION:</b> Actions take effect immediately. Refresh may be needed.<br>N:Name, U:URL, F:Folder, T:Total, R:Read, D:Deleted, A:Avg Size, S:Storage'; contentEl.createEl('hr'); const actions=contentEl.createDiv({cls:'manage-feeds-actions'}); actions.createEl('button',{text:'Apply N/U/F Changes'}).addEventListener('click',async()=>{ await this.applyNameUrlFolderChanges(); }); actions.createEl('button',{text:'Mark Selected Read'}).addEventListener('click',()=>{ this.runActionOnSelected('Mark all items in selected feeds read?', this.plugin.markAllRead.bind(this.plugin)); }); actions.createEl('button',{text:'Purge Deleted'}).addEventListener('click',()=>{ this.runActionOnSelected('Permanently purge deleted items from selected feeds?', this.plugin.purgeDeleted.bind(this.plugin)); }); actions.createEl('button',{text:'Remove Content'}).addEventListener('click',()=>{ this.runActionOnSelected('Remove ALL downloaded content (title, etc. remain) from selected feeds?', this.plugin.removeContent.bind(this.plugin)); }); actions.createEl('button',{text:'Deduplicate'}).addEventListener('click',()=>{ this.runActionOnSelected('Deduplicate items by link in selected feeds?', this.plugin.deduplicate.bind(this.plugin), true); }); actions.createEl('button',{text:'Remove Selected Feeds'}).addEventListener('click',async()=>{ await this.removeSelectedFeeds(); }); contentEl.createEl('br'); const formContainer=contentEl.createEl('div'); const form=formContainer.createEl('table',{cls:'manageFeedsForm'}); const head=form.createTHead().createEl('tr'); head.createEl('th',{text:"N/U"}); head.createEl('th',{text:"F"}); head.createEl('th',{text:"T"}); head.createEl('th',{text:"R"}); head.createEl('th',{text:"D"}); head.createEl('th',{text:"A"}); head.createEl('th',{text:"S"}); const checkAllTh=head.createEl('th'); const checkAll=checkAllTh.createEl('input',{attr:{type:'checkbox'}}); checkAll.id='checkAll'; checkAll.onchange=()=>{const isChecked=checkAll.checked; contentEl.querySelectorAll<HTMLInputElement>('.checkThis').forEach(el=>el.checked=isChecked);}; const tbody=form.createTBody(); let nT=0,nR=0,nD=0,nL=0,nS=0; GLB.feedList.forEach((item, i)=>{ const tr=tbody.createEl('tr'); const nameCell=tr.createEl('td',{cls:'cellNameContainer'}); const nameInput=nameCell.createEl('input',{value:item.name}); nameInput.id=`manageFdName${i}`; const urlInput=nameCell.createEl('input',{value:item.feedUrl}); urlInput.id=`manageFdUrl${i}`; urlInput.readOnly = true; // Make URL readonly to avoid accidental changes leading to data loss without explicit rename logic
-        const folderCell=tr.createEl('td',{cls:'cellFolderContainer'}); const folderInput=folderCell.createEl('input',{value:item.folder || ''}); folderInput.id=`manageFdFolder${i}`; const stats=this.plugin.getFeedStats(item.feedUrl); const storeInfo=this.plugin.getFeedStorageInfo(item.feedUrl); tr.createEl('td',{text:stats.total.toString()}).setAttribute('sortBy',stats.total.toString()); tr.createEl('td',{text:stats.read.toString()}).setAttribute('sortBy',stats.read.toString()); tr.createEl('td',{text:stats.deleted.toString()}).setAttribute('sortBy',stats.deleted.toString()); tr.createEl('td',{text:storeInfo[0]}).setAttribute('sortBy',(storeInfo[2]/(stats.total||1)).toString()); tr.createEl('td',{text:storeInfo[1]}).setAttribute('sortBy',storeInfo[3].toString()); const checkTd=tr.createEl('td'); const check=checkTd.createEl('input',{attr:{type:'checkbox'},cls:'checkThis'}); check.setAttribute('val',item.feedUrl); check.setAttribute('fdName',item.name); nT+=stats.total; nR+=stats.read; nD+=stats.deleted; nL+=storeInfo[2]; nS+=storeInfo[3]; }); const foot=form.createTFoot().createEl('tr'); foot.createEl('td',{text:`Total: ${GLB.feedList.length}`}); foot.createEl('td'); foot.createEl('td',{text:nT.toString()}); foot.createEl('td',{text:nR.toString()}); foot.createEl('td',{text:nD.toString()}); foot.createEl('td',{text:Math.floor(nL/(nT||1)).toString()}); foot.createEl('td',{text:getStoreSizeStr(nS)}); foot.createEl('td'); head.querySelectorAll('th:nth-child(-n+7)').forEach((th,idx)=>{th.addEventListener('click',()=>{const tbody=form.querySelector('tbody'); if(!tbody)return; Array.from(tbody.querySelectorAll('tr:not(:last-child)')).sort(this.comparer(idx,this.asc=!this.asc)).forEach(tr=>tbody.appendChild(tr));});}); } comparer=(idx:number, asc:boolean)=>(a:Element, b:Element)=>{const v1=this.getCellValue(a,idx); const v2=this.getCellValue(b,idx); const n1=parseFloat(v1); const n2=parseFloat(v2); return (v1!==''&&v2!==''&&!isNaN(n1)&&!isNaN(n2))?(asc?n1-n2:n2-n1):(asc?v1.localeCompare(v2):v2.localeCompare(v1));}; getCellValue=(tr:Element, idx:number):string=>{const cell=tr.children[idx]; if(!cell) return ''; const input=cell.querySelector('input'); if(input)return input.value; return cell.getAttribute('sortBy') || cell.textContent || '';}; async applyNameUrlFolderChanges(){ let changed=false; const renameOps:{oldName:string, newName:string, oldUrl: string}[]=[]; // Store oldUrl too
-    // const reUrlOps:{oldUrl:string, newUrl:string}[]=[]; // URL change disabled for now
-    for(let i=0; i<GLB.feedList.length; i++){ const nameInput=document.getElementById(`manageFdName${i}`) as HTMLInputElement; // const urlInput=document.getElementById(`manageFdUrl${i}`) as HTMLInputElement; // URL input is readonly
-        const folderInput=document.getElementById(`manageFdFolder${i}`) as HTMLInputElement; if(!nameInput||!folderInput) continue; const newName=nameInput.value.trim(); // const newUrl=urlInput.value.trim(); // Readonly
-        const newFolder=folderInput.value.trim(); const oldItem=GLB.feedList[i]; let nameChanged=oldItem.name!==newName; // let urlChanged=oldItem.feedUrl!==newUrl; // Always false
-        let folderChanged=(oldItem.folder||'')!==(newFolder||''); // Compare empty strings properly
-        if(nameChanged&&!newName){new Notice(`Name cannot be empty for ${oldItem.name}.`,2000); nameChanged=false;} // if(urlChanged&&!newUrl){new Notice(`URL cannot be empty for ${oldItem.name}.`,2000); urlChanged=false;}
-        // if(urlChanged){try{new URL(newUrl);}catch(_){new Notice(`Invalid new URL for ${oldItem.name}.`,2000); urlChanged=false;}}
-        if(nameChanged&&GLB.feedList.some((f,j)=>j!==i&&f.name===newName)){new Notice(`Name "${newName}" already used.`,2000); nameChanged=false;} // if(urlChanged&&GLB.feedList.some((f,j)=>j!==i&&f.feedUrl===newUrl)){new Notice(`URL "${newUrl}" already exists.`,2000); urlChanged=false;}
-        if(nameChanged||folderChanged){ // Removed urlChanged condition
-            changed=true; if(nameChanged)renameOps.push({oldName:oldItem.name, newName, oldUrl: oldItem.feedUrl}); // if(urlChanged)reUrlOps.push({oldUrl:oldItem.feedUrl, newUrl});
-            if(folderChanged)oldItem.folder=newFolder; if(nameChanged)oldItem.name=newName; // if(urlChanged)oldItem.feedUrl=newUrl;
-        } } if(changed){ try{ // Rename files BEFORE updating GLB.feedList or GLB.feedsStore
-        await Promise.all(renameOps.map(op=>this.renameFeedFiles(op.oldName, op.newName))); // Rename based on names first
-        // Update names in GLB.feedsStore AFTER file rename
-        renameOps.forEach(op => {
-            const feedData = GLB.feedsStore[op.oldUrl]; // Find data by URL
-            if (feedData) {
-                feedData.name = op.newName; // Update the name property within the stored data
-                GLB.feedsStoreChange = true; // Mark for saving
-                GLB.feedsStoreChangeList.add(op.oldUrl); // Use URL as the key
+
+class ManageFeedsModal extends Modal {
+    plugin: FeedsReader;
+    sortBy: string = 'name'; // Track current sort column
+    asc: boolean = true; // Track sort direction
+
+    constructor(app: App, plugin: FeedsReader) {
+        super(app);
+        this.plugin = plugin;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        this.titleEl.innerText = "Manage Feeds";
+        contentEl.empty(); // Clear previous content on open/re-open
+        contentEl.addClass('manageFeedsModal');
+
+        contentEl.createDiv({cls:'manage-feeds-warning'}).innerHTML = '<b>CAUTION:</b> Actions take effect immediately. Refresh may be needed.<br>N:Name, U:URL, F:Folder, T:Total, R:Read, D:Del, A:Avg Size, S:Storage';
+        contentEl.createEl('hr');
+
+        const actionsContainer = contentEl.createDiv({ cls: 'manage-feeds-actions' });
+        actionsContainer.createEl('button', { text: 'Apply Name/Folder Changes' }).addEventListener('click', async () => { await this.applyNameUrlFolderChanges(); });
+        actionsContainer.createEl('button', { text: 'Mark Selected Read' }).addEventListener('click', () => { this.runActionOnSelected('Mark all items in selected feeds read?', this.plugin.markAllRead.bind(this.plugin)); });
+        actionsContainer.createEl('button', { text: 'Purge Deleted' }).addEventListener('click', () => { this.runActionOnSelected('Permanently purge deleted items from selected feeds?', this.plugin.purgeDeleted.bind(this.plugin)); });
+        actionsContainer.createEl('button', { text: 'Remove Content' }).addEventListener('click', () => { this.runActionOnSelected('Remove ALL downloaded content (title, link etc. remain) from selected feeds?', this.plugin.removeContent.bind(this.plugin)); });
+        actionsContainer.createEl('button', { text: 'Deduplicate Links' }).addEventListener('click', () => { this.runActionOnSelected('Deduplicate items by link in selected feeds?', this.plugin.deduplicate.bind(this.plugin), true); });
+        actionsContainer.createEl('button', { text: 'Remove Selected Feeds', cls: 'mod-warning' }).addEventListener('click', async () => { await this.removeSelectedFeeds(); });
+
+        contentEl.createEl('br');
+
+        const tableContainer = contentEl.createEl('div');
+        this.renderTable(tableContainer); // Render the table initially
+    }
+
+    renderTable(container: HTMLElement) {
+        container.empty(); // Clear previous table if re-rendering
+        const form = container.createEl('table', { cls: 'manageFeedsForm' });
+
+        // --- Table Header ---
+        const head = form.createTHead().createEl('tr');
+        const headers = [
+            { text: "N/U", key: 'name' },
+            { text: "F", key: 'folder' },
+            { text: "T", key: 'total' },
+            { text: "R", key: 'read' },
+            { text: "D", key: 'deleted' },
+            { text: "A", key: 'avgSize' },
+            { text: "S", key: 'size' }
+        ];
+        headers.forEach((header, index) => {
+            const th = head.createEl('th', { text: header.text });
+            th.setAttribute('data-column-key', header.key);
+            th.addEventListener('click', () => {
+                if (this.sortBy === header.key) {
+                    this.asc = !this.asc; // Toggle direction if same column
+                } else {
+                    this.sortBy = header.key; // Set new sort column
+                    this.asc = true; // Default to ascending
+                }
+                this.renderTable(container); // Re-render table with new sort
+            });
+            // Add sort indicator
+            if (this.sortBy === header.key) {
+                th.addClass(this.asc ? 'sort-asc' : 'sort-desc');
+                th.setText(header.text + (this.asc ? ' ▲' : ' ▼'));
             }
         });
-        // reUrlOps.forEach(op=>{if(GLB.feedsStore[op.oldUrl]){GLB.feedsStore[op.newUrl]=GLB.feedsStore[op.oldUrl]; delete GLB.feedsStore[op.oldUrl];}}); // URL change disabled
-        sort_feed_list(); await this.plugin.saveSubscriptions(); // Save updated names/folders in subscriptions
-        await this.plugin.saveFeedsData(); // Save updated names within feed data files
-        await this.plugin.createFeedBar(); new Notice("Changes applied. Feed list updated.",1500); this.close(); } catch(e:any){ new Notice(`Error applying changes: ${e.message}`, 3000); console.error(e); } } else new Notice("No valid changes detected.",1000); } async renameFeedFiles(oldName:string, newName:string){ const folder=`${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`; const adapter = this.plugin.app.vault.adapter; for(let i=0;;i++){const oldFn=this.plugin.makeFilename(oldName,i); const newFn=this.plugin.makeFilename(newName,i); const oldGz=`${folder}/${oldFn}.gzip`; const oldPl=`${folder}/${oldFn}`; const newGz=`${folder}/${newFn}.gzip`; const newPl=`${folder}/${newFn}`; let foundOld=false; try{if(await adapter.exists(oldGz)){console.log(`Renaming ${oldGz} to ${newGz}`); await adapter.rename(oldGz, newGz); foundOld=true;}}catch(e){console.warn(`Rename failed ${oldGz} -> ${newGz}`,e);} try{if(await adapter.exists(oldPl)){console.log(`Renaming ${oldPl} to ${newPl}`); await adapter.rename(oldPl, newPl); foundOld=true;}}catch(e){console.warn(`Rename failed ${oldPl} -> ${newPl}`,e);} if(!foundOld)break; // Stop if no file with this index exists
-    }} runActionOnSelected(confirmMsg:string, actionFn:(feedUrl:string)=>any, noticeResult=false){ const checked=Array.from(document.querySelectorAll<HTMLInputElement>('.checkThis:checked')); if(checked.length===0){new Notice("No feeds selected.",1500); return;} if(!window.confirm(confirmMsg))return; let changed=false; let results:{name:string, result:any}[]=[]; checked.forEach(el=>{const url=el.getAttribute('val'); const name=el.getAttribute('fdName'); if(url){try{const result=actionFn(url); // Call the action function (e.g., markAllRead, purgeDeleted)
-                if(result !== undefined && result !== false) { // Check if action returned meaningful result
-                    results.push({name: name||url, result});
-                } changed=true;}catch(e:any){new Notice(`Error on ${name||url}: ${e.message}`,2000); console.error(e);}}}); if(changed){this.plugin.createFeedBar(); // Refresh feed bar to show updated stats
-        new Notice("Action applied to selected feeds.",1500); if(noticeResult && results.length > 0) { // Show results if requested and available
-            results.forEach(r=>new Notice(`${r.name}: ${r.result}`));
-        } // No need to close automatically, user might want to perform more actions
-        // Refresh the table data in the modal itself
-        this.onOpen(); // Re-render the modal content
-        // this.close();
-    } } async removeSelectedFeeds(){ const checked=Array.from(document.querySelectorAll<HTMLInputElement>('.checkThis:checked')); if(checked.length===0){new Notice("No feeds selected.",1500); return;} if(!window.confirm(`Remove ${checked.length} feed(s) and ALL associated data? This CANNOT BE UNDONE.`))return; await Promise.all(checked.map(el=>this.plugin.removeFeed(el.getAttribute('val')||''))); new Notice(`${checked.length} feed(s) removed.`,2000); // Refresh the modal content after removal
-    this.onOpen(); // Re-render the modal content
-    // this.close();
-    } async onClose() { this.contentEl.empty(); if (GLB.feedsStoreChange) { // Refresh feed bar if data changed
-        await this.plugin.createFeedBar();
-        // Optionally refresh the main view if the current feed was affected
-        if (GLB.currentFeed && GLB.feedsStoreChangeList.has(GLB.currentFeed)) {
-            this.plugin.makeDisplayList();
-            this.plugin.show_feed();
+        const checkAllTh = head.createEl('th'); // Checkbox column header
+        const checkAll = checkAllTh.createEl('input', { attr: { type: 'checkbox' } });
+        checkAll.id = 'checkAllManage'; // More specific ID
+        checkAll.onchange = () => {
+            const isChecked = checkAll.checked;
+            container.querySelectorAll<HTMLInputElement>('.checkThis').forEach(el => el.checked = isChecked);
+        };
+
+        // --- Table Body ---
+        const tbody = form.createTBody();
+        let totalItems = 0, totalRead = 0, totalDeleted = 0, totalRawLength = 0, totalBlobSize = 0;
+
+        // Prepare data with stats for sorting
+        const feedDataForTable = GLB.feedList.map((item, i) => {
+            const stats = this.plugin.getFeedStats(item.feedUrl);
+            const storeInfo = this.plugin.getFeedStorageInfo(item.feedUrl);
+            totalItems += stats.total;
+            totalRead += stats.read;
+            totalDeleted += stats.deleted;
+            totalRawLength += storeInfo[2];
+            totalBlobSize += storeInfo[3];
+            return {
+                originalIndex: i, // To map back to GLB.feedList if needed
+                name: item.name,
+                feedUrl: item.feedUrl,
+                folder: item.folder || '',
+                total: stats.total,
+                read: stats.read,
+                deleted: stats.deleted,
+                avgSize: stats.total === 0 ? 0 : storeInfo[2] / stats.total, // Raw length avg
+                size: storeInfo[3], // Blob size
+                sizeStr: storeInfo[1] // Formatted size string
+            };
+        });
+
+        // Sort the data
+        feedDataForTable.sort(this.comparer(this.sortBy, this.asc));
+
+        // Render sorted rows
+        feedDataForTable.forEach(data => {
+            const tr = tbody.createEl('tr');
+            // Name/URL Cell
+            const nameCell = tr.createEl('td', { cls: 'cellNameContainer' });
+            const nameInput = nameCell.createEl('input', { value: data.name });
+            nameInput.id = `manageFdName${data.originalIndex}`; // Link to original index
+            nameInput.type = 'text';
+            const urlInput = nameCell.createEl('input', { value: data.feedUrl, type: 'text', attr: { readonly: true } }); // Readonly URL
+            urlInput.id = `manageFdUrl${data.originalIndex}`;
+            // Folder Cell
+            const folderCell = tr.createEl('td', { cls: 'cellFolderContainer' });
+            const folderInput = folderCell.createEl('input', { value: data.folder });
+            folderInput.id = `manageFdFolder${data.originalIndex}`;
+            folderInput.type = 'text';
+            // Stats Cells
+            tr.createEl('td', { text: data.total.toString() });
+            tr.createEl('td', { text: data.read.toString() });
+            tr.createEl('td', { text: data.deleted.toString() });
+            tr.createEl('td', { text: Math.floor(data.avgSize).toString() }); // Display average size
+            tr.createEl('td', { text: data.sizeStr }); // Display formatted size
+            // Checkbox Cell
+            const checkTd = tr.createEl('td');
+            const check = checkTd.createEl('input', { attr: { type: 'checkbox' }, cls: 'checkThis' });
+            check.setAttribute('value', data.feedUrl); // Use value attribute
+            check.setAttribute('data-feed-name', data.name); // Keep name for confirmation dialogs
+        });
+
+        // --- Table Footer ---
+        const foot = form.createTFoot().createEl('tr');
+        foot.createEl('td', { text: `Total: ${GLB.feedList.length}` });
+        foot.createEl('td'); // Folder
+        foot.createEl('td', { text: totalItems.toString() }); // Total items
+        foot.createEl('td', { text: totalRead.toString() }); // Total read
+        foot.createEl('td', { text: totalDeleted.toString() }); // Total deleted
+        foot.createEl('td', { text: Math.floor(totalRawLength / (totalItems || 1)).toString() }); // Avg size overall
+        foot.createEl('td', { text: getStoreSizeStr(totalBlobSize) }); // Total size overall
+        foot.createEl('td'); // Checkbox column
+    }
+
+    comparer = (key: string, asc: boolean) => (a: any, b: any) => {
+        const valA = a[key];
+        const valB = b[key];
+        let comparison = 0;
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            comparison = valA - valB;
+        } else if (typeof valA === 'string' && typeof valB === 'string') {
+            comparison = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+        } else {
+            // Handle mixed types or other types if necessary
+             if (valA < valB) comparison = -1;
+             if (valA > valB) comparison = 1;
         }
-    } } }
+        return asc ? comparison : comparison * -1;
+    };
+
+    getCellValue = (tr: Element, idx: number): string => {
+        // This function is less useful now with direct data sorting
+        // Kept for potential future use or reference
+        const cell = tr.children[idx];
+        if (!cell) return '';
+        const input = cell.querySelector('input');
+        if (input) return input.value;
+        return cell.getAttribute('sortBy') || cell.textContent || '';
+    };
+
+    async applyNameUrlFolderChanges() {
+        let changed = false;
+        const renameOps: { oldName: string, newName: string, oldUrl: string }[] = [];
+        const folderChanges: { url: string, newFolder: string }[] = [];
+
+        for (let i = 0; i < GLB.feedList.length; i++) {
+            const nameInput = document.getElementById(`manageFdName${i}`) as HTMLInputElement;
+            const folderInput = document.getElementById(`manageFdFolder${i}`) as HTMLInputElement;
+            if (!nameInput || !folderInput) continue;
+
+            const newName = nameInput.value.trim();
+            const newFolder = folderInput.value.trim();
+            const oldItem = GLB.feedList[i];
+
+            const nameChanged = oldItem.name !== newName;
+            const folderChanged = (oldItem.folder || '') !== (newFolder || '');
+
+            // Validation
+            if (nameChanged && !newName) { new Notice(`Name cannot be empty for original feed: ${oldItem.name}.`, 2000); continue; } // Skip this change
+            if (nameChanged && GLB.feedList.some((f, j) => j !== i && f.name === newName)) { new Notice(`Name "${newName}" already used by another feed.`, 2000); continue; }
+
+            if (nameChanged) {
+                renameOps.push({ oldName: oldItem.name, newName, oldUrl: oldItem.feedUrl });
+                changed = true;
+            }
+            if (folderChanged) {
+                folderChanges.push({ url: oldItem.feedUrl, newFolder });
+                 changed = true;
+            }
+        }
+
+        if (changed) {
+            try {
+                // 1. Rename physical files first (using old names)
+                await Promise.all(renameOps.map(op => this.renameFeedFiles(op.oldName, op.newName)));
+
+                // 2. Update GLB.feedList and GLB.feedsStore in memory
+                renameOps.forEach(op => {
+                    const feedInList = GLB.feedList.find(f => f.feedUrl === op.oldUrl);
+                    if (feedInList) feedInList.name = op.newName;
+                    const feedInData = GLB.feedsStore[op.oldUrl];
+                    if (feedInData) {
+                         feedInData.name = op.newName; // Update name inside stored data object
+                         GLB.feedsStoreChange = true;
+                         GLB.feedsStoreChangeList.add(op.oldUrl); // Mark for saving
+                    }
+                });
+                folderChanges.forEach(op => {
+                     const feedInList = GLB.feedList.find(f => f.feedUrl === op.url);
+                     if (feedInList) feedInList.folder = op.newFolder;
+                      const feedInData = GLB.feedsStore[op.url];
+                     if (feedInData) {
+                          feedInData.folder = op.newFolder; // Update folder inside stored data object
+                          GLB.feedsStoreChange = true;
+                          GLB.feedsStoreChangeList.add(op.url); // Mark for saving
+                     }
+                });
+
+                // 3. Re-sort the global list
+                sort_feed_list();
+
+                // 4. Save subscriptions and potentially changed feed data
+                await this.plugin.saveSubscriptions();
+                await this.plugin.saveFeedsData(); // Save feed data if names/folders inside changed
+
+                // 5. Refresh UI
+                await this.plugin.refreshFeedListSidebar(); // Update sidebar list
+                new Notice("Changes applied successfully.", 1500);
+                this.close(); // Close modal on success
+            } catch (e: any) {
+                new Notice(`Error applying changes: ${e.message}`, 3000);
+                console.error("Error applying name/folder changes:", e);
+                // Optionally re-render the table to show current state after error
+                const tableContainer = this.contentEl.querySelector('div'); // Find the container
+                 if(tableContainer) this.renderTable(tableContainer);
+            }
+        } else {
+            new Notice("No valid changes detected.", 1000);
+        }
+    }
+
+    async renameFeedFiles(oldName:string, newName:string){
+        const folder = `${GLB.feeds_reader_dir}/${GLB.feeds_store_base}`;
+        const adapter = this.plugin.app.vault.adapter;
+        if (!await adapter.exists(folder)) return; // No folder, nothing to rename
+
+        let i = 0;
+        while (true) {
+            const oldFnBase = this.plugin.makeFilename(oldName, i);
+            const newFnBase = this.plugin.makeFilename(newName, i);
+            const oldGz = `${folder}/${oldFnBase}.gzip`;
+            const oldPl = `${folder}/${oldFnBase}`; // Plain filename without .gzip
+            const newGz = `${folder}/${newFnBase}.gzip`;
+            const newPl = `${folder}/${newFnBase}`;
+            let foundOldFile = false;
+
+            try {
+                if (await adapter.exists(oldGz)) {
+                    console.log(`Renaming ${oldGz} to ${newGz}`);
+                    await adapter.rename(oldGz, newGz);
+                    foundOldFile = true;
+                } else if (await adapter.exists(oldPl)) { // Check for plain file if gzip not found
+                     console.log(`Renaming ${oldPl} to ${newPl}`); // Rename plain to plain
+                     await adapter.rename(oldPl, newPl);
+                    foundOldFile = true;
+                }
+            } catch (e) {
+                 console.warn(`Rename failed for index ${i} (Old: ${oldName}, New: ${newName})`, e);
+                 // Decide whether to continue or stop on error
+            }
+            if (!foundOldFile) break; // Stop if no file (gz or plain) exists for this index
+            i++;
+        }
+    }
+
+    runActionOnSelected(confirmMsg:string, actionFn:(feedUrl:string)=>any, noticeResult=false){
+        const checkedBoxes = Array.from(this.contentEl.querySelectorAll<HTMLInputElement>('.checkThis:checked'));
+        if (checkedBoxes.length === 0) {
+            new Notice("No feeds selected.", 1500);
+            return;
+        }
+        if (!window.confirm(confirmMsg)) return;
+
+        let changed = false;
+        let results: { name: string, result: any }[] = [];
+
+        checkedBoxes.forEach(checkbox => {
+            const url = checkbox.getAttribute('value');
+            const name = checkbox.getAttribute('data-feed-name');
+            if (url) {
+                try {
+                    const result = actionFn(url); // Execute the action (e.g., markAllRead)
+                    if (result !== undefined && result !== false && result !== null) {
+                         results.push({ name: name || url, result });
+                    }
+                    changed = true; // Assume change occurred if function didn't throw
+                } catch (e: any) {
+                    new Notice(`Error applying action to ${name || url}: ${e.message}`, 2000);
+                    console.error(`Error during selected action on ${url}:`, e);
+                }
+            }
+        });
+
+        if (changed) {
+             // Refresh sidebar immediately to reflect changes (e.g., unread counts)
+             this.plugin.refreshFeedListSidebar();
+             // If the current feed was affected, refresh the main display too
+             const currentFeedUrl = GLB.currentFeed;
+             if (currentFeedUrl && checkedBoxes.some(cb => cb.getAttribute('value') === currentFeedUrl)) {
+                  this.plugin.makeDisplayList(); // Update display indices/starred list
+                  this.plugin.refreshDisplay(); // Refresh main view
+             }
+
+            new Notice("Action applied to selected feeds.", 1500);
+            if (noticeResult && results.length > 0) {
+                results.forEach(r => new Notice(`${r.name}: ${r.result}`));
+            }
+            // Re-render the modal table to show updated stats
+            const tableContainer = this.contentEl.querySelector('div'); // Adjust selector if needed
+            if(tableContainer) this.renderTable(tableContainer);
+            // Do not close the modal automatically
+        }
+    }
+
+    async removeSelectedFeeds(){
+        const checkedBoxes = Array.from(this.contentEl.querySelectorAll<HTMLInputElement>('.checkThis:checked'));
+        if (checkedBoxes.length === 0) {
+            new Notice("No feeds selected.", 1500);
+            return;
+        }
+        const feedNames = checkedBoxes.map(cb => cb.getAttribute('data-feed-name') || cb.getAttribute('value')).join(', ');
+        if (!window.confirm(`PERMANENTLY REMOVE ${checkedBoxes.length} feed(s) (${feedNames}) and ALL associated data? This CANNOT BE UNDONE.`)) return;
+
+        const urlsToRemove = checkedBoxes.map(cb => cb.getAttribute('value')).filter(Boolean) as string[];
+
+        await Promise.all(urlsToRemove.map(url => this.plugin.removeFeed(url)));
+
+        new Notice(`${checkedBoxes.length} feed(s) removed.`, 2000);
+        // Re-render the modal table after removal
+         const tableContainer = this.contentEl.querySelector('div'); // Adjust selector if needed
+         if(tableContainer) this.renderTable(tableContainer);
+         // Do not close automatically
+    }
+
+    async onClose() {
+        // No need for explicit refresh calls here if modal re-renders on open
+        // and main plugin handles UI updates based on GLB changes triggered by actions.
+    }
+}
 
 // --- Setting Tab ---
 class FeedReaderSettingTab extends PluginSettingTab {
 	plugin: FeedsReader;
-	constructor(app: App, plugin: FeedsReader) { super(app, plugin); this.plugin = plugin; }
+
+	constructor(app: App, plugin: FeedsReader) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
 	display(): void {
-        const { containerEl } = this; containerEl.empty(); containerEl.createEl('h2', { text: 'Settings for Feeds Reader' });
+        const { containerEl } = this;
+        containerEl.empty();
+        containerEl.createEl('h2', { text: 'Settings for Feeds Reader' });
+
+        // --- ChatGPT Settings ---
         containerEl.createEl('h3', { text: 'ChatGPT (Optional)' });
-        new Setting(containerEl).setName('API Key').setDesc('Your OpenAI API Key').addText(t=>t.setPlaceholder('sk-...').setValue(this.plugin.settings.chatGPTAPIKey||'').onChange(async(v)=>{this.plugin.settings.chatGPTAPIKey=v; GLB.settings.chatGPTAPIKey=v; await this.plugin.saveSettings();}));
-        new Setting(containerEl).setName('Default Prompt').setDesc('The default instruction for ChatGPT interactions.').addTextArea(t=>t.setPlaceholder(DEFAULT_SETTINGS.chatGPTPrompt||'').setValue(this.plugin.settings.chatGPTPrompt||'').onChange(async(v)=>{this.plugin.settings.chatGPTPrompt=v; GLB.settings.chatGPTPrompt=v; await this.plugin.saveSettings();}));
+        new Setting(containerEl)
+            .setName('API Key')
+            .setDesc('Your OpenAI API Key for ChatGPT features.')
+            .addText(text => text
+                .setPlaceholder('sk-...')
+                .setValue(this.plugin.settings.chatGPTAPIKey || '')
+                .onChange(async (value) => {
+                    this.plugin.settings.chatGPTAPIKey = value;
+                    GLB.settings.chatGPTAPIKey = value; // Update global settings object too
+                    await this.plugin.saveSettings();
+                }));
+        new Setting(containerEl)
+            .setName('Default Prompt')
+            .setDesc('The default instruction prepended to content sent to ChatGPT.')
+            .addTextArea(text => text
+                .setPlaceholder(DEFAULT_SETTINGS.chatGPTPrompt || '')
+                .setValue(this.plugin.settings.chatGPTPrompt || '')
+                .onChange(async (value) => {
+                    this.plugin.settings.chatGPTPrompt = value;
+                    GLB.settings.chatGPTPrompt = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- Appearance Settings ---
         containerEl.createEl('h3', { text: 'Appearance' });
-        new Setting(containerEl).setName('Default Display Mode').setDesc('Choose how feed items are initially displayed.').addDropdown(d=>d.addOption('card','Card View').addOption('list','List View').setValue(this.plugin.settings.defaultDisplayMode).onChange(async(v:'card'|'list')=>{this.plugin.settings.defaultDisplayMode=v;GLB.displayMode=v;await this.plugin.saveSettings(); this.plugin.show_feed(); /* Refresh view */}));
-        new Setting(containerEl).setName('Card Width (pixels)').setDesc('Set the width for items in Card View (min 180, max 800).').addText(t=>t.setPlaceholder('280').setValue(this.plugin.settings.cardWidth.toString()).onChange(async(v)=>{let w=parseInt(v); if(isNaN(w)) w=280; w = Math.max(180, Math.min(800, w)); /* Apply bounds */ this.plugin.settings.cardWidth=w; GLB.cardWidth=w; document.documentElement.style.setProperty('--card-item-width',`${w}px`); await this.plugin.saveSettings();}));
-        new Setting(containerEl).setName('Items Per Page').setDesc('Number of feed items to show on each page.').addText(t=>t.setPlaceholder('20').setValue(this.plugin.settings.nItemPerPage.toString()).onChange(async(v)=>{const n=parseInt(v)||20; this.plugin.settings.nItemPerPage=n>0?n:20; GLB.nItemPerPage=this.plugin.settings.nItemPerPage; await this.plugin.saveSettings(); if(GLB.currentFeed)this.plugin.show_feed(); /* Refresh view */}));
-        containerEl.createEl('h4', { text: 'Show Action Buttons' });
-        const toggles:{k:keyof FeedsReaderSettings; n:string; d: string}[]=[ {k:'showRead',n:'Read/Unread', d:'Mark items as read or unread.'}, {k:'showDelete',n:'Delete/Undelete', d:'Mark items as deleted or restore them.'}, {k:'showJot',n:'Jot Notes', d:'Quickly jot down temporary notes associated with an item.'}, {k:'showSnippet',n:'Save Snippet', d:'Save item title, link, and optional content/notes to a snippets file.'}, {k:'showSave',n:'Save as Note', d:'Create a new Obsidian note from the feed item.'}, {k:'showMath',n:'Render Math', d:'Attempt to render LaTeX math in item content (requires MathJax).'}, {k:'showGPT',n:'Ask GPT', d:'Send item content to ChatGPT (requires API key).'}, {k:'showEmbed',n:'Embed Link', d:'Open the item link in an embedded iframe modal.'}, {k:'showFetch',n:'Fetch Full Page', d:'Attempt to fetch and display the full content of the linked page.'}, {k:'showLink',n:'Open Link', d:'Show a direct link to open the original item URL.'}, ];
-        toggles.forEach(s=>{ new Setting(containerEl).setName(s.n).setDesc(s.d).addToggle(t=>t.setValue(this.plugin.settings[s.k] as boolean).onChange(async(v)=>{(this.plugin.settings[s.k] as boolean)=v; (GLB.settings[s.k] as boolean)=v; await this.plugin.saveSettings(); if(GLB.currentFeed)this.plugin.show_feed(); /* Refresh view */ })); });
+        new Setting(containerEl)
+            .setName('Default Display Mode')
+            .setDesc('Choose how feed items are initially displayed in the main view.')
+            .addDropdown(dropdown => dropdown
+                .addOption('card', 'Card View')
+                .addOption('list', 'List View')
+                .setValue(this.plugin.settings.defaultDisplayMode)
+                .onChange(async (value: 'card' | 'list') => {
+                    this.plugin.settings.defaultDisplayMode = value;
+                    GLB.displayMode = value; // Update global state
+                    await this.plugin.saveSettings();
+                    this.plugin.refreshDisplay(); // Refresh the main view
+                }));
+        new Setting(containerEl)
+            .setName('Card Width (pixels)')
+            .setDesc('Set the target width for items in Card View (min 180, max 800). Actual width adapts to available space.')
+            .addText(text => text
+                .setPlaceholder('280')
+                .setValue(this.plugin.settings.cardWidth.toString())
+                .onChange(async (value) => {
+                    let width = parseInt(value);
+                    if (isNaN(width)) width = 280; // Default if invalid input
+                    width = Math.max(180, Math.min(800, width)); // Clamp value
+                    this.plugin.settings.cardWidth = width;
+                    GLB.cardWidth = width;
+                    document.documentElement.style.setProperty('--card-item-width', `${width}px`); // Update CSS variable
+                    await this.plugin.saveSettings();
+                     // No need to refresh display just for width change
+                }));
+        new Setting(containerEl)
+            .setName('Items Per Page')
+            .setDesc('Number of feed items shown per page in the main view.')
+            .addText(text => text
+                .setPlaceholder('20')
+                .setValue(this.plugin.settings.nItemPerPage.toString())
+                .onChange(async (value) => {
+                    const num = parseInt(value) || 20; // Default to 20 if invalid
+                    this.plugin.settings.nItemPerPage = num > 0 ? num : 20; // Ensure positive number
+                    GLB.nItemPerPage = this.plugin.settings.nItemPerPage;
+                    await this.plugin.saveSettings();
+                    if (GLB.currentFeed) this.plugin.refreshDisplay(); // Refresh view if a feed is active
+                }));
+
+        // --- Action Button Visibility ---
+        containerEl.createEl('h4', { text: 'Show Action Buttons On Items' });
+        const buttonToggles: { key: keyof FeedsReaderSettings; name: string; desc: string }[] = [
+            { key: 'showRead', name: 'Read/Unread', desc: 'Mark items as read or unread.' },
+            { key: 'showDelete', name: 'Delete/Undelete', desc: 'Mark items as deleted or restore them.' },
+            { key: 'showJot', name: 'Jot Notes', desc: 'Quickly jot down temporary notes associated with an item.' },
+            { key: 'showSnippet', name: 'Save Snippet', desc: 'Save item details to a dedicated snippets file.' },
+            { key: 'showSave', name: 'Save as Note', desc: 'Create a new Obsidian note from the feed item.' },
+            { key: 'showMath', name: 'Render Math', desc: 'Attempt to render LaTeX math in item content (requires MathJax).' },
+            { key: 'showGPT', name: 'Ask GPT', desc: 'Send item content to ChatGPT (requires API key & prompt).' },
+            { key: 'showEmbed', name: 'Embed Link', desc: 'Open the item link in an embedded iframe modal.' },
+            { key: 'showFetch', name: 'Fetch Full Page', desc: 'Attempt to fetch and display the linked page content.' },
+            { key: 'showLink', name: 'Open Link', desc: 'Show a direct link to open the original item URL.' },
+        ];
+        buttonToggles.forEach(setting => {
+            new Setting(containerEl)
+                .setName(setting.name)
+                .setDesc(setting.desc)
+                .addToggle(toggle => toggle
+                    .setValue(this.plugin.settings[setting.key] as boolean) // Assume boolean
+                    .onChange(async (value) => {
+                        (this.plugin.settings[setting.key] as boolean) = value;
+                        (GLB.settings[setting.key] as boolean) = value; // Update global settings object
+                        await this.plugin.saveSettings();
+                        if (GLB.currentFeed) this.plugin.refreshDisplay(); // Refresh view to show/hide buttons
+                    }));
+        });
+
+        // --- Saving Behavior ---
         containerEl.createEl('h3', { text: 'Saving Behavior' });
-        new Setting(containerEl).setName('Save Content in Notes/Snippets').setDesc('If enabled, includes the item\'s content when saving snippets or creating notes.').addToggle(t=>t.setValue(this.plugin.settings.saveContent).onChange(async(v)=>{this.plugin.settings.saveContent=v; GLB.settings.saveContent=v; await this.plugin.saveSettings();}));
-        new Setting(containerEl).setName('Prepend New Snippets').setDesc('ON: Add new snippets to the top of the snippets file. OFF: Append to the bottom.').addToggle(t=>t.setValue(this.plugin.settings.saveSnippetNewToOld).onChange(async(v)=>{this.plugin.settings.saveSnippetNewToOld=v; GLB.settings.saveSnippetNewToOld=v; await this.plugin.saveSettings();}));
+        new Setting(containerEl)
+            .setName('Save Content in Notes/Snippets')
+            .setDesc('If enabled, includes the full downloaded item content when using "Save Snippet" or "Save as Note".')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.saveContent)
+                .onChange(async (value) => {
+                    this.plugin.settings.saveContent = value;
+                    GLB.settings.saveContent = value;
+                    await this.plugin.saveSettings();
+                }));
+        new Setting(containerEl)
+            .setName('Prepend New Snippets')
+            .setDesc('ON: Add new snippets to the top of the snippets file. OFF: Append to the bottom.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.saveSnippetNewToOld)
+                .onChange(async (value) => {
+                    this.plugin.settings.saveSnippetNewToOld = value;
+                    GLB.settings.saveSnippetNewToOld = value;
+                    await this.plugin.saveSettings();
+                }));
     }
 }
