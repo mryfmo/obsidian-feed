@@ -1,4 +1,5 @@
 import { request, Notice } from "obsidian";
+import { GLB } from "./globals"; // Import GLB to access feedsStore for stats
 
 // --- Global Helper ---
 export function nowdatetime(): string {
@@ -10,69 +11,54 @@ export function nowdatetime(): string {
 export interface RssFeedContent {
     subtitle: string,
     title: string,
-    name: string, // Added by main.ts from feedList
-    link: string, // Feed's primary link
-    image: string, // Feed's primary image URL
-    folder: string, // Added by main.ts from feedList
-    description: string, // Feed description
-    pubDate: string, // Feed publication/update date
-    items: RssFeedItem[] // Array of feed items
+    name: string,
+    link: string,
+    image: string,
+    folder: string,
+    description: string,
+    pubDate: string,
+    items: RssFeedItem[]
 }
 
 export interface RssFeedItem {
     title: string,
-    content?: string | null, // Changed to optional
-    category?: string | null, // Changed to optional
-    link: string,            // Keep link as required
-    creator?: string | null, // Changed to optional
+    content?: string | null,
+    category?: string | null,
+    link: string,
+    creator?: string | null,
     pubDate: string,
     read: string | null;
     deleted: string | null;
     downloaded: string;
     starred: boolean;
-    imageUrl: string | null; // Extracted image URL specific to this item
+    imageUrl: string | null;
 }
 
 // --- Constants ---
-// Keys used for saving/loading item data
 export const itemKeys = ["title", "link", "pubDate", "read", "deleted", "downloaded", "starred", "content", "creator", "category", "imageUrl"];
 
 // --- XML Parsing Helpers ---
-
-/**
- * Finds a child node by name, handling namespaces and basic nesting.
- * @param element Parent Element or Document
- * @param name Tag name (e.g., "title", "dc:creator", "media:content")
- * @returns The first matching ChildNode or null.
- */
 function getElementByName(element: Element | Document, name: string): ChildNode | null {
     let value: ChildNode | null = null;
     if (!(element instanceof Element || element instanceof Document)) return null;
-
-    // Check for required methods more safely
-    const el = element as Element; // Cast to Element for potential access, but check methods
+    const el = element as Element;
     if (typeof el?.getElementsByTagName !== 'function' || typeof el?.getElementsByTagNameNS !== 'function') {
         console.warn("Feeds Reader: Element missing required methods (getElementsByTagName/NS)", element);
         return null;
     }
-
-
     try {
         if (name.includes(":")) {
             const [namespace, tag] = name.split(":");
-            // lookupNamespaceURI might be null if the prefix isn't defined on this element or ancestors
             const namespaceUri = el.lookupNamespaceURI(namespace);
             if (namespaceUri) {
                 const byNamespace = el.getElementsByTagNameNS(namespaceUri, tag);
                 if (byNamespace.length > 0) value = byNamespace[0].firstChild || byNamespace[0];
             }
-            // Fallback if namespace lookup fails or finds nothing
             if (!value) { const tmp = el.getElementsByTagName(name); if (tmp.length > 0) value = tmp[0].firstChild || tmp[0]; }
-        } else if (name.includes(".")) {
-            // Handle potential errors if structure isn't as expected
+        } else if (name.includes(".")) { // Adjusted to handle potentially missing childNodes
             const [prefix, tag] = name.split(".");
             const prefixEls = el.getElementsByTagName(prefix);
-            if (prefixEls.length > 0 && prefixEls[0]) {
+            if (prefixEls.length > 0 && prefixEls[0] && prefixEls[0].childNodes) { // Check childNodes exists
                  const nodes = Array.from(prefixEls[0].childNodes);
                  value = nodes.find(node => node.nodeName.toLowerCase() === tag.toLowerCase()) || null;
             }
@@ -83,24 +69,19 @@ function getElementByName(element: Element | Document, name: string): ChildNode 
     } catch (e) { console.error(`Feeds Reader: Error in getElementByName for "${name}":`, e, element); }
     return value;
 }
-
-/** Gets potential text representations from a Node */
 function getElPossibleText(el: Node | null): string[] {
-  if (!el) return [''];
-  const tags = ['textContent', 'nodeValue', 'data', 'innerHTML', 'innerText', 'wholeText'];
-  const texts: string[] = [''];
-  for (const t of tags) {
-      // Add type check for safety
+    if (!el) return [''];
+    const tags = ['textContent', 'nodeValue', 'data', 'innerHTML', 'innerText', 'wholeText'];
+    const texts: string[] = []; // Initialize empty
+    for (const t of tags) {
+      // Add explicit check for null/undefined before accessing property
       if (el && typeof (el as any)[t] === 'string') {
           texts.push((el as any)[t]);
       }
-  }
-  // Ensure strings before processing
-  return texts.map(s => (s || '').trim()).filter(s => s);
+    }
+    // Ensure initial empty string if no text found, then filter
+    return (texts.length > 0 ? texts : ['']).map(s => (s || '').trim()).filter(s => s);
 }
-
-
-/** Extracts content using getContent, returning the longest non-empty string. */
 function getContent(element: Element | Document, names: string[]): string {
     let longestValue = '';
     for (const name of names) {
@@ -109,234 +90,109 @@ function getContent(element: Element | Document, names: string[]): string {
             if (name.includes("#")) {
                 const [elementName, attr] = name.split("#");
                 const dataNode = getElementByName(element, elementName);
-                // Ensure it's an Element before calling getAttribute
                 if (dataNode instanceof Element) {
                      currentValue = dataNode.getAttribute(attr) || '';
                 }
             } else {
                 const dataNode = getElementByName(element, name);
                 if (dataNode) {
-                     // Find the longest text representation
-                     currentValue = getElPossibleText(dataNode).reduce((a, b) => (b.length > a.length ? b : a), '');
+                     const possibleTexts = getElPossibleText(dataNode);
+                     // Check if possibleTexts is not empty before reducing
+                     if (possibleTexts.length > 0) {
+                        currentValue = possibleTexts.reduce((a, b) => (b.length > a.length ? b : a), '');
+                     }
                 }
             }
         } catch (e) { console.error(`Feeds Reader: Error in getContent for "${name}":`, e, element); }
 
-        // Basic sanitization/normalization (consider a more robust library if needed)
         currentValue = currentValue
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&quot;/g, "\"")
-            .replace(/&apos;/g, "'")
-            .replace(/&#39;/g, "'") // Numeric entity for apostrophe
-            .replace(/&amp;/g, "&") // Must be last
-            .replace(/\u00A0/g, " ") // Replace non-breaking space
-            .trim();
-
-        if (currentValue.length > longestValue.length) {
-            longestValue = currentValue;
-        }
+            .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"")
+            .replace(/&apos;/g, "'").replace(/&#39;/g, "'").replace(/&amp;/g, "&")
+            .replace(/\u00A0/g, " ").trim();
+        if (currentValue.length > longestValue.length) { longestValue = currentValue; }
     }
-    // Final cleanup before returning
     return longestValue;
 }
-
-
-/** Normalizes a URL string. */
 export function normalizeUrl(url: string | null): string | null {
     if (!url || typeof url !== 'string') return null;
     let normalized = url.trim();
     if (!normalized) return null;
     try {
-        // Basic unescaping - be careful not to double-escape/unescape
         normalized = normalized
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&apos;/g, "'")
-          .replace(/&#39;/g, "'");
-
-        if (normalized.startsWith("//")) {
-            normalized = "https:" + normalized;
-        }
-        // Check prefix before constructing URL
-        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
-            return null;
-        }
-        // Validate by attempting to create a URL object
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'");
+        if (normalized.startsWith("//")) { normalized = "https:" + normalized; }
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) { return null; }
         new URL(normalized);
         return normalized;
-    } catch (e) {
-        // Log invalid URLs if needed for debugging
-        // console.warn(`Feeds Reader: Invalid URL encountered: ${url}`, e);
-        return null; // Return null for invalid URLs
-    }
+    } catch (e) { return null; }
 }
-
-
-/** Extracts image URL from item element or content. */
 function extractImageUrl(element: Element, content: string | null): string | null {
-    let imageUrl: string | null = null;
-    // Define sources with clear type hints and error handling
+     let imageUrl: string | null = null;
     const sources: (() => string | null)[] = [
-        () => {
-            try {
-                const mc = element.getElementsByTagNameNS("http://search.yahoo.com/mrss/", "content");
-                for (let i = 0; i < mc.length; i++) {
-                    if (mc[i].getAttribute("medium") === "image") {
-                        return mc[i].getAttribute("url");
-                    }
-                }
-            } catch (e) { /* Handle potential error if needed */ }
-            return null;
-        },
-        () => {
-            try {
-                const enc = element.getElementsByTagName("enclosure");
-                for (let i = 0; i < enc.length; i++) {
-                    if (enc[i].getAttribute("type")?.startsWith("image/")) {
-                        return enc[i].getAttribute("url");
-                    }
-                }
-            } catch (e) { /* Handle potential error */ }
-            return null;
-        },
-        () => {
-             try {
-                 // Prioritize namespaced version, then fallback
-                 const itunesImageNS = element.getElementsByTagNameNS("http://www.itunes.com/dtds/podcast-1.0.dtd", "image");
-                 if (itunesImageNS?.[0]) return itunesImageNS[0].getAttribute("href");
-
-                 const itunesImage = element.getElementsByTagName("itunes:image");
-                 if (itunesImage?.[0]) return itunesImage[0].getAttribute("href");
-             } catch (e) { /* Handle potential error */ }
-             return null;
-         },
-        () => {
-            try {
-                const thumbnail = element.getElementsByTagNameNS("http://search.yahoo.com/mrss/", "thumbnail");
-                return thumbnail?.[0]?.getAttribute("url");
-            } catch (e) { /* Handle potential error */ }
-            return null;
-        },
-        () => {
-            if (!content) return null;
-            try {
-                // Improved regex to handle single quotes and potential whitespace
-                const match = content.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-                return match?.[1] || null;
-            } catch (e) { /* Handle potential error */ }
-            return null;
-        }
+        () => { try { const mc = element.getElementsByTagNameNS("http://search.yahoo.com/mrss/", "content"); for (let i = 0; i < mc.length; i++) { if (mc[i].getAttribute("medium") === "image") return mc[i].getAttribute("url"); } } catch (e) { } return null; },
+        () => { try { const enc = element.getElementsByTagName("enclosure"); for (let i = 0; i < enc.length; i++) { if (enc[i].getAttribute("type")?.startsWith("image/")) return enc[i].getAttribute("url"); } } catch (e) { } return null; },
+        () => { try { const itunesImageNS = element.getElementsByTagNameNS("http://www.itunes.com/dtds/podcast-1.0.dtd", "image"); if (itunesImageNS?.[0]) return itunesImageNS[0].getAttribute("href"); const itunesImage = element.getElementsByTagName("itunes:image"); if (itunesImage?.[0]) return itunesImage[0].getAttribute("href"); } catch (e) { } return null; },
+        () => { try { const thumbnail = element.getElementsByTagNameNS("http://search.yahoo.com/mrss/", "thumbnail"); return thumbnail?.[0]?.getAttribute("url"); } catch (e) { } return null; },
+        () => { if (!content) return null; try { const match = content.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i); return match?.[1] || null; } catch (e) { } return null; }
     ];
-
-    for (const source of sources) {
-        try {
-            const url = source(); // url is string | null here
-            // Pass string | null directly to normalizeUrl
-            imageUrl = normalizeUrl(url);
-            if (imageUrl) return imageUrl;
-        } catch (e) {
-            console.error("Feeds Reader: Image extract function error:", e, element);
-        }
-    }
-    return null; // Return null if no valid image URL found
+    for (const source of sources) { try { const url = source(); imageUrl = normalizeUrl(url); if (imageUrl) return imageUrl; } catch (e) { console.error("Feeds Reader: Image extract function error:", e, element); } }
+    return null;
 }
-
-
-/** Builds an RssFeedItem from an XML Element */
 function buildItem(element: Element): RssFeedItem {
     const contentTags = ["content:encoded", "content", "description", "summary", "itunes:summary", "media:description", "rss:description"];
-    const contentValue = getContent(element, contentTags) || null; // Ensure null if empty
-    const creatorValue = getContent(element, ["dc:creator", "creator", "author", "author.name", "itunes:author"]) || null; // Ensure null if empty
-    const categoryValue = getContent(element, ["category"]) || null; // Use null for consistency
-    // Ensure link is valid or empty string, never null for the RssFeedItem interface
+    const contentValue = getContent(element, contentTags) || null;
+    const creatorValue = getContent(element, ["dc:creator", "creator", "author", "author.name", "itunes:author"]) || null;
+    const categoryValue = getContent(element, ["category"]) || null;
     const linkValue = normalizeUrl(getContent(element, ["link", "link#href", "guid"])) || '';
-
-    // Extract image URL once
     const itemImageUrl = extractImageUrl(element, contentValue);
-
     return {
-        title: getContent(element, ["title", "rss:title"]),
-        content: contentValue,
-        category: categoryValue,
-        link: linkValue,
-        creator: creatorValue,
-        // Ensure pubDate is a string, fallback if necessary
+        title: getContent(element, ["title", "rss:title"]), content: contentValue, category: categoryValue,
+        link: linkValue, creator: creatorValue,
         pubDate: getContent(element, ["pubDate", "published", "updated", "dc:date", "dcterms:issued", "dcterms:modified"]) || nowdatetime(),
-        read: null,
-        deleted: null,
-        downloaded: nowdatetime(), // Set download time consistently
-        starred: false,
-        imageUrl: itemImageUrl // Assign extracted image URL
+        read: null, deleted: null, downloaded: nowdatetime(), starred: false, imageUrl: itemImageUrl
     }
 }
-
-
-/**
- * Finds all item/entry elements in the document
- * Handles potential undefined elements and ensures type safety for Array.from.
- */
 function getAllItems(doc: Document): Element[] {
-    const itemSelectors: (string | { ns: string; tag: string })[] = [
-        "item", // Common RSS 2.0
-        "entry", // Common Atom
-        { ns: "http://purl.org/rss/1.0/", tag: "item" } // RSS 1.0
-    ];
+    const itemSelectors: (string | { ns: string; tag: string })[] = [ "item", "entry", { ns: "http://purl.org/rss/1.0/", tag: "item" } ];
     const allElements: Element[] = [];
-
     for (const selector of itemSelectors) {
-        // Initialize elements as potentially undefined
         let elements: HTMLCollectionOf<Element> | NodeListOf<Element> | undefined = undefined;
         try {
-            if (typeof selector === 'string') {
-                elements = doc.getElementsByTagName(selector);
-            } else {
-                // Ensure namespace URI is valid before calling getElementsByTagNameNS
-                if (selector.ns) {
-                    elements = doc.getElementsByTagNameNS(selector.ns, selector.tag);
-                }
-                // If selector.ns is missing or empty, elements remains undefined
-            }
-
-            // Check if elements is defined AND has length > 0 before accessing length or using Array.from
-            if (elements && elements.length > 0) {
-                 // Now 'elements' is guaranteed to be non-null and have items.
-                 // Spread NodeListOf/HTMLCollection into the array.
-                 allElements.push(...Array.from(elements));
-            }
-        } catch (e) {
-            console.error(`Feeds Reader: Error finding items with selector: ${JSON.stringify(selector)}`, e, doc);
-            // If an error occurs, elements might remain undefined, but the loop continues.
-        }
+            if (typeof selector === 'string') { elements = doc.getElementsByTagName(selector); }
+            else { if (selector.ns) { elements = doc.getElementsByTagNameNS(selector.ns, selector.tag); } }
+            if (elements && elements.length > 0) { allElements.push(...Array.from(elements)); }
+        } catch (e) { console.error(`Feeds Reader: Error finding items with selector: ${JSON.stringify(selector)}`, e, doc); }
     }
-    // Deduplication is usually not required as getElementsByTagName/NS returns live collections,
-    // but if multiple selectors matched the *same* element, Set could deduplicate.
-    // return Array.from(new Set(allElements));
     return allElements;
 }
-
 
 /** Fetches feed data with appropriate headers */
 async function requestFeed(feedUrl: string): Promise<string> {
     try {
-        // Use standard cache-busting headers
+        // Add User-Agent header (Consider making this configurable in settings)
+        // const userAgent = GLB.settings?.customUserAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36";
+        const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"; // Temporary default
+
         return await request({
-             url: feedUrl,
-             method: "GET",
-             headers: {
-                 "Cache-Control": "no-cache, no-store, must-revalidate",
-                 "Pragma": "no-cache", // For HTTP/1.0 caches
-                 "Expires": "0" // For proxy caches
-             }
+
+            url: feedUrl,
+            method: "GET",
+            headers: {
+                "User-Agent": userAgent, // ★★★ Define the User-Agent to use ★★★
+                "Accept": "application/xml,application/rss+xml,application/atom+xml;q=0.9,text/xml;q=0.8,*/*;q=0.5", // ★ Add: Accept header to prioritize XML types
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
          });
     }
     catch (error: any) {
-        // Provide more context in the error message
         console.error(`Feeds Reader: Request failed for ${feedUrl}:`, error);
         const message = error?.message || (typeof error === 'string' ? error : 'Network request failed');
-        throw new Error(`Failed to fetch feed (${feedUrl}): ${message}`);
+        const status = error?.status || error?.response?.status || '(status unknown)';
+        // Throw error with status code
+        throw new Error(`Failed to fetch feed (${feedUrl}), status ${status}: ${message}`);
     }
 }
 
@@ -346,103 +202,84 @@ export async function getFeedItems(feedUrl: string): Promise<RssFeedContent | un
     let rawData: string;
     let doc: Document;
 
-    try {
-        rawData = await requestFeed(feedUrl);
-    } catch (e: any) {
-        // Notice already shown in requestFeed is preferable
-        // new Notice(`Fetch failed for ${feedUrl}: ${e.message}`, 3000);
-        return undefined;
-    }
+    // requestFeed will throw on network error (like 404)
+    rawData = await requestFeed(feedUrl);
 
     try {
         const parser = new window.DOMParser();
         doc = parser.parseFromString(rawData, "application/xml");
 
-        // Check for parser error more reliably
         const parserError = doc.querySelector("parsererror");
         if (parserError) {
             console.error("XML Parsing Error:", parserError.textContent, `Feed: ${feedUrl}`);
-
-            // Attempt to find alternate feed link in HTML
+            // Attempt to find alternate feed link
             try {
                 const htmlDoc = parser.parseFromString(rawData, "text/html");
                 const rssLink = htmlDoc.querySelector('link[type="application/rss+xml"], link[type="application/atom+xml"]');
                 const altHref = rssLink?.getAttribute('href');
-
                 if (altHref) {
                     try {
-                        // Resolve relative URLs against the original feed URL
                         const altUrl = new URL(altHref, feedUrl).toString();
-                        // Avoid infinite loops if the alternate is the same
                         if (altUrl !== feedUrl) {
                              new Notice(`XML parse failed. Trying alternate: ${altUrl}`, 4000);
-                             // Recursively call getFeedItems with the alternate URL
                              return await getFeedItems(altUrl);
                         }
-                    } catch (urlError) {
-                        console.warn("Invalid alternate URL found in HTML:", altHref, urlError);
-                    }
+                    } catch (urlError) { console.warn("Invalid alternate URL found:", altHref, urlError); }
                 }
-            } catch (htmlParseError) {
-                console.warn("Error parsing response as HTML to find alternate feed:", htmlParseError);
-            }
-
-            // If no alternate found or failed, show error notice
-            new Notice(`Failed to parse feed XML: ${feedUrl}`, 3000);
-            return undefined;
+            } catch (htmlParseError) { console.warn("Error parsing response as HTML:", htmlParseError); }
+            // Throw parse error if no alternate found or successful
+            throw new Error(`Failed to parse feed XML (${feedUrl}). Check validity or console.`);
         }
-    } catch (e) {
-        console.error("DOMParser Error:", e, `Feed: ${feedUrl}`);
-        new Notice(`Error parsing feed: ${feedUrl}`, 3000);
-        return undefined;
+    } catch (e: any) { // Catches DOMParser errors and thrown parse error
+        console.error("Feed Parsing Error:", e, `Feed: ${feedUrl}`);
+        throw e; // Re-throw to be caught by updateOneFeed
     }
 
-    // Define tag lists for clarity
+    // --- Feed metadata and item extraction (no changes needed here) ---
     const feedTitleTags = ["title"];
-    const feedLinkTags = ["link", "link#href"]; // Prioritize link with href attribute if present
+    const feedLinkTags = ["link", "link#href"];
     const feedDescTags = ["description", "subtitle", "itunes:summary"];
-    // Broader image tag search including common patterns
     const feedImageTags = ["image > url", "image url", "image", "icon", "logo", "itunes:image#href"];
-    const feedDateTags = ["pubDate", "updated", "lastBuildDate", "dc:date"]; // Include dc:date
+    const feedDateTags = ["pubDate", "updated", "lastBuildDate", "dc:date"];
 
-    // Extract feed metadata
-    const feedTitle = getContent(doc.documentElement || doc, feedTitleTags); // Use documentElement as root
-    // Provide feedUrl as a fallback link
+    const feedTitle = getContent(doc.documentElement || doc, feedTitleTags);
     const feedLink = normalizeUrl(getContent(doc.documentElement || doc, feedLinkTags)) || feedUrl;
-    // Extract image, normalizing the result
     let feedImage = normalizeUrl(getContent(doc.documentElement || doc, feedImageTags));
 
     const items: RssFeedItem[] = [];
-    const rawItems = getAllItems(doc); // Get all potential item elements
+    const rawItems = getAllItems(doc);
 
     rawItems.forEach((rawItem) => {
         try {
             const item = buildItem(rawItem);
-            // Ensure essential fields are present before adding
-            if (item.title && item.link) {
-                 items.push(item);
-            } else {
-                 console.warn("Skipping item with missing title or link:", item, `Feed: ${feedUrl}`);
-            }
-        } catch (itemError) {
-            console.error("Error building item:", itemError, `Element:`, rawItem, `Feed: ${feedUrl}`);
-        }
+            if (item.title && item.link) { items.push(item); }
+            else { console.warn("Skipping item with missing title or link:", item, `Feed: ${feedUrl}`); }
+        } catch (itemError) { console.error("Error building item:", itemError, `Element:`, rawItem, `Feed: ${feedUrl}`); }
     });
 
-    // Construct the final RssFeedContent object
     const content: RssFeedContent = {
-        // Provide a fallback title based on hostname if feed title is missing
         title: feedTitle || `Feed (${new URL(feedUrl).hostname})`,
-        subtitle: getContent(doc.documentElement || doc, ["subtitle"]), // Keep subtitle specific
-        link: feedLink,
-        pubDate: getContent(doc.documentElement || doc, feedDateTags),
-        image: feedImage || '', // Ensure image is always a string
-        description: getContent(doc.documentElement || doc, feedDescTags),
-        items: items,
-        // These will be populated later by main.ts logic
-        name: '',
-        folder: '',
+        subtitle: getContent(doc.documentElement || doc, ["subtitle"]),
+        link: feedLink, pubDate: getContent(doc.documentElement || doc, feedDateTags),
+        image: feedImage || '', description: getContent(doc.documentElement || doc, feedDescTags),
+        items: items, name: '', folder: '',
     };
-
     return content;
+}
+
+/** Calculates statistics for a given feed URL */
+export function getFeedStats(feedUrl: string): { total: number; read: number; deleted: number; unread: number; starred: number } {
+    let total = 0, read = 0, deleted = 0, unread = 0, starred = 0;
+    const feed = GLB.feedsStore[feedUrl]; // Access global state
+    if (feed?.items) {
+        total = feed.items.length;
+        for (const item of feed.items) {
+            if (!item) continue;
+            if (item.read && !item.deleted) read++;
+            if (item.deleted) deleted++;
+            if (!item.read && !item.deleted) unread++;
+            if (item.starred && !item.deleted) starred++;
+        }
+    }
+    return { total, read, deleted, unread, starred };
 }

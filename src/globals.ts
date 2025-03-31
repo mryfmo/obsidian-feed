@@ -26,6 +26,7 @@ export interface FeedsReaderSettings {
     // --- API Keys & Prompts ---
     chatGPTAPIKey?: string; // Optional API key for ChatGPT
     chatGPTPrompt?: string; // Default prompt for ChatGPT interaction
+    customUserAgent?: string; // Optional custom User-Agent for fetching feeds
 }
 
 // --- Global State Namespace ---
@@ -48,7 +49,19 @@ export namespace GLB {
 
   // --- Core Data Structures ---
   // List of subscribed feeds with basic info
-  export var feedList: { name: string; feedUrl: string; unread: number; updated: number; folder: string }[] = [];
+  export var feedList: {
+      name: string;
+      feedUrl: string;
+      unread: number;
+      updated: number; // Timestamp of last successful update OR last attempt
+      folder: string;
+      // ★★★ Add: Store last error info ★★★
+      lastError: {
+        status: number | null; // HTTP status code, etc.
+        message: string | null; // Error message
+        timestamp: string | null; // Error timestamp
+      } | null; // null if no error
+  }[] = [];
   // Main store holding all fetched feed content (keyed by feedUrl)
   export var feedsStore: { [id: string]: RssFeedContent } = {};
   // Flags indicating if feed data needs saving

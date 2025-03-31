@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, App, Platform } from "obsidian";
 import { GLB } from "./globals";
 import FeedsReader from "./main"; // Import the plugin class itself
+import { getFeedStats } from "./getFeed"; // Import getFeedStats
 
 export const VIEW_TYPE_FEED_LIST = "feed-list-view";
 const PLUGIN_ID = 'feeds-reader'; // Ensure consistent Plugin ID
@@ -11,18 +12,14 @@ export class FeedListView extends ItemView {
 
     constructor(leaf: WorkspaceLeaf) {
         super(leaf);
-        // Get plugin instance early, but check validity before use
         this.plugin = this.getPluginInstance();
         if (!this.plugin) {
              console.error("FeedListView: Failed to get plugin instance during construction.");
-             // Optionally handle this error, e.g., by showing an error message in onOpen
         }
     }
 
-    // Helper to get the plugin instance
     private getPluginInstance(): FeedsReader | null {
         try {
-            // Use type assertion as App.plugins is not in official obsidian.d.ts
             const plugins = (this.app as any).plugins;
             if (!plugins || !plugins.plugins) {
                  console.error("FeedListView: Cannot access plugins object or plugins map.");
@@ -47,18 +44,17 @@ export class FeedListView extends ItemView {
     }
 
     getDisplayText(): string {
-        return "Feeds"; // Sidebar tab title
+        return "Feeds Reader"; // Sidebar tab title
     }
 
     getIcon(): string {
         return "rss"; // Sidebar icon
     }
 
-    // Called when the view is first opened/activated
     async onOpen() {
         console.log("FeedListView: onOpen triggered.");
         const container = this.contentEl;
-        container.empty(); // Clear any previous content
+        container.empty();
         container.addClass('feeds-reader-feed-list-container');
 
         if (!this.plugin) {
@@ -67,29 +63,24 @@ export class FeedListView extends ItemView {
             return;
         }
 
-        // Show initial loading state
         this.renderLoadingState(container);
 
-        // Data loading and initial rendering are now handled by the plugin's
-        // loadFeedsDataWithNotice and subsequent refresh calls.
-        // We might trigger a refresh here if needed, but generally rely on the plugin's flow.
-        // Check if data seems loaded already, otherwise wait for plugin's refresh call.
-        if (GLB.feedList && GLB.feedList.length > 0) {
-            console.log("FeedListView: Data seems available, rendering initial content.");
-            this.renderContent(container);
+        // Rely on plugin's loadFeedsDataWithNotice and refresh calls
+        // Wait a bit for data loading triggered elsewhere
+        await sleep(100); // Small delay to allow potential data load
+        if (GLB.feedList && (GLB.feedList.length > 0 || this.plugin.isDataLoaded)) { // Check if loaded or data exists
+            console.log("FeedListView: Data seems available or loading finished, rendering initial content.");
+            await this.renderContent(container);
         } else {
             console.log("FeedListView: Waiting for data load and refresh call from plugin.");
-            // Optionally trigger load if it hasn't started? Risky.
-            // await this.plugin.loadFeedsDataWithNotice(); // Avoid potentially double-loading
+            // Optionally add a timeout or a message if data doesn't load
         }
     }
 
-    // Renders the basic structure and loading message
     renderLoadingState(container: HTMLElement) {
         this.isLoading = true;
-        container.empty(); // Clear previous content
+        container.empty();
         container.addClass('feeds-reader-feed-list-container');
-        // Add basic structure (manage section, feed list area) but show loading text
         const manage = container.createEl('div', { cls: 'manage-section' });
         manage.createEl('p', { text: "Loading controls..."});
         manage.createEl('hr');
@@ -99,7 +90,6 @@ export class FeedListView extends ItemView {
         console.log("FeedListView: Rendered loading state.");
     }
 
-    // Renders the actual content once data is available (called by plugin.refreshFeedListSidebar)
     async renderContent(container: HTMLElement) {
          console.log("FeedListView: renderContent called.");
          if (!this.plugin) {
@@ -107,8 +97,8 @@ export class FeedListView extends ItemView {
              container.setText("Error rendering feed list.");
              return;
          }
-        this.isLoading = false; // Mark as loaded
-        container.empty(); // Clear loading state
+        this.isLoading = false;
+        container.empty();
         container.addClass('feeds-reader-feed-list-container');
 
 
@@ -143,39 +133,106 @@ export class FeedListView extends ItemView {
         container.createEl('h3', {text: 'Feeds', cls: 'feed-list-header'});
         const feedTableDiv = container.createEl('div', { cls: 'feedTableDiv' });
         const feedTable = feedTableDiv.createEl('table');
-        feedTable.id = 'feedTable'; // Keep the ID for targeting
+        feedTable.id = 'feedTable';
 
-        // Call plugin method to populate the table
-        // Ensure feedList is actually populated before calling
+        // Call createFeedBar directly
         if (GLB.feedList && GLB.feedList.length > 0) {
              console.log(`FeedListView: Calling createFeedBar with ${GLB.feedList.length} feeds.`);
-             await this.plugin.createFeedBar(feedTable); // Pass the table element
+             await this.createFeedBar(feedTable); // Pass the table element
         } else {
              console.log("FeedListView: No feeds in GLB.feedList to display.");
              feedTable.createTBody().createEl('tr').createEl('td').setText('No feeds subscribed.');
         }
 
-        // Thanks/Complain Link
         this.renderThanksLink(container);
-
-        // Update highlights based on current state AFTER rendering elements
         this.updateFeedHighlighting();
         console.log("FeedListView: Content rendered.");
     }
 
+    sort_feed_list() {
+        if (!GLB.feedList) return;
+        GLB.feedList.sort((a, b) => {
+            const folderA = a.folder || "zzz";
+            const folderB = b.folder || "zzz";
+            if (folderA < folderB) return -1;
+            if (folderA > folderB) return 1;
+            const nameA = a.name || "";
+            const nameB = b.name || "";
+            return nameA.localeCompare(nameB);
+        });
+    }    
+
+    async createFeedBar(targetTableElement: HTMLTableElement | null) {
+        const t = targetTableElement;
+        if (!t) { console.error("Target table element not provided for createFeedBar"); return; }
+        t.empty();
+        let currentFolder = "%%%NO_FOLDER_YET%%%";
+
+        if (!GLB.feedList?.length) {
+             const row = t.createTBody().createEl('tr');
+             row.createEl('td').setText('No feeds subscribed.');
+             return;
+        }
+
+        const tbody = t.createTBody();
+        // Ensure list is sorted before rendering
+        this.sort_feed_list(); // Call sort function
+
+        GLB.feedList.forEach(feed => {
+             if (!feed?.feedUrl || !feed.name) return;
+             const folder = feed.folder || "";
+
+             if (folder !== currentFolder) {
+                 currentFolder = folder;
+                 const row = tbody.createEl('tr', { cls: 'feedFolderRow' });
+                 const cell = row.createEl('td'); cell.colSpan = 2;
+                 cell.createEl('span', { text: currentFolder || "Uncategorized", cls: 'feedFolder' });
+             }
+
+             const tr = tbody.createEl('tr');
+             // Add error class if applicable
+             if (feed.lastError) {
+                 tr.addClass('feed-has-error');
+             }
+
+             const nameTd = tr.createEl('td');
+             const showFeedSpan = nameTd.createEl('span', { cls: 'showFeed' });
+             showFeedSpan.id = feed.feedUrl;
+
+             // Add error icon if applicable
+             if (feed.lastError) {
+                const errorIcon = showFeedSpan.createSpan({ cls: 'feed-error-icon', text: '⚠️' });
+                errorIcon.setAttribute('title', `Error ${feed.lastError.status || 'Fetch Failed'}: ${feed.lastError.message}\n(Last attempt: ${new Date(feed.lastError.timestamp || '').toLocaleString()})`);
+             }
+
+             showFeedSpan.createSpan({ text: feed.name, cls: 'feed-name' });
+
+             const statsSpan = showFeedSpan.createSpan({ cls: 'feed-stats' });
+             statsSpan.setAttrs({ 'fdUrl': feed.feedUrl, 'fdName': feed.name });
+
+             // Show stats or error indicator
+             if (feed.lastError) {
+                 statsSpan.createEl('span', { text: '-- / --', cls: 'feed-error-stats' });
+             } else {
+                 // Use imported getFeedStats
+                 const stats = getFeedStats(feed.feedUrl);
+                 const unreadSpan = statsSpan.createEl('span', { text: stats.unread.toString(), cls: 'unreadCount' });
+                 if (stats.total < GLB.maxTotalnumDisplayed) {
+                     statsSpan.createEl('span', { text: '/', cls: 'unreadCountSep' });
+                     statsSpan.createEl('span', { text: stats.total.toString(), cls: 'totalCount' });
+                 }
+             }
+        });
+    }
 
     async onClose() {
         console.log("FeedListView: onClose triggered.");
-        // No specific cleanup needed here usually, main plugin handles saving
         this.contentEl.empty();
     }
 
-     // Helper to render the thanks/complain link section
      renderThanksLink(container: HTMLElement) {
-         // Remove existing link if present
          container.querySelector('.thanks-complain')?.remove();
-
-         if (GLB.feedList && GLB.feedList.length > GLB.nThanksSep) { // Use threshold from GLB
+         if (GLB.feedList && GLB.feedList.length > GLB.nThanksSep) {
            const thanksDiv = container.createDiv({cls: 'thanks-complain'});
            thanksDiv.createEl('hr');
            const thanksTable = thanksDiv.createEl('table');
@@ -186,8 +243,6 @@ export class FeedListView extends ItemView {
          }
      }
 
-
-    // Helper to update filter highlights based on GLB state
     updateFilterHighlight() {
         if (!this.contentEl) return;
         this.contentEl.querySelectorAll('.filter-item').forEach(el => el.removeClass('filter-active'));
@@ -195,13 +250,11 @@ export class FeedListView extends ItemView {
         this.contentEl.querySelector(`#${activeFilterId}`)?.addClass('filter-active');
     }
 
-    // Method to update highlighting and state (called from main plugin)
     updateFeedHighlighting() {
-        if (!this.contentEl || this.isLoading) return; // Don't update if not ready or still loading
+        if (!this.contentEl || this.isLoading) return;
 
-        // Update Feed/Starred Item highlighting
         this.contentEl.querySelectorAll('.showFeed, #showStarredItems').forEach(el => {
-            const htmlEl = el as HTMLElement; // Cast for id access
+            const htmlEl = el as HTMLElement;
             if (htmlEl.id === GLB.currentFeed || (GLB.currentFeed === GLB.STARRED_VIEW_ID && htmlEl.id === 'showStarredItems')) {
                 htmlEl.addClass('showingFeed');
             } else {
@@ -209,24 +262,24 @@ export class FeedListView extends ItemView {
             }
         });
 
-        // Update Filter highlights
         this.updateFilterHighlight();
 
-        // Update Sort order text
          const toggleOrderEl = this.contentEl.querySelector('#toggleOrder');
-         if (toggleOrderEl instanceof HTMLElement) { // Check if it's an HTMLElement
+         if (toggleOrderEl instanceof HTMLElement) {
               toggleOrderEl.setText(`Sort: ${GLB.itemOrder}`);
          }
 
-         // Re-render thanks link (in case feed list becomes empty/populated)
          this.renderThanksLink(this.contentEl);
     }
 
-    // Method to refresh the feed list itself (e.g., after adding/removing/updating feeds)
     async refreshFeedListDisplay() {
         console.log("FeedListView: refreshFeedListDisplay called.");
-         if (!this.plugin || !this.contentEl) return;
-         // Re-render the whole content
-         this.renderContent(this.contentEl);
+         if (!this.plugin || !this.contentEl || this.isLoading) return;
+         await this.renderContent(this.contentEl); // Re-render content
     }
 }
+
+// Auxiliary functions (sleep, sort_feed_list) if used elsewhere
+function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)); }
+// Assuming sort_feed_list is defined globally in main.ts or imported
+declare function sort_feed_list(): void;
