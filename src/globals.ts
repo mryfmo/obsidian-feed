@@ -16,6 +16,7 @@ export interface FeedsReaderSettings {
     showSave: boolean;
     showMath: boolean;
     showGPT: boolean;
+    showGemini: boolean;
     showEmbed: boolean;
     showFetch: boolean;
     showLink: boolean;
@@ -24,8 +25,12 @@ export interface FeedsReaderSettings {
     defaultDisplayMode: 'list' | 'card'; // Initial display mode
     cardWidth: number; // Default width for cards in pixels
     // --- API Keys & Prompts ---
+    enableGPT: boolean;
     chatGPTAPIKey?: string; // Optional API key for ChatGPT
     chatGPTPrompt?: string; // Default prompt for ChatGPT interaction
+    enableGemini: boolean;
+    geminiApiKey?: string; // Optional API key for Gemini
+    geminiPrompt?: string; // Default prompt for Gemini interaction
     customUserAgent?: string; // Optional custom User-Agent for fetching feeds
 }
 
