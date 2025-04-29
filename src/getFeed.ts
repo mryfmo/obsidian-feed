@@ -9,7 +9,7 @@ export interface RssFeedContent {
     title: string,
     name: string,
     link: string,
-    image: string,
+    image: string | null,
     folder: string,
     description: string,
     pubDate: string,
@@ -18,14 +18,15 @@ export interface RssFeedContent {
 
 export interface RssFeedItem {
     title: string,
-    content: string,
+    content?: string,
     category: string,
     link: string,
-    creator: string,
+    creator?: string,
     pubDate: string,
-    read: string
-    deleted: string,
-    downloaded: string
+    read: string | null,
+    deleted: string | null,
+    downloaded: string | null,
+    [key: string]: string | null | undefined;
 }
 
 export const itemKeys = ["title", "content", "link", "creator", "pubDate", "read", "deleted", "downloaded"];
@@ -37,8 +38,8 @@ export const itemKeys = ["title", "content", "link", "creator", "pubDate", "read
  * @param element
  * @param name
  */
-function getElementByName(element: Element | Document, name: string): ChildNode {
-    let value: ChildNode;
+function getElementByName(element: Element | Document, name: string): ChildNode | undefined {
+    let value: ChildNode | undefined;
     if (typeof element.getElementsByTagName !== 'function' && typeof element.getElementsByTagNameNS !== 'function') {
         //the required methods do not exist on element, aborting
         return;
@@ -84,7 +85,7 @@ function getElementByName(element: Element | Document, name: string): ChildNode 
             value = el;
           } else {
             //value = el.firstChild;
-            value = [... el.childNodes].reduce((a, b) => {return getElLen(a) > getElLen(b) ? a : b;});
+            value = Array.from(el.childNodes).reduce((a, b) => {return getElLen(a) > getElLen(b) ? a : b;});
           }
         }
     }
@@ -92,23 +93,23 @@ function getElementByName(element: Element | Document, name: string): ChildNode 
     return value;
 }
 
-function getElLen(el) {
+function getElLen(el: Node) {
   const possibleTextTags = ['innerHTML', 'wholeText', 'innerText', 'nodeValue', 'textContent', 'data'];
   const len_s = [0];
   for (const t of possibleTextTags) {
-    if ((typeof el[t]) === 'string') {
-      len_s.push(el[t].length);
+    if ((typeof (el as any)[t]) === 'string') {
+      len_s.push((el as any)[t].length);
     }
   }
   return Math.max(...len_s);
 }
 
-function getElPossibleText(el) {
+function getElPossibleText(el: Node) {
   const possibleTextTags = ['innerHTML', 'wholeText', 'innerText', 'nodeValue', 'textContent', 'data'];
   const possibleTexts = [''];
   for (const t of possibleTextTags) {
-    if ((typeof el[t]) === 'string') {
-      possibleTexts.push(el[t]);
+    if ((typeof (el as any)[t]) === 'string') {
+      possibleTexts.push((el as any)[t]);
     }
   }
   return possibleTexts;
@@ -121,7 +122,7 @@ function getElPossibleText(el) {
  * @param names possible names
  */
 function getContent(element: Element | Document, names: string[]): string {
-    let value: string;
+    let value: string = '';
     let values: string [] = [];
     for (const name of names) {
         if (name.includes("#")) {
@@ -139,7 +140,7 @@ function getContent(element: Element | Document, names: string[]): string {
         } else {
             const data = getElementByName(element, name);
             if (data) {
-                value = getElPossibleText(data).reduce((a, b) => {return a.length > b.length ? a : b;});
+                value = getElPossibleText(data as Node).reduce((a, b) => {return a.length > b.length ? a : b;});
             }
         }
         if (value === undefined) {
@@ -197,7 +198,7 @@ export function nowdatetime(): string {
   return a.toISOString();
 }
 
-export async function getFeedItems(feedUrl: string): Promise<RssFeedContent> {
+export async function getFeedItems(feedUrl: string): Promise<RssFeedContent | undefined> {
     let data;
     try {
         const rawData = await requestFeed(feedUrl);
@@ -234,6 +235,8 @@ export async function getFeedItems(feedUrl: string): Promise<RssFeedContent> {
         image: image ? image.replace(/^\/|\/$/g, '') : null,
         description: getContent(data, ["description"]),
         items: items,
+        name: '',
+        folder: ''
     };
 
     return Promise.resolve(content);

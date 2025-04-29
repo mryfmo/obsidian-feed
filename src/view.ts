@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
 import { GLB } from "./globals"
 import { saveFeedsData, loadSubscriptions, loadFeedsStoredData, getFeedStats } from "./main"
 
@@ -46,8 +46,8 @@ export class FRView extends ItemView {
     toggleNaviAux.id = 'toggleNaviAux';
     toggleNaviAux.className = 'toggleNaviAux';
 
-    const navigation = container.createEl("div", {class: 'navigation'});
-    const content = container.createEl("div", {class: "content"});
+    const navigation = container.createEl("div", {cls: 'navigation'});
+    const content = container.createEl("div", {cls: "content"});
     navigation.className = 'navigation';
     content.className = 'content';
     navigation.id = 'naviBar';
@@ -94,9 +94,9 @@ export class FRView extends ItemView {
       const thanksTable = feedTableDiv.createEl('table');
       const thanks = thanksTable.createEl('tr');
       thanks.className = 'thanks';
-      thanks.createEl('td').createEl('a', {text: "Thanks", href: "https://www.buymeacoffee.com/fjdu"});
+      thanks.createEl('td').createEl('a', {text: "Thanks", href: "https://www.buymeacoffee.com/mryfmo"});
       thanks.createEl('td').createEl('span', {text: "or"});
-      thanks.createEl('td').createEl('a', {text: "Complain", href: "https://github.com/fjdu/obsidian-feed/issues"});
+      thanks.createEl('td').createEl('a', {text: "Complain", href: "https://github.com/mryfmo/obsidian-feed/issues"});
     }
 
     const feed_content = content.createEl('div');
@@ -112,6 +112,7 @@ export class FRView extends ItemView {
 
 export async function createFeedBar() {
   const feedTable = document.getElementById('feedTable');
+  if (!feedTable) return;
   await feedTable.empty();
   let thisFolder = "";
   GLB.feedList.forEach(async (item, idx) => {
@@ -144,7 +145,7 @@ export async function createFeedBar() {
   });
 }
 
-export function waitForElm(selector) {
+export function waitForElm(selector: string) {
     return new Promise(resolve => {
         if (document.querySelector(selector)) {
             return resolve(document.querySelector(selector));

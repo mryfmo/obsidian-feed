@@ -1,4 +1,25 @@
-import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom } from 'obsidian';
+// Add these type declarations at the top of the file as a workaround
+type CompressionFormat = "gzip" | "deflate" | "deflate-raw";
+interface CompressionStream {
+    readonly readable: ReadableStream<Uint8Array>;
+    readonly writable: WritableStream<Uint8Array>;
+    new(format: CompressionFormat): CompressionStream;
+}
+declare var CompressionStream: {
+    prototype: CompressionStream;
+    new(format: CompressionFormat): CompressionStream;
+};
+interface DecompressionStream {
+    readonly readable: ReadableStream<Uint8Array>;
+    readonly writable: WritableStream<Uint8Array>;
+    new(format: CompressionFormat): DecompressionStream;
+}
+declare var DecompressionStream: {
+    prototype: DecompressionStream;
+    new(format: CompressionFormat): DecompressionStream;
+};
+
+import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom, request, Component, WorkspaceLeaf, TFile } from 'obsidian';
 import { FRView, VIEW_TYPE_FEEDS_READER, createFeedBar, waitForElm } from "./view";
 import { getFeedItems, RssFeedContent, nowdatetime, itemKeys } from "./getFeed";
 import { GLB } from "./globals";
@@ -10,9 +31,28 @@ interface FeedsReaderSettings {
 	feeds_data_fname: string;
 	subscriptions_fname: string;
 	showAll: boolean;
+	nItemPerPage: number;
+	saveContent: boolean;
+	saveSnippetNewToOld: boolean;
+	showJot: boolean;
+	showSnippet: boolean;
+	showRead: boolean;
+	showSave: boolean;
+	showMath: boolean;
+	showGPT: boolean;
+	showEmbed: boolean;
+	showFetch: boolean;
+	showLink: boolean;
+	showDelete: boolean;
+	chatGPTAPIKey: string;
+	chatGPTPrompt: string;
 }
 
 const DEFAULT_SETTINGS: FeedsReaderSettings = {
+  feeds_reader_dir: 'feeds-reader',
+  feeds_data_fname: 'feeds-data.json',
+  subscriptions_fname: 'subscriptions.json',
+  showAll: false,
   nItemPerPage: 20,
   saveContent: false,
   saveSnippetNewToOld: true,
@@ -25,7 +65,9 @@ const DEFAULT_SETTINGS: FeedsReaderSettings = {
   showEmbed: true,
   showFetch: true,
   showLink: true,
-  showDelete: true
+  showDelete: true,
+  chatGPTAPIKey: '',
+  chatGPTPrompt: ''
 }
 
 export default class FeedsReader extends Plugin {
@@ -52,7 +94,9 @@ export default class FeedsReader extends Plugin {
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
 		this.registerDomEvent(document, 'click', async (evt: MouseEvent) => {
-      if (evt.target.id === 'updateAll') {
+      const target = evt.target as HTMLElement;
+      if (!target) return;
+      if (target.id === 'updateAll') {
         GLB.feedList.forEach(async (f) => {
           const [nNew, nTotal] = await updateOneFeed(f.feedUrl);
           if (nNew > 0) {
@@ -61,16 +105,17 @@ export default class FeedsReader extends Plugin {
           }
         });
       }
-      if (evt.target.className === 'elUnreadTotalAndRefresh') {
-        const fdUrl = evt.target.getAttribute('fdUrl');
+      if (target.className === 'elUnreadTotalAndRefresh') {
+        const fdUrl = target.getAttribute('fdUrl');
+        if (!fdUrl) return;
         const [nNew, nTotal] = await updateOneFeed(fdUrl);
-        new Notice(evt.target.getAttribute('fdName') + ': '
+        new Notice(target.getAttribute('fdName') + ': '
                    + nTotal.toString() + " retrieved, "
                    + nNew.toString() + ' new.', 3000);
       }
-      if (evt.target.className.includes('showFeed')) {
+      if (target.className.includes('showFeed')) {
         const previousFeed = GLB.currentFeed;
-        GLB.currentFeed = evt.target.id;
+        GLB.currentFeed = target.id;
         if (GLB.currentFeed === '') {
           return;
         }
@@ -82,29 +127,32 @@ export default class FeedsReader extends Plugin {
           }
         }
         if (previousFeed != '') {
-          document.getElementById(previousFeed).className = 'showFeed nonShowingFeed';
+          const prevElement = document.getElementById(previousFeed);
+          if (prevElement) prevElement.className = 'showFeed nonShowingFeed';
         }
-        document.getElementById(GLB.currentFeed).className = 'showFeed showingFeed';
+        const currentElement = document.getElementById(GLB.currentFeed);
+        if (currentElement) currentElement.className = 'showFeed showingFeed';
         if (previousFeed != GLB.currentFeed) {
           GLB.undoList = [];
         }
         GLB.idxItemStart = 0;
         GLB.nPage = 1;
         makeDisplayList();
-        GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed);
+        const unreadCount = document.getElementById('unreadCount' + GLB.currentFeed);
+        GLB.elUnreadCount = unreadCount || undefined;
         show_feed();
       }
-      if (evt.target.id === 'nextPage') {
+      if (target.id === 'nextPage') {
         GLB.idxItemStart += GLB.nItemPerPage;
         GLB.nPage += 1;
         show_feed();
       }
-      if (evt.target.id === 'prevPage') {
+      if (target.id === 'prevPage') {
         GLB.idxItemStart -= GLB.nItemPerPage;
         GLB.nPage -= 1;
         show_feed();
       }
-      if (evt.target.id === 'undo') {
+      if (target.id === 'undo') {
         if (GLB.currentFeed != '') {
           GLB.idxItemStart = 0;
           GLB.nPage = 1;
@@ -112,15 +160,21 @@ export default class FeedsReader extends Plugin {
           show_feed();
         }
       }
-      if (evt.target.className === 'showItemContent') {
-        const idx = evt.target.getAttribute('_idx');
-        if (evt.target.getAttribute('showContent') === '0') {
-          const elID = evt.target.getAttribute('_link');
+      if (target.className === 'showItemContent') {
+        const target = evt.target as HTMLElement;
+        if (!target) return;
+        const idx = parseInt(target.getAttribute('_idx') || '0');
+        if (!idx) return;
+        if (target.getAttribute('showContent') === '0') {
+          const elID = target.getAttribute('_link');
+          if (!elID) return;
           let elContent = document.getElementById('itemContent' + idx);
           if (elContent !== null) {
             elContent.empty();
           } else {
-            elContent = document.getElementById(elID).createEl('div');
+            const parentEl = document.getElementById(elID as string);
+            if (!parentEl) return;
+            elContent = parentEl.createEl('div');
             elContent.className = 'itemContent';
             elContent.id = 'itemContent' + idx;
           }
@@ -129,27 +183,27 @@ export default class FeedsReader extends Plugin {
 
           if (item.content) {
             try {
-              elContent.appendChild(sanitizeHTMLToDom(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
+              elContent.appendChild(document.createTextNode(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
             } catch (e) {
-              elContent.appendChild(item.content.replace(/<img src="\/\//g,"<img src=\"https://"));
+              elContent.appendChild(document.createTextNode(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
             }
           }
-          evt.target.setAttribute('showContent', '1');
+          target.setAttribute('showContent', '1');
         } else {
           const elContent = document.getElementById('itemContent' + idx);
           if (elContent !== null) {
             elContent.remove();
           }
-          evt.target.setAttribute('showContent', '0');
+          target.setAttribute('showContent', '0');
           const embeddedIframe = document.getElementById('embeddedIframe' + idx);
           if (embeddedIframe !== null) {
             embeddedIframe.remove();
           }
         }
       }
-      if (evt.target.className === 'elEmbedButton') {
-        const idx = evt.target.getAttribute('_idx');
-        const elID = evt.target.getAttribute('_link');
+      if (target.className === 'elEmbedButton') {
+        const idx = target.getAttribute('_idx');
+        const elID = target.getAttribute('_link');
         if (document.getElementById('embeddedIframe' + idx) !== null) {
           return;
         }
@@ -157,40 +211,57 @@ export default class FeedsReader extends Plugin {
         if (elContent !== null) {
           elContent.empty();
         } else {
-          const itemEl = document.getElementById(elID);
+          const itemEl = document.getElementById(elID as string) as HTMLElement;
+          if (!itemEl) {
+            new Notice('Failed to find element with ID: ' + elID, 1000);
+            return;
+          }
           elContent = itemEl.createEl('div');
           elContent.className = 'itemContent';
           elContent.id = 'itemContent' + idx;
         }
-        const url = evt.target.getAttribute('url');
+        const url = target.getAttribute('url');
         const embeddedIframe = elContent.createEl('iframe');
         embeddedIframe.className = 'embeddedIframe';
         embeddedIframe.id = 'embeddedIframe' + idx;
-        embeddedIframe.src = url;
+        embeddedIframe.src = url as string;
         // const embeddedIframe = elContent.createEl('object');
         // embeddedIframe.className = 'embeddedIframe';
         // embeddedIframe.id = 'embeddedIframe' + idx;
         // embeddedIframe.data = url;
       }
-      if (evt.target.className === 'elFetch') {
-        const idx = evt.target.getAttribute('_idx');
-        const elID = evt.target.getAttribute('_link');
-        const url = evt.target.getAttribute('url');
+      if (target.className === 'elFetch') {
+        const idx = target.getAttribute('_idx');
+        const elID = target.getAttribute('_link');
+        const url = target.getAttribute('url'); // url can be null here
+        if (!url) { // Add null check for url
+          new Notice('Failed to get URL for fetching.', 1000);
+          return;
+        }
         if (document.getElementById('fetchContainer' + idx) !== null) {
           return;
         }
-        let pageSrc = '';
+        let pageSrc: string | null = null;
         try {
-          pageSrc = await request({url: url, method: "GET"});
+          // Now url is guaranteed to be a string
+          const response = await request({url: url, method: "GET"});
+          // Check if request returned null
+          if (response === null) {
+            new Notice('Fail to fetch ' + url, 1000);
+            return;
+          }
+          pageSrc = response; // Assign only if response is not null
         } catch (e) {
           new Notice('Fail to fetch ' + url, 1000);
           return;
         }
+        // Removed redundant null check: if (pageSrc === null) return;
         let elContent = document.getElementById('itemContent' + idx);
         if (elContent !== null) {
           elContent.empty();
         } else {
-          const itemEl = document.getElementById(elID);
+          const itemEl = document.getElementById(elID as string);
+          if (itemEl === null) return;
           elContent = itemEl.createEl('div');
           elContent.className = 'itemContent';
           elContent.id = 'itemContent' + idx;
@@ -200,25 +271,30 @@ export default class FeedsReader extends Plugin {
         fetchContainer.id = 'fetchContainer' + idx;
         fetchContainer.appendChild(sanitizeHTMLToDom(pageSrc));
       }
-      if (evt.target.className === 'renderMath') {
-          const idx = this.getNumFromId(evt.target.id, 'renderMath');
-          let elContent = document.getElementById('itemContent' + idx);
-          const item = GLB.feedsStore[GLB.currentFeed].items[idx];
+      if (target.className === 'renderMath') {
+        const idx = this.getNumFromId(target.id, 'renderMath');
+        let elContent = document.getElementById('itemContent' + idx);
+        const item = GLB.feedsStore[GLB.currentFeed].items[idx];
         if (item.content) {
             const elID = item.link;
             if (elContent !== null) {
               elContent.empty();
             } else {
-              elContent = document.getElementById(elID).createEl('div');
+              const itemEl = document.getElementById(elID);
+              if (!itemEl) {
+                new Notice('Failed to find element with ID: ' + elID, 1000);
+                return;
+              }
+              elContent = itemEl.createEl('div');
               elContent.id = 'itemContent' + idx;
             }
             elContent.className = 'itemContent';
             MarkdownRenderer.render(this.app,
-              remedyLatex(htmlToMarkdown(item.content)), elContent);
+              remedyLatex(htmlToMarkdown(item.content)), elContent, item.link, this);
           }
       }
-      if (evt.target.className === 'askChatGPT') {
-        const idx = this.getNumFromId(evt.target.id, 'askChatGPT');
+      if (target.className === 'askChatGPT') {
+        const idx = this.getNumFromId(target.id, 'askChatGPT');
         const item = GLB.feedsStore[GLB.currentFeed].items[idx];
         if (!item.content) {
           return;
@@ -245,7 +321,7 @@ export default class FeedsReader extends Plugin {
             promptText + '\n' + item.content);
           replyByGPT = replyByGPT.trim();
           if (replyByGPT !== '') {
-            const shortNote = document.getElementById('shortNote' + idx);
+            const shortNote = document.getElementById('shortNote' + idx) as HTMLTextAreaElement;
             let existingNote = shortNote.value;
             if (existingNote !== '') {
               existingNote = existingNote + '\n\n';
@@ -256,12 +332,12 @@ export default class FeedsReader extends Plugin {
           console.log(e);
         };
       }
-      if (evt.target.className === 'noteThis') {
-        if (! await this.app.vault.exists(GLB.feeds_reader_dir)) {
+      if (target.className === 'noteThis') {
+        if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
           await this.app.vault.createFolder(GLB.feeds_reader_dir);
         }
 
-        const idx = this.getNumFromId(evt.target.id, 'noteThis');
+        const idx = this.getNumFromId(target.id, 'noteThis');
         const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
         let dt_str: string = '';
         if (the_item.pubDate != '') {
@@ -281,14 +357,14 @@ export default class FeedsReader extends Plugin {
                               .replace(/[:!?@#\*\^\$]+/g, '')) + '.md';
         const fpath: string = GLB.feeds_reader_dir + '/' + fname;
         let shortNoteContent = '';
-        const elShortNote = document.getElementById('shortNote' + idx);
+        const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
         if (elShortNote !== null) {
           shortNoteContent = elShortNote.value;
         }
         let abstractOpen = '-';
         let theContent = '';
         if (GLB.saveContent) {
-          let author_text = the_item.creator.trim();
+          let author_text = the_item.creator ? the_item.creator.trim() : '';
           if (author_text !== '') {
             author_text = '\n> ' + htmlToMarkdown(author_text);
           }
@@ -306,7 +382,7 @@ export default class FeedsReader extends Plugin {
                             .replace(/\s+$/g, '')
                             .replace(/^\s+/g, '')))) + author_text;
         }
-        if (! await this.app.vault.exists(fpath)) {
+        if (! await this.app.vault.adapter.exists(fpath)) {
           await this.app.vault.create(fpath,
             shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
             the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
@@ -316,17 +392,17 @@ export default class FeedsReader extends Plugin {
           new Notice(fpath + " already exists.", 1000);
         }
       }
-      if (evt.target.className === 'saveSnippet') {
-        if (! await this.app.vault.exists(GLB.feeds_reader_dir)) {
+      if (target.className === 'saveSnippet') {
+        if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
           await this.app.vault.createFolder(GLB.feeds_reader_dir);
         }
 
-        const idx = this.getNumFromId(evt.target.id, 'saveSnippet');
+        const idx = this.getNumFromId(target.id, 'saveSnippet');
         const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
         const fpath: string = GLB.feeds_reader_dir + '/' + GLB.saved_snippets_fname;
-        const link_text = sanitizeHTMLToDom(the_item.link).textContent;
+        const link_text = sanitizeHTMLToDom(the_item.link).textContent || '';
         let shortNoteContent = '';
-        const elShortNote = document.getElementById('shortNote' + idx);
+        const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
         if (elShortNote !== null) {
           shortNoteContent = elShortNote.value;
         }
@@ -349,7 +425,7 @@ export default class FeedsReader extends Plugin {
         }
         let theContent = '';
         if (GLB.saveContent) {
-          let author_text = the_item.creator.trim();
+          let author_text = the_item.creator ? the_item.creator.trim() : '';
           if (author_text !== '') {
             author_text = '\n> ' + htmlToMarkdown(author_text);
           }
@@ -371,16 +447,16 @@ export default class FeedsReader extends Plugin {
             shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
             the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
             '](' + link_text + ')\n> ' + theContent + dt_str + feedNameStr);
-        if (! await this.app.vault.exists(fpath)) {
+        if (! await this.app.vault.adapter.exists(fpath)) {
           await this.app.vault.create(fpath, snippet_content);
           new Notice(fpath + " saved.", 1000);
         } else {
-          const prevContent: string = (await this.app.vault.adapter.read(fpath));
+          const prevContent: string = (await this.app.vault.adapter.read(fpath)) || '';
           if (prevContent.includes(link_text)) {
             new Notice("Snippet url already exists.", 1000);
           } else {
             if (GLB.saveSnippetNewToOld) {
-              await app.vault.process(app.vault.getAbstractFileByPath(fpath),
+              await this.app.vault.process(this.app.vault.getAbstractFileByPath(fpath) as TFile,
                 (data) => {return snippet_content + '\n\n<hr>\n\n' + data;});
             } else {
               await this.app.vault.adapter.append(fpath,
@@ -390,8 +466,8 @@ export default class FeedsReader extends Plugin {
           }
         }
       }
-      if ((evt.target.className === 'markPageRead') ||
-          (evt.target.className === 'markPageDeleted')) {
+      if ((target.className === 'markPageRead') ||
+          (target.className === 'markPageDeleted')) {
         if (!GLB.feedsStore.hasOwnProperty(GLB.currentFeed)) {
           return;
         }
@@ -410,14 +486,18 @@ export default class FeedsReader extends Plugin {
           }
           changed = true;
           nMarked += 1;
-          if (evt.target.className === 'markPageRead') {
+          if (target.className === 'markPageRead') {
             item.read = nowStr;
             const elToggleRead = document.getElementById('toggleRead' + idx);
-            elToggleRead.innerText = 'Unread';
+            if (elToggleRead) {
+              elToggleRead.innerText = 'Unread';
+            }
           } else {
             item.deleted = nowStr;
             const elToggleDeleted = document.getElementById('toggleDelete' + idx);
-            elToggleDeleted.innerText = 'Undelete';
+            if (elToggleDeleted) {
+              elToggleDeleted.innerText = 'Undelete';
+            }
           }
 
           const idxOf = GLB.undoList.indexOf(idx);
@@ -428,15 +508,19 @@ export default class FeedsReader extends Plugin {
 
           GLB.hideThisItem = true;
           if ((!GLB.showAll) && GLB.hideThisItem) {
-            document.getElementById(item.link).className = 'hidedItem';
+            const el = document.getElementById(
+              GLB.feedsStore[GLB.currentFeed].items[idx].link);
+            if (el) el.className = 'hidedItem';
           }
         }
         if (changed) {
           GLB.feedsStoreChange = true;
           GLB.feedsStoreChangeList.add(GLB.currentFeed);
-          GLB.elUnreadCount.innerText = parseInt(GLB.elUnreadCount.innerText) - nMarked;
+          if (GLB.elUnreadCount) {
+            GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - nMarked).toString();
+          }
           if (!GLB.showAll) {
-            [...document.getElementsByClassName('pageActions')].forEach(el => {el.remove();});
+            Array.from(document.getElementsByClassName('pageActions')).forEach(el => {el.remove();});
             if (GLB.idxItemStart+GLB.nItemPerPage < GLB.displayIndices.length) {
               GLB.idxItemStart += GLB.nItemPerPage;
               GLB.nPage += 1;
@@ -450,7 +534,7 @@ export default class FeedsReader extends Plugin {
           }
         }
       }
-      if (evt.target.className === 'removePageContent') {
+      if (target.className === 'removePageContent') {
         if (!GLB.feedsStore.hasOwnProperty(GLB.currentFeed)) {
           return;
         }
@@ -482,24 +566,28 @@ export default class FeedsReader extends Plugin {
         }
       }
 
-      if (evt.target.className === 'toggleRead') {
-        const idx = this.getNumFromId(evt.target.id, 'toggleRead');
+      if (target.className === 'toggleRead') {
+        const idx = this.getNumFromId(target.id, 'toggleRead');
         GLB.feedsStoreChange = true;
         GLB.feedsStoreChangeList.add(GLB.currentFeed);
-        const el = document.getElementById(evt.target.id);
-        if (el.innerText === 'Read') {
+        const el = document.getElementById(target.id);
+        if (el && el.innerText === 'Read') {
           GLB.feedsStore[GLB.currentFeed].items[idx].read = nowdatetime();
           el.innerText = 'Unread';
           GLB.hideThisItem = true;
-          if (!GLB.feedsStore[GLB.currentFeed].items[idx].deleted) {
-            GLB.elUnreadCount.innerText = parseInt(GLB.elUnreadCount.innerText) - 1;
+          if (GLB.elUnreadCount) {
+            GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
           }
         } else {
           GLB.feedsStore[GLB.currentFeed].items[idx].read = '';
-          el.innerText = 'Read';
+          if (el) {
+            el.innerText = 'Read';
+          }
           GLB.hideThisItem = false;
           if (!GLB.feedsStore[GLB.currentFeed].items[idx].deleted) {
-            GLB.elUnreadCount.innerText = parseInt(GLB.elUnreadCount.innerText) + 1;
+            if (GLB.elUnreadCount) {
+              GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
+            }
           }
         }
         const idxOf = GLB.undoList.indexOf(idx);
@@ -508,43 +596,51 @@ export default class FeedsReader extends Plugin {
         }
         GLB.undoList.unshift(idx);
         if ((!GLB.showAll) && GLB.hideThisItem) {
-          document.getElementById(
-            GLB.feedsStore[GLB.currentFeed].items[idx].link ).className = 'hidedItem';
+          const el = document.getElementById(
+            GLB.feedsStore[GLB.currentFeed].items[idx].link);
+          if (el) el.className = 'hidedItem';
         }
       }
-      if (evt.target.className === 'toggleDelete') {
-        const idx = this.getNumFromId(evt.target.id, 'toggleDelete');
+      if (target.className === 'toggleDelete') {
+        const idx = this.getNumFromId(target.id, 'toggleDelete');
         GLB.feedsStoreChange = true;
         GLB.feedsStoreChangeList.add(GLB.currentFeed);
-        const el = document.getElementById(evt.target.id);
-        if (el.innerText === 'Delete') {
-          GLB.feedsStore[GLB.currentFeed].items[idx].deleted = nowdatetime();
-          el.innerText = 'Undelete';
-          GLB.hideThisItem = true;
-          if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
-            GLB.elUnreadCount.innerText = parseInt(GLB.elUnreadCount.innerText) - 1;
+        const el = document.getElementById(target.id);
+        if (el) {
+          if (el.innerText === 'Delete') {
+            GLB.feedsStore[GLB.currentFeed].items[idx].deleted = nowdatetime();
+            el.innerText = 'Undelete';
+            GLB.hideThisItem = true;
+            if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
+              if (GLB.elUnreadCount) {
+                GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
+              }
+            }
+          } else {
+            GLB.feedsStore[GLB.currentFeed].items[idx].deleted = '';
+            el.innerText = 'Delete';
+            GLB.hideThisItem = false;
+            if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
+              if (GLB.elUnreadCount) {
+                GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
+              }
+            }
           }
-        } else {
-          GLB.feedsStore[GLB.currentFeed].items[idx].deleted = '';
-          el.innerText = 'Delete';
-          GLB.hideThisItem = false;
-          if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
-            GLB.elUnreadCount.innerText = parseInt(GLB.elUnreadCount.innerText) + 1;
+          const idxOf = GLB.undoList.indexOf(idx);
+          if (idxOf > -1) {
+            GLB.undoList.splice(idxOf, 1);
           }
-        }
-        const idxOf = GLB.undoList.indexOf(idx);
-        if (idxOf > -1) {
-          GLB.undoList.splice(idxOf, 1);
-        }
-        GLB.undoList.unshift(idx);
-        if ((!GLB.showAll) && GLB.hideThisItem) {
-          document.getElementById(
-            GLB.feedsStore[GLB.currentFeed].items[idx].link ).className = 'hidedItem';
+          GLB.undoList.unshift(idx);
+          if ((!GLB.showAll) && GLB.hideThisItem) {
+            const el = document.getElementById(
+              GLB.feedsStore[GLB.currentFeed].items[idx].link);
+            if (el) el.className = 'hidedItem';
+          }
         }
       }
 
-      if (evt.target.className === 'jotNotes') {
-        const idx = this.getNumFromId(evt.target.id, 'jotNotes');
+      if (target.className === 'jotNotes') {
+        const idx = this.getNumFromId(target.id, 'jotNotes');
         const el = document.getElementById('shortNoteContainer' + idx);
         if (el !== null) {
           //el.remove();
@@ -563,38 +659,44 @@ export default class FeedsReader extends Plugin {
         shortNote.placeholder = 'Enter notes here to be saved in the markdown or the snippets file.';
       }
 
-      if (evt.target.id === 'showAll') {
+      if (target.id === 'showAll') {
         let toggle = document.getElementById('showAll');
-        if (toggle.innerText == 'Show all') {
-          toggle.innerText = 'Unread only';
-          GLB.showAll = false;
-        } else {
-          toggle.innerText = 'Show all';
-          GLB.showAll = true;
+        if (toggle) {
+          if (toggle.innerText == 'Show all') {
+            toggle.innerText = 'Unread only';
+            GLB.showAll = false;
+          } else {
+            toggle.innerText = 'Show all';
+            GLB.showAll = true;
+          }
         }
       }
-      if (evt.target.id === 'titleOnly') {
+      if (target.id === 'titleOnly') {
         let toggle = document.getElementById('titleOnly');
-        if (toggle.innerText === 'Title only') {
-          toggle.innerText = 'Show content';
-          GLB.titleOnly = false;
-        } else {
-          toggle.innerText = 'Title only';
-          GLB.titleOnly = true;
+        if (toggle) {
+          if (toggle.innerText === 'Title only') {
+            toggle.innerText = 'Show content';
+            GLB.titleOnly = false;
+          } else {
+            toggle.innerText = 'Title only';
+            GLB.titleOnly = true;
+          }
         }
       }
-      if (evt.target.id === 'toggleOrder') {
+      if (target.id === 'toggleOrder') {
         let toggle = document.getElementById('toggleOrder');
-        if (toggle.innerText === 'New to old') {
-          toggle.innerText = 'Old to new';
-        } else if (toggle.innerText === 'Old to new') {
-          toggle.innerText = 'Random';
-        } else {
-          toggle.innerText = 'New to old';
+        if (toggle) {
+          if (toggle.innerText === 'New to old') {
+            toggle.innerText = 'Old to new';
+          } else if (toggle.innerText === 'Old to new') {
+            toggle.innerText = 'Random';
+          } else {
+            toggle.innerText = 'New to old';
+          }
+          GLB.itemOrder = toggle.innerText;
         }
-        GLB.itemOrder = toggle.innerText;
       }
-      if ((evt.target.id === 'saveFeedsData') || (evt.target.id === 'save_data_toggling')) {
+      if ((target.id === 'saveFeedsData') || (target.id === 'save_data_toggling')) {
         const nSaved = await saveFeedsData();
         if (nSaved > 0) {
           new Notice("Data saved: " + nSaved.toString() + 'file(s) updated.', 1000);
@@ -602,42 +704,93 @@ export default class FeedsReader extends Plugin {
           new Notice("No need to save.", 1000);
         }
       }
-      if ((evt.target.id === 'toggleNavi') && (GLB.currentFeed != '')) {
+      if ((target.id === 'toggleNavi') && (GLB.currentFeed != '')) {
         const toggle = document.getElementById('toggleNavi');
-        if (toggle.innerText === '>') {
-          toggle.innerText = '<';
-          const toggleNaviAux = document.getElementById('toggleNaviAux');
-          const elUnreadcountWhileToggling = toggleNaviAux.createEl('span', {text: GLB.elUnreadCount.innerText});
-          elUnreadcountWhileToggling.className = 'unreadcountWhileToggling';
-          GLB.elUnreadCount = elUnreadcountWhileToggling;
-          const save_data_toggling = toggleNaviAux.createEl('span', {text: 'Save progress'});
-          save_data_toggling.id = 'save_data_toggling';
-          save_data_toggling.className = 'save_data_toggling';
-          document.getElementById('naviBar').className = 'navigation naviBarHidden';
-          document.getElementById('contentBox').className = 'content contentBoxFullpage';
-          document.getElementById('toggleNaviContainer').className = 'toggleNaviContainer';
-        } else {
-          toggle.innerText = '>';
-          const s = GLB.elUnreadCount.innerText;
-          GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed);
-          GLB.elUnreadCount.innerText = s;
-          document.getElementById('toggleNaviAux').empty();
-          document.getElementById('naviBar').className = 'navigation naviBarShown';
-          document.getElementById('contentBox').className = 'content contentBoxRightpage';
-          document.getElementById('toggleNaviContainer').className = 'toggleNaviContainer';
+        if (toggle) {
+          if (toggle.innerText === '>') {
+            toggle.innerText = '<';
+            const toggleNaviAux = document.getElementById('toggleNaviAux');
+            if (toggleNaviAux) {
+              const elUnreadcountWhileToggling = toggleNaviAux.createEl('span', {text: GLB.elUnreadCount?.innerText});
+              elUnreadcountWhileToggling.className = 'unreadcountWhileToggling';
+              GLB.elUnreadCount = elUnreadcountWhileToggling;
+              const save_data_toggling = toggleNaviAux.createEl('span', {text: 'Save progress'});
+              save_data_toggling.id = 'save_data_toggling';
+              save_data_toggling.className = 'save_data_toggling';
+            }
+            const naviBar = document.getElementById('naviBar');
+            if (naviBar) naviBar.className = 'navigation naviBarHidden';
+            const contentBox = document.getElementById('contentBox');
+            if (contentBox) contentBox.className = 'content contentBoxFullpage';
+            const toggleNaviContainer = document.getElementById('toggleNaviContainer');
+            if (toggleNaviContainer) toggleNaviContainer.className = 'toggleNaviContainer';
+          } else {
+            toggle.innerText = '>';
+            const s = GLB.elUnreadCount?.innerText;
+            GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed) || undefined;
+            if (GLB.elUnreadCount && s) GLB.elUnreadCount.innerText = s;
+            const toggleNaviAux = document.getElementById('toggleNaviAux');
+            if (toggleNaviAux) toggleNaviAux.empty();
+            const naviBar = document.getElementById('naviBar');
+            if (naviBar) naviBar.className = 'navigation naviBarShown';
+            const contentBox = document.getElementById('contentBox');
+            if (contentBox) contentBox.className = 'content contentBoxRightpage';
+            const toggleNaviContainer = document.getElementById('toggleNaviContainer');
+            if (toggleNaviContainer) toggleNaviContainer.className = 'toggleNaviContainer';
+          }
         }
       }
-      if (evt.target.id === 'search') {
-        if (GLB.currentFeed === '') {
-          new Notice("Feed not selected: I can only search when a feed is selected.", 3000);
-        } else {
-          new SearchModal(this.app).open();
+      if (target.id === 'search') {
+        const searchTermsEl = document.getElementById('searchTerms') as HTMLInputElement;
+        const wordWiseEl = document.getElementById('checkBoxWordwise') as HTMLInputElement;
+        if (searchTermsEl && wordWiseEl) {
+          const wordWise = wordWiseEl.checked;
+          const searchTerms = ([...new Set((document.getElementById('searchTerms') as HTMLInputElement).value.toLowerCase().split(/[ ,;\t\n]+/))]
+                            .filter(i => i)
+                            .sort((a: string, b: string) => b.length - a.length)) as string[];
+          if (searchTerms.length === 0) {
+            return;
+          }
+          const fd = GLB.feedsStore[GLB.currentFeed].items;
+          const sep = /\s+/;
+          GLB.displayIndices = [];
+          for (let i=0; i<fd.length; i++) {
+            let item = fd[i];
+            let sItems;
+            let sCreator='', sContent='';
+            if (item.creator) {
+              sCreator = item.creator;
+            }
+            if (item.content) {
+              sContent = item.content;
+            }
+            if (wordWise) {
+              sItems = (item.title.toLowerCase().split(sep)
+                  .concat(sCreator.toLowerCase().split(sep))
+                  .concat(sContent.toLowerCase().split(sep)));
+            } else {
+              sItems = [item.title.toLowerCase(), sCreator.toLowerCase(),
+                        sContent.toLowerCase()].join(' ');
+            }
+            let found = true;
+            for (let j=0; j<searchTerms.length; j++) {
+              if (!sItems.includes(searchTerms[j])) {
+                found = false;
+                break;
+              }
+            }
+            if (found) {
+              GLB.displayIndices.push(i);
+            }
+          }
+          show_feed();
+          this.close();
         }
       }
-      if (evt.target.id === 'addFeed') {
+      if (target.id === 'addFeed') {
         new AddFeedModal(this.app).open();
       }
-      if (evt.target.id === 'manageFeeds') {
+      if (target.id === 'manageFeeds') {
         new ManageFeedsModal(this.app).open();
       }
 		});
@@ -664,10 +817,12 @@ export default class FeedsReader extends Plugin {
         leaf = this.app.workspace.activeLeaf;
     }
 
-    await leaf.setViewState({
+    if (leaf) {
+      await leaf.setViewState({
         type: VIEW_TYPE_FEEDS_READER,
         active: true
-    });
+      });
+    }
 
     this.app.workspace.revealLeaf(
       this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER)[0]
@@ -710,9 +865,14 @@ export default class FeedsReader extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-  getNumFromId(idstr, pref) {
+  getNumFromId(idstr: string, pref: string) {
     const n = pref.length;
     return parseInt(idstr.substring(n));
+  }
+
+  close() {
+    // モーダルを閉じる処理
+    this.app.workspace.activeLeaf?.detach();
   }
 }
 
@@ -754,9 +914,14 @@ async function updateOneFeed(fdUrl: string) {
     nNew = mergeStoreWithNewData(res, fdUrl);
     if (nNew > 0) {
       const stats = getFeedStats(fdUrl);
-      document.getElementById('unreadCount' + fdUrl).innerText = stats.unread.toString();
+      const unreadCountEl = document.getElementById('unreadCount' + fdUrl);
+      if (unreadCountEl) {
+        unreadCountEl.innerText = stats.unread.toString();
+      }
       if (fdUrl === GLB.currentFeed) {
-        GLB.elUnreadCount.innerText = stats.unread.toString();
+        if (GLB.elUnreadCount) {
+          GLB.elUnreadCount.innerText = stats.unread.toString();
+        }
         GLB.undoList = [];
         GLB.idxItemStart = 0;
         GLB.nPage = 1;
@@ -764,7 +929,10 @@ async function updateOneFeed(fdUrl: string) {
         show_feed();
       }
       if (stats.total < GLB.maxTotalnumDisplayed) {
-        document.getElementById('totalCount' + fdUrl).innerText = stats.total.toString();
+        const totalCountEl = document.getElementById('totalCount' + fdUrl);
+        if (totalCountEl) {
+          totalCountEl.innerText = stats.total.toString();
+        }
       }
       await saveFeedsData();
     }
@@ -800,10 +968,10 @@ class SearchModal extends Modal {
     checkBoxWordwise.type = 'checkBox';
     const searchButton = form.createEl('tr').createEl('td').createEl('button', {text: "Search"});
     searchButton.addEventListener("click", async () => {
-      const wordWise = document.getElementById('checkBoxWordwise').checked;
-      const searchTerms = ([...new Set(document.getElementById('searchTerms').value.toLowerCase().split(/[ ,;\t\n]+/))]
+      const wordWise = (document.getElementById('checkBoxWordwise') as HTMLInputElement).checked;
+      const searchTerms = ([...new Set((document.getElementById('searchTerms') as HTMLInputElement).value.toLowerCase().split(/[ ,;\t\n]+/))]
                          .filter(i => i)
-                         .sort((a,b) => {return b.length-a.length;}));
+                         .sort((a: string, b: string) => b.length - a.length)) as string[];
       if (searchTerms.length === 0) {
         return;
       }
@@ -881,9 +1049,9 @@ class AddFeedModal extends Modal {
     tr = form.createEl('tr');
     const saveButton = tr.createEl('td').createEl('button', {text: "Save"});
     saveButton.addEventListener("click", async () => {
-      const newFeedName = document.getElementById('newFeedName').value;
-      const newFeedUrl = document.getElementById('newFeedUrl').value;
-      const newFeedFolder = document.getElementById('newFeedFolder').value;
+      const newFeedName = (document.getElementById('newFeedName') as HTMLInputElement).value;
+      const newFeedUrl = (document.getElementById('newFeedUrl') as HTMLInputElement).value;
+      const newFeedFolder = (document.getElementById('newFeedFolder') as HTMLInputElement).value;
       if ((newFeedName == "") || (newFeedUrl == "")) {
         new Notice("Feed name and url must not be empty.", 1000);
         return;
@@ -922,6 +1090,7 @@ class ManageFeedsModal extends Modal {
 	constructor(app: App) {
 		super(app);
 	}
+	asc: boolean = false;
 
 	onOpen() {
 		const {contentEl} = this;
@@ -944,9 +1113,9 @@ class ManageFeedsModal extends Modal {
     btApplyChanges.addEventListener('click', async () => {
       let changed = false;
       for (let i=0; i<GLB.feedList.length; i++) {
-        const newName = document.getElementById('manageFdName' + i.toString()).value;
-        const newUrl = document.getElementById('manageFdUrl' + i.toString()).value;
-        const newFolder = document.getElementById('manageFdFolder' + i.toString()).value;
+        const newName = (document.getElementById('manageFdName' + i.toString()) as HTMLInputElement).value;
+        const newUrl = (document.getElementById('manageFdUrl' + i.toString()) as HTMLInputElement).value;
+        const newFolder = (document.getElementById('manageFdFolder' + i.toString()) as HTMLInputElement).value;
         let sMsg = '';
         if (GLB.feedList[i].name != newName) {
           sMsg += 'Name: ' + GLB.feedList[i].name + ' -> ' + newName;
@@ -965,7 +1134,7 @@ class ManageFeedsModal extends Modal {
               for (let j=0; j<GLB.feedList.length; j++) {
                 if ((j != i) && (GLB.feedList[j].name === newName)) {
                   new Notice("Not changed: name already included.", 1000);
-                  alreadyIncluded = True;
+                  alreadyIncluded = true;
                   break;
                 }
               }
@@ -975,8 +1144,8 @@ class ManageFeedsModal extends Modal {
                                    makeFilename(GLB.feedList[i].name, j)+'.gzip'].join('/');
                   const fpath_new = [GLB.feeds_reader_dir, GLB.feeds_store_base,
                                    makeFilename(newName, j)+'.gzip'].join('/');
-                  if (await app.vault.exists(fpath_old)) {
-                    await app.vault.adapter.rename(fpath_old, fpath_new);
+                  if (await this.app.vault.adapter.exists(fpath_old)) {
+                    await this.app.vault.adapter.rename(fpath_old, fpath_new);
                   } else {
                     break;
                   }
@@ -992,7 +1161,7 @@ class ManageFeedsModal extends Modal {
               for (let j=0; j<GLB.feedList.length; j++) {
                 if ((j != i) && (GLB.feedList[j].feedUrl === newUrl)) {
                   new Notice("Not changed: url already included.", 1000);
-                  alreadyIncluded = True;
+                  alreadyIncluded = true;
                   break;
                 }
               }
@@ -1020,53 +1189,53 @@ class ManageFeedsModal extends Modal {
     });
     btMarkAllRead.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {markAllRead(el.getAttribute('val'));});}});
+        Array.from(document.getElementsByClassName('checkThis'))
+        .filter(el => (el as HTMLInputElement).checked)
+        .forEach(el => {markAllRead(el.getAttribute('val')!);});}});
     btPurgeDeleted.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {purgeDeleted(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {purgeDeleted(el.getAttribute('val')!);});}});
     btRemoveContent.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {removeContent(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {removeContent(el.getAttribute('val')!);});}});
     btRemoveEmptyFields.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {removeEmptyFields(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {removeEmptyFields(el.getAttribute('val')!);});}});
     btRemoveContentOld.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {removeContentOld(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {removeContentOld(el.getAttribute('val')!);});}});
     btPurgeAll.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {purgeAll(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {purgeAll(el.getAttribute('val')!);});}});
     btPurgeOldHalf.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {purgeOldHalf(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {purgeOldHalf(el.getAttribute('val')!);});}});
     btDeduplicate.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {const nRemoved = deduplicate(el.getAttribute('val'));
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {const nRemoved = deduplicate(el.getAttribute('val')!);
                       if (nRemoved>0) {
                         new Notice(nRemoved + " removed for "
                         + el.getAttribute('fdName'), 2000);
                       }});}});
     btRemoveFeed.addEventListener('click', () => {
       if (window.confirm('Sure?')) {
-      [...document.getElementsByClassName('checkThis')]
-      .filter(el => el.checked)
-      .forEach(el => {removeFeed(el.getAttribute('val'));});}});
+      Array.from(document.getElementsByClassName('checkThis'))
+      .filter(el => (el as HTMLInputElement).checked)
+      .forEach(el => {removeFeed(el.getAttribute('val')!);});}});
 
     contentEl.createEl('br');
 
@@ -1086,10 +1255,10 @@ class ManageFeedsModal extends Modal {
     checkAll.type = 'checkBox';
     checkAll.id = 'checkAll';
     checkAll.addEventListener('click', (evt) => {
-      if (document.getElementById('checkAll').checked) {
-        [...document.getElementsByClassName('checkThis')].forEach(el => {el.checked = true;});
+      if ((document.getElementById('checkAll') as HTMLInputElement).checked) {
+        Array.from(document.getElementsByClassName('checkThis')).forEach(el => {(el as HTMLInputElement).checked = true;});
       } else {
-        [...document.getElementsByClassName('checkThis')].forEach(el => {el.checked = false;});
+        Array.from(document.getElementsByClassName('checkThis')).forEach(el => {(el as HTMLInputElement).checked = false;});
       }
     });
 
@@ -1113,11 +1282,11 @@ class ManageFeedsModal extends Modal {
 
       const stats = getFeedStats(GLB.feedList[i].feedUrl);
       const storeSizeInfo = getFeedStorageInfo(GLB.feedList[i].feedUrl);
-      tr.createEl('td', {text: stats.total.toString()}).setAttribute('sortBy', stats.total);
-      tr.createEl('td', {text: stats.read.toString()}).setAttribute('sortBy', stats.read);
-      tr.createEl('td', {text: stats.deleted.toString()}).setAttribute('sortBy', stats.deleted);
-      tr.createEl('td', {text: storeSizeInfo[0]}).setAttribute('sortBy', storeSizeInfo[2]/stats.total);
-      tr.createEl('td', {text: storeSizeInfo[1]}).setAttribute('sortBy', storeSizeInfo[3]);
+      tr.createEl('td', {text: stats.total.toString()}).setAttribute('sortBy', stats.total.toString());
+      tr.createEl('td', {text: stats.read.toString()}).setAttribute('sortBy', stats.read.toString());
+      tr.createEl('td', {text: stats.deleted.toString()}).setAttribute('sortBy', stats.deleted.toString());
+      tr.createEl('td', {text: storeSizeInfo[0].toString()}).setAttribute('sortBy', (Number(storeSizeInfo[2])/Number(stats.total)).toString());
+      tr.createEl('td', {text: storeSizeInfo[1].toString()}).setAttribute('sortBy', storeSizeInfo[3].toString());
       const checkThis = tr.createEl('td').createEl('input');
       checkThis.type = 'checkBox';
       checkThis.className = 'checkThis';
@@ -1127,8 +1296,8 @@ class ManageFeedsModal extends Modal {
       nTotal += stats.total;
       nRead += stats.read;
       nDeleted += stats.deleted;
-      nLength += storeSizeInfo[2];
-      nStoreSize += storeSizeInfo[3];
+      nLength += Number(storeSizeInfo[2]);
+      nStoreSize += Number(storeSizeInfo[3]);
     }
     tr = tbody.createEl('tr');
     tr.createEl('td', {text: 'Total: ' + GLB.feedList.length.toString()});
@@ -1142,21 +1311,30 @@ class ManageFeedsModal extends Modal {
 
     // From: https://stackoverflow.com/questions/14267781/sorting-html-table-with-javascript
     // https://stackoverflow.com/questions/14267781/sorting-html-table-with-javascript/53880407#53880407
-    const getCellValue = (tr, idx) => tr.children[idx].getAttribute('sortBy') || tr.children[idx].firstChild.value;
+    const getCellValue = (tr: HTMLElement, idx: number): string => {
+      const val = tr.children[idx].getAttribute('sortBy') || (tr.children[idx].firstChild as HTMLInputElement)?.value;
+      return val?.toString() || '0';
+    };
     
-    const comparer = ((idx, asc) =>
-      (a, b) =>
-        ((v1, v2) =>
-         v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1.toString().localeCompare(v2)
+    const comparer = ((idx: number, asc: boolean) =>
+      (a: HTMLElement, b: HTMLElement) =>
+        ((v1: string, v2: string) =>
+         v1 !== '' && v2 !== '' && !isNaN(Number(v1)) && !isNaN(Number(v2)) ? 
+         Number(v1) - Number(v2) : 
+         v1.toString().localeCompare(v2)
         )(getCellValue(asc ? a : b, idx), getCellValue(asc ? b : a, idx)));
     
     const rowSelectorStr ='tr:nth-child(-n+' + (GLB.feedList.length).toString() + ')';
     document.querySelectorAll('.manageFeedsForm th:nth-child(n+1):nth-child(-n+7)')
     .forEach(th => th.addEventListener('click', (() => {
         const table = th.closest('table');
+        if (!table) return;
         const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const parentNode = th.parentNode;
+        if (!parentNode) return;
         Array.from(tbody.querySelectorAll(rowSelectorStr))
-            .sort(comparer(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
+            .sort(comparer(Array.from(parentNode.children).indexOf(th), this.asc = !this.asc))
             .forEach(tr => tbody.insertBefore(tr, tbody.lastChild));
     })));
 
@@ -1350,7 +1528,7 @@ export async function saveFeedsData () {
     return nSaved;
   }
   for (let i=0; i<GLB.feedList.length; i++) {
-    key = GLB.feedList[i].feedUrl;
+    let key = GLB.feedList[i].feedUrl;
     if (!GLB.feedsStoreChangeList.has(key)) {
       continue;
     }
@@ -1421,7 +1599,7 @@ function str2filename(s: string) {
           .replace(/[_-]*\s+$/g, '');
 }
 
-function unEscape(htmlStr) {
+function unEscape(htmlStr: string) {
     return htmlStr.replace(/&lt;/g , "<")
                   .replace(/&gt;/g , ">")
                   .replace(/&quot;/g , "\"")
@@ -1644,6 +1822,7 @@ async function show_feed() {
      return;
    }
    const feed_content = document.getElementById('feed_content');
+   if (!feed_content) return;
    feed_content.empty();
 
    const feedTitle = feed_content.createEl('h2');
@@ -1653,7 +1832,7 @@ async function show_feed() {
      return;
    }
    const fd = GLB.feedsStore[GLB.currentFeed];
-   feedTitle.createEl('a', {href: sanitizeHTMLToDom(fd.link).textContent}).appendChild(sanitizeHTMLToDom(fd.title));
+   feedTitle.createEl('a', {href: sanitizeHTMLToDom(fd.link).textContent || ''}).appendChild(sanitizeHTMLToDom(fd.title));
    if (fd.pubDate != '') {
      feed_content.createEl('div', {text: fd.pubDate});
    }
@@ -1680,14 +1859,14 @@ async function show_feed() {
      const itemTitle = itemEl.createEl('div');
      itemTitle.className = 'itemTitle';
      if (!GLB.titleOnly) {
-       itemTitle.createEl('a', {href: sanitizeHTMLToDom(item.link).textContent})
+       itemTitle.createEl('a', {href: sanitizeHTMLToDom(item.link).textContent || ''})
                 .appendChild(sanitizeHTMLToDom(item.title));
      } else {
        const elTitle = itemTitle.createEl('div');
        elTitle.appendChild(sanitizeHTMLToDom(item.title));
        elTitle.className = 'showItemContent';
        elTitle.setAttribute('_link', item.link);
-       elTitle.setAttribute('_idx', idx);
+       elTitle.setAttribute('_idx', idx.toString());
        elTitle.setAttribute('showContent', '0');
      }
      if (item.creator) {
@@ -1699,7 +1878,7 @@ async function show_feed() {
      if (item.pubDate) {
        elPubDate = itemEl.createEl('div', {text: item.pubDate});
      } else {
-       elPubDate = itemEl.createEl('div', {text: item.downloaded});
+       elPubDate = itemEl.createEl('div', {text: item.downloaded || ''});
      }
      elPubDate.className = 'elPubDate';
      const elActionContainer = itemEl.createEl('div');
@@ -1752,7 +1931,7 @@ async function show_feed() {
      if (GLB.settings.showEmbed) {
        const embed = itemActionOneRow.createEl('div', {text: "Embed"});
        embed.setAttribute('url', item.link);
-       embed.setAttribute('_idx', idx);
+       embed.setAttribute('_idx', idx.toString());
        embed.setAttribute('_link', item.link);
        embed.className = 'elEmbedButton';
      }
@@ -1760,7 +1939,7 @@ async function show_feed() {
      if (GLB.settings.showFetch) {
        const fetch = itemActionOneRow.createEl('div', {text: "Fetch"});
        fetch.setAttribute('url', item.link);
-       fetch.setAttribute('_idx', idx);
+       fetch.setAttribute('_idx', idx.toString());
        fetch.setAttribute('_link', item.link);
        fetch.className = 'elFetch';
      }
@@ -1768,7 +1947,7 @@ async function show_feed() {
      if (GLB.settings.showLink) {
        const elLink = itemActionOneRow.createEl('div');
        elLink.setAttribute('url', item.link);
-       elLink.setAttribute('_idx', idx);
+       elLink.setAttribute('_idx', idx.toString());
        elLink.setAttribute('_link', item.link);
        elLink.className = 'elLink';
        elLink.createEl('a', {text: "Link", href: item.link});
@@ -1812,15 +1991,25 @@ async function show_feed() {
    }
    const stats = getFeedStats(GLB.currentFeed);
    //  GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed);
-   GLB.elTotalCount = document.getElementById('totalCount' + GLB.currentFeed);
-   GLB.elSepUnreadTotal = document.getElementById('sepUnreadTotal' + GLB.currentFeed);
-   GLB.elUnreadCount.innerText = stats.unread.toString();
+   GLB.elTotalCount = document.getElementById('totalCount' + GLB.currentFeed) || undefined;
+   GLB.elSepUnreadTotal = document.getElementById('sepUnreadTotal' + GLB.currentFeed) || undefined;
+   if (GLB.elUnreadCount) {
+     GLB.elUnreadCount.innerText = stats.unread.toString();
+   }
    if (fd.items.length < GLB.maxTotalnumDisplayed) {
-     GLB.elTotalCount.innerText = fd.items.length.toString();
-     GLB.elSepUnreadTotal.innerText = '/';
+     if (GLB.elTotalCount) {
+       GLB.elTotalCount.innerText = fd.items.length.toString();
+     }
+     if (GLB.elSepUnreadTotal) {
+       GLB.elSepUnreadTotal.innerText = '/';
+     }
    } else {
-     GLB.elTotalCount.innerText = '';
-     GLB.elSepUnreadTotal.innerText = '';
+     if (GLB.elTotalCount) {
+       GLB.elTotalCount.innerText = '';
+     }
+     if (GLB.elSepUnreadTotal) {
+       GLB.elSepUnreadTotal.innerText = '';
+     }
    }
 }
 
@@ -1868,40 +2057,40 @@ async function saveSubscriptions() {
 
 async function saveStringToFileGzip(s: string, folder: string, fname: string) {
   let written = 0, success = true;
-  if (! await app.vault.exists(folder)) {
-    await app.vault.createFolder(folder);
+  if (! await this.app.vault.exists(folder)) {
+    await this.app.vault.createFolder(folder);
   }
   const s_gzipped = await compress(s, 'gzip');
   const fpath = folder + "/" + fname + '.gzip';
-  if (! await app.vault.exists(fpath)) {
-    await app.vault.createBinary(fpath, s_gzipped);
+  if (! await this.app.vault.exists(fpath)) {
+    await this.app.vault.createBinary(fpath, s_gzipped);
     written = 1;
   } else {
-    if ((await decompress(await app.vault.adapter.readBinary(fpath), 'gzip')) !== s) {
-      await app.vault.adapter.remove(fpath);
-      await app.vault.createBinary(fpath, s_gzipped);
+    if ((await decompress(await this.app.vault.adapter.readBinary(fpath), 'gzip')) !== s) {
+      await this.app.vault.adapter.remove(fpath);
+      await this.app.vault.createBinary(fpath, s_gzipped);
       written = 1;
     }
   }
   try {
-    const readBack = await decompress(await app.vault.adapter.readBinary(fpath), 'gzip');
+    const readBack = await decompress(await this.app.vault.adapter.readBinary(fpath), 'gzip');
     if (readBack !== s) {
       success = false;
       new Notice('Readback content mismatch while saving: ' + fpath, 3000);
     }
   } catch (e) {
     success = false;
-    new Notice('Problem encountered while saving: ' + fpath, 3000);
+    new Notice('Error reading back: ' + fpath, 3000);
   }
   if (!success) {
-    if (await app.vault.exists(fpath)) {
-      await app.vault.adapter.remove(fpath);
+    if (await this.app.vault.exists(fpath)) {
+      await this.app.vault.adapter.remove(fpath);
     }
-    written = saveStringToFile(s, folder, fname);
+    written = await saveStringToFile(s, folder, fname);
     new Notice('Failed to save as gzip; save as plain text instead: ' + folder + "/" + fname, 1000);
   } else {
-    if (await app.vault.exists(folder + "/" + fname)) {
-      await app.vault.adapter.remove(folder + "/" + fname);
+    if (await this.app.vault.exists(folder + "/" + fname)) {
+      await this.app.vault.adapter.remove(folder + "/" + fname);
     }
   }
   return written;
@@ -1909,16 +2098,16 @@ async function saveStringToFileGzip(s: string, folder: string, fname: string) {
 
 async function saveStringToFile(s: string, folder: string, fname: string) {
   let written = 0;
-  if (! await app.vault.exists(folder)) {
-    await app.vault.createFolder(folder);
+  if (! await this.app.vault.exists(folder)) {
+    await this.app.vault.createFolder(folder);
   }
   const fpath = folder + "/" + fname;
-  if (! await app.vault.exists(fpath)) {
-    await app.vault.create(fpath, s);
+  if (! await this.app.vault.exists(fpath)) {
+    await this.app.vault.create(fpath, s);
     written = 1;
   } else {
-    if ((await app.vault.adapter.read(fpath)) != s) {
-      await app.vault.adapter.write(fpath, s);
+    if ((await this.app.vault.adapter.read(fpath)) != s) {
+      await this.app.vault.adapter.write(fpath, s);
       written = 1;
     }
   }
@@ -1946,8 +2135,8 @@ async function saveStringSplitted(s: string, folder: string, fname_base: string,
     // Remove redundant files with higher serial number.
     for (;;i++) {
       const fpath_unneeded = folder + '/' + makeFilename(fname_base, i) + '.gzip';
-      if (await app.vault.exists(fpath_unneeded)) {
-        await app.vault.adapter.remove(fpath_unneeded);
+      if (await this.app.vault.exists(fpath_unneeded)) {
+        await this.app.vault.adapter.remove(fpath_unneeded);
         new Notice('Redundant file ' + fpath_unneeded + ' removed.', 2000);
       } else {
         break;
@@ -1961,25 +2150,25 @@ async function saveStringSplitted(s: string, folder: string, fname_base: string,
 
 async function loadStringSplitted_Gzip(folder: string, fname_base: string) {
   let res = '';
-  if (await app.vault.exists(folder)) {
+  if (await this.app.vault.exists(folder)) {
     for (let i=0;;i++) {
       const fpath_plain = folder + '/' + makeFilename(fname_base, i);
       const fpath = fpath_plain + '.gzip';
-      const gzip_exist = await app.vault.exists(fpath);
-      const plain_exist = await app.vault.exists(fpath_plain);
+      const gzip_exist = await this.app.vault.exists(fpath);
+      const plain_exist = await this.app.vault.exists(fpath_plain);
       if ((! plain_exist) && (! gzip_exist)) {
         break;
       }
       let s_partial;
       if (gzip_exist) {
         try {
-          s_partial = await decompress(await app.vault.adapter.readBinary(fpath), 'gzip');
+          s_partial = await decompress(await this.app.vault.adapter.readBinary(fpath), 'gzip');
         } catch (e) {
           new Notice('Error reading: ' + fpath + '\nTry with: ' + fpath_plain, 1000);
-          s_partial = await app.vault.adapter.read(fpath_plain);
+          s_partial = await this.app.vault.adapter.read(fpath_plain);
         }
       } else {
-        s_partial = await app.vault.adapter.read(fpath_plain);
+        s_partial = await this.app.vault.adapter.read(fpath_plain);
       }
       res = s_partial.concat('', res);
     }
@@ -1989,13 +2178,13 @@ async function loadStringSplitted_Gzip(folder: string, fname_base: string) {
 
 async function loadStringSplitted(folder: string, fname_base: string) {
   let res = '';
-  if (await app.vault.exists(folder)) {
+  if (await this.app.vault.exists(folder)) {
     for (let i=0;;i++) {
       const fpath = folder + '/' + makeFilename(fname_base, i);
-      if (! await app.vault.exists(fpath)) {
+      if (! await this.app.vault.exists(fpath)) {
         break;
       }
-      res = (await app.vault.adapter.read(fpath)).concat('', res);
+      res = (await this.app.vault.adapter.read(fpath)).concat('', res);
     }
   }
   return res;
@@ -2008,10 +2197,10 @@ function makeFilename (fname_base: string, iPostfix: number) {
 async function removeFileFragments(folder: string, fname_base: string, nfile: number) {
   for (let i=0;i<nfile;i++) {
     const fpath = folder + '/' + makeFilename(fname_base, i);
-    if (! await app.vault.exists(fpath)) {
+    if (! await this.app.vault.exists(fpath)) {
       continue;
     }
-    await app.vault.adapter.remove(fpath);
+    await this.app.vault.adapter.remove(fpath);
     new Notice(fpath + ' removed.', 2000);
   }
 }
@@ -2019,15 +2208,15 @@ async function removeFileFragments(folder: string, fname_base: string, nfile: nu
 async function removeFileFragments_gzipped(folder: string, fname_base: string, nfile: number) {
   for (let i=0;i<nfile;i++) {
     const fpath = folder + '/' + makeFilename(fname_base, i) + '.gzip';
-    if (! await app.vault.exists(fpath)) {
+    if (! await this.app.vault.exists(fpath)) {
       continue;
     }
-    await app.vault.adapter.remove(fpath);
+    await this.app.vault.adapter.remove(fpath);
     new Notice(fpath + ' removed.', 2000);
   }
 }
 
-async function fetchChatGPT(apiKey, temperature, text) {
+async function fetchChatGPT(apiKey: string, temperature: number, text: string) {
   const res = await
     fetch('https://api.openai.com/v1/chat/completions',
           {method: 'POST',
@@ -2054,7 +2243,7 @@ function remedyLatex(s: string) {
           .replace(/\*/g, '\\*');
 }
 
-async function compress(string, format) {
+async function compress(string: string, format: CompressionFormat) {
   // From: https://wicg.github.io/compression/
   const byteArray = new TextEncoder().encode(string);
   const cs = new CompressionStream(format);
@@ -2080,7 +2269,7 @@ async function compress(string, format) {
   return concatenated;
 }
 
-async function decompress(byteArray, format) {
+async function decompress(byteArray: Uint8Array, format: CompressionFormat) {
   const cs = new DecompressionStream(format);
   const writer = cs.writable.getWriter();
   writer.write(byteArray);
@@ -2089,3 +2278,4 @@ async function decompress(byteArray, format) {
   const a = await r.arrayBuffer();
   return new TextDecoder().decode(a);
 }
+

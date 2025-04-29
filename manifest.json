@@ -1,11 +1,11 @@
 {
-	"id": "rss-feeds-reader",
-	"name": "Feeds Reader",
-	"version": "1.2.0",
+	"id": "contents-feeds-reader",
+	"name": "Contents Feeds Reader",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Read RSS feeds within Obsidian.",
-	"author": "fjdu",
-	"authorUrl": "https://fjdu.github.io",
-	"fundingUrl": "https://www.buymeacoffee.com/fjdu",
+	"description": "Read RSS/Atom, YouTube, Podcasts, and other contents within Obsidian.",
+	"author": "mryfmo",
+	"authorUrl": "https://mryfmo.github.io",
+	"fundingUrl": "https://www.buymeacoffee.com/mryfmo",
 	"isDesktopOnly": false
 }
