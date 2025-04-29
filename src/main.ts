@@ -19,9 +19,9 @@ declare var DecompressionStream: {
     new(format: CompressionFormat): DecompressionStream;
 };
 
-import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom, request, Component, WorkspaceLeaf, TFile } from 'obsidian';
-import { FRView, VIEW_TYPE_FEEDS_READER, createFeedBar, waitForElm } from "./view";
-import { getFeedItems, RssFeedContent, nowdatetime, itemKeys } from "./getFeed";
+import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, PluginSettingTab, Setting, sanitizeHTMLToDom, request, Component, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import { FRView, VIEW_TYPE_FEEDS_READER, createFeedBar, waitForElm, getNumFromId, nowdatetime } from "./view";
+import { getFeedItems, RssFeedContent, itemKeys } from "./getFeed";
 import { GLB } from "./globals";
 
 // Remember to rename these classes and interfaces!
@@ -78,13 +78,13 @@ export default class FeedsReader extends Plugin {
 
     this.registerView(
       VIEW_TYPE_FEEDS_READER,
-      (leaf) => new FRView(leaf)
+      (leaf) => new FRView(leaf, this)
     );
 
 		// This creates an icon in the left ribbon.
     //addIcon("circle", `<rect x="120" width="100" height="100" rx="15" fill="currentColor" />`);
     addIcon("circle", `<circle cx="50" cy="50" r="50" fill="currentColor" /> <circle cx="50" cy="50" r="30" fill="cyan" /> <circle cx="50" cy="50" r="10" fill="green" />`);
-		const ribbonIconEl = this.addRibbonIcon('circle', 'Feeds reader', async (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('rss', 'Feeds reader', async (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
       this.activateView();
 		});
@@ -96,15 +96,144 @@ export default class FeedsReader extends Plugin {
 		this.registerDomEvent(document, 'click', async (evt: MouseEvent) => {
       const target = evt.target as HTMLElement;
       if (!target) return;
-      if (target.id === 'updateAll') {
-        GLB.feedList.forEach(async (f) => {
-          const [nNew, nTotal] = await updateOneFeed(f.feedUrl);
-          if (nNew > 0) {
-            new Notice(f.name + ': ' + nTotal.toString() + ' retrieved, '
-                       + nNew.toString() + " new.", 3000);
+
+      // Check if the click target is within a manage button div
+      const manageButton = target.closest('.manage > div') as HTMLElement | null;
+
+      if (manageButton) {
+          const buttonId = manageButton.id;
+          if (buttonId === 'updateAll') {
+            GLB.feedList.forEach(async (f) => {
+              const [nNew, nTotal] = await updateOneFeed(f.feedUrl);
+              if (nNew > 0) {
+                new Notice(f.name + ': ' + nTotal.toString() + ' retrieved, '
+                           + nNew.toString() + " new.", 3000);
+              }
+            });
+          } else if (buttonId === 'search') {
+            new SearchModal(this.app).open(); // Assuming SearchModal needs app instance
+          } else if (buttonId === 'showAll') {
+            let toggle = document.getElementById('showAll') as HTMLElement;
+            const spanInside = toggle?.querySelector('span'); // Get the span inside the div
+            if (toggle && spanInside) {
+              if (toggle.title.includes('Unread only')) { // Check title instead of innerText
+                toggle.title = 'Show all';
+                setIcon(spanInside, 'filter-x'); // Change icon to show filter is off
+                GLB.showAll = true;
+              } else {
+                toggle.title = 'Unread only / Show all';
+                setIcon(spanInside, 'filter'); // Change icon back
+                GLB.showAll = false;
+              }
+            }
+            // Re-render feed list based on new showAll state
+            makeDisplayList();
+            show_feed();
+          } else if (buttonId === 'titleOnly') {
+            let toggle = document.getElementById('titleOnly') as HTMLElement;
+            const spanInside = toggle?.querySelector('span');
+            if (toggle && spanInside) {
+              if (toggle.title.includes('Title only')) { // Check title
+                toggle.title = 'Show content';
+                setIcon(spanInside, 'layout-grid'); // Change icon
+                GLB.titleOnly = false;
+              } else {
+                toggle.title = 'Title only / Show content';
+                setIcon(spanInside, 'layout-list'); // Change icon back
+                GLB.titleOnly = true;
+              }
+            }
+            // Re-render feed list based on new titleOnly state
+            show_feed();
+          } else if (buttonId === 'toggleOrder') {
+            const toggleOrderDiv = document.getElementById('toggleOrder') as HTMLElement;
+            const toggleSpan = toggleOrderDiv?.querySelector('span') as HTMLElement;
+            if (toggleSpan && toggleOrderDiv) {
+              let nextIcon: string;
+              let nextTitle: string;
+              if (GLB.itemOrder === 'New to old') {
+                GLB.itemOrder = 'Old to new';
+                nextIcon = 'arrow-up-down';
+                nextTitle = 'Sort: Old to new';
+              } else if (GLB.itemOrder === 'Old to new') {
+                GLB.itemOrder = 'Random';
+                nextIcon = 'shuffle';
+                nextTitle = 'Sort: Random';
+              } else { // Random
+                GLB.itemOrder = 'New to old';
+                nextIcon = 'arrow-down-up';
+                nextTitle = 'Sort: New to old';
+              }
+              setIcon(toggleSpan, nextIcon);
+              toggleOrderDiv.title = nextTitle;
+            }
+            // Re-render feed list based on new order
+            makeDisplayList();
+            show_feed();
+          } else if (buttonId === 'saveFeedsData' || buttonId === 'save_data_toggling') {
+            const nSaved = await saveFeedsData();
+            if (nSaved > 0) {
+              new Notice("Data saved: " + nSaved.toString() + 'file(s) updated.', 1000);
+            } else {
+              new Notice("No need to save.", 1000);
+            }
+          } else if (buttonId === 'undo') {
+              if (GLB.currentFeed != '') {
+                GLB.idxItemStart = 0;
+                GLB.nPage = 1;
+                GLB.displayIndices = GLB.undoList.slice(0, GLB.nItemPerPage);
+                show_feed();
+              }
+          } else if (buttonId === 'addFeed') {
+            new AddFeedModal(this.app).open();
+          } else if (buttonId === 'manageFeeds') {
+            new ManageFeedsModal(this.app).open();
           }
-        });
+          return; // Prevent further checks if a manage button was clicked
       }
+
+      // Handle toggleNavi click
+      if (target.closest('#toggleNavi')) { // Check if the click is on or inside toggleNavi
+          const toggle = document.getElementById('toggleNavi');
+          const naviBar = document.getElementById('naviBar');
+          const contentBox = document.getElementById('contentBox');
+          const toggleNaviContainer = document.getElementById('toggleNaviContainer');
+          const toggleNaviAux = document.getElementById('toggleNaviAux');
+
+          if (toggle && naviBar && contentBox && toggleNaviContainer && toggleNaviAux) {
+              if (naviBar.classList.contains('naviBarHidden')) {
+                  // Currently hidden, show it
+                  setIcon(toggle, 'panel-left-open');
+                  toggle.title = "Hide navigation"; // Update title
+                  naviBar.className = 'navigation naviBarShown';
+                  contentBox.className = 'content contentBoxRightpage';
+                  toggleNaviContainer.className = 'toggleNaviContainer'; // Ensure correct class
+                  // Restore unread count if applicable
+                  const s = GLB.elUnreadCount?.innerText; // Get text from potentially temporary element
+                  GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed) || undefined;
+                  if (GLB.elUnreadCount && s) GLB.elUnreadCount.innerText = s;
+                  toggleNaviAux.empty();
+              } else {
+                  // Currently shown, hide it
+                  setIcon(toggle, 'panel-left-close');
+                  toggle.title = "Show navigation"; // Update title
+                  naviBar.className = 'navigation naviBarHidden';
+                  contentBox.className = 'content contentBoxFullpage';
+                  toggleNaviContainer.className = 'toggleNaviContainer'; // Ensure correct class
+                  // Show auxiliary info
+                  const elUnreadcountWhileToggling = toggleNaviAux.createEl('span', {text: GLB.elUnreadCount?.innerText});
+                  elUnreadcountWhileToggling.className = 'unreadcountWhileToggling';
+                  GLB.elUnreadCount = elUnreadcountWhileToggling; // Temporarily point GLB reference
+                  const save_data_toggling = toggleNaviAux.createEl('span', {text: 'Save progress'});
+                  save_data_toggling.id = 'save_data_toggling';
+                  save_data_toggling.className = 'save_data_toggling';
+              }
+          }
+          return; // Prevent further checks
+      }
+
+      // --- Keep other event listeners below --- 
+
       if (target.className === 'elUnreadTotalAndRefresh') {
         const fdUrl = target.getAttribute('fdUrl');
         if (!fdUrl) return;
@@ -152,14 +281,6 @@ export default class FeedsReader extends Plugin {
         GLB.nPage -= 1;
         show_feed();
       }
-      if (target.id === 'undo') {
-        if (GLB.currentFeed != '') {
-          GLB.idxItemStart = 0;
-          GLB.nPage = 1;
-          GLB.displayIndices = GLB.undoList.slice(0, GLB.nItemPerPage);
-          show_feed();
-        }
-      }
       if (target.className === 'showItemContent') {
         const target = evt.target as HTMLElement;
         if (!target) return;
@@ -201,78 +322,24 @@ export default class FeedsReader extends Plugin {
           }
         }
       }
-      if (target.className === 'elEmbedButton') {
+      if (target.className === 'elEmbedButton' && !target.closest('.elEmbedButton')) { // Handle direct click if not handled by closest
         const idx = target.getAttribute('_idx');
         const elID = target.getAttribute('_link');
-        if (document.getElementById('embeddedIframe' + idx) !== null) {
-          return;
-        }
-        let elContent = document.getElementById('itemContent' + idx);
-        if (elContent !== null) {
-          elContent.empty();
-        } else {
-          const itemEl = document.getElementById(elID as string) as HTMLElement;
-          if (!itemEl) {
-            new Notice('Failed to find element with ID: ' + elID, 1000);
-            return;
-          }
-          elContent = itemEl.createEl('div');
-          elContent.className = 'itemContent';
-          elContent.id = 'itemContent' + idx;
-        }
-        const url = target.getAttribute('url');
-        const embeddedIframe = elContent.createEl('iframe');
-        embeddedIframe.className = 'embeddedIframe';
-        embeddedIframe.id = 'embeddedIframe' + idx;
-        embeddedIframe.src = url as string;
-        // const embeddedIframe = elContent.createEl('object');
-        // embeddedIframe.className = 'embeddedIframe';
-        // embeddedIframe.id = 'embeddedIframe' + idx;
-        // embeddedIframe.data = url;
+         // ... (rest of elEmbedButton logic) ...
+         return; // Handled
       }
-      if (target.className === 'elFetch') {
+      if (target.className === 'elFetch' && !target.closest('.elFetch')) { // Handle direct click if not handled by closest
         const idx = target.getAttribute('_idx');
         const elID = target.getAttribute('_link');
-        const url = target.getAttribute('url'); // url can be null here
-        if (!url) { // Add null check for url
-          new Notice('Failed to get URL for fetching.', 1000);
-          return;
-        }
-        if (document.getElementById('fetchContainer' + idx) !== null) {
-          return;
-        }
-        let pageSrc: string | null = null;
-        try {
-          // Now url is guaranteed to be a string
-          const response = await request({url: url, method: "GET"});
-          // Check if request returned null
-          if (response === null) {
-            new Notice('Fail to fetch ' + url, 1000);
-            return;
-          }
-          pageSrc = response; // Assign only if response is not null
-        } catch (e) {
-          new Notice('Fail to fetch ' + url, 1000);
-          return;
-        }
-        // Removed redundant null check: if (pageSrc === null) return;
-        let elContent = document.getElementById('itemContent' + idx);
-        if (elContent !== null) {
-          elContent.empty();
-        } else {
-          const itemEl = document.getElementById(elID as string);
-          if (itemEl === null) return;
-          elContent = itemEl.createEl('div');
-          elContent.className = 'itemContent';
-          elContent.id = 'itemContent' + idx;
-        }
-        const fetchContainer = elContent.createEl('div');
-        fetchContainer.className = 'fetchContainer';
-        fetchContainer.id = 'fetchContainer' + idx;
-        fetchContainer.appendChild(sanitizeHTMLToDom(pageSrc));
+        // ... (rest of elFetch logic) ...
+        return; // Handled
       }
+
+      // --- Handlers remaining in main.ts --- 
+      // Restore full logic for handlers previously replaced by comments
+
       if (target.className === 'renderMath') {
-        const idx = this.getNumFromId(target.id, 'renderMath');
+        const idx = getNumFromId(target.id, 'renderMath'); 
         let elContent = document.getElementById('itemContent' + idx);
         const item = GLB.feedsStore[GLB.currentFeed].items[idx];
         if (item.content) {
@@ -288,184 +355,557 @@ export default class FeedsReader extends Plugin {
               elContent = itemEl.createEl('div');
               elContent.id = 'itemContent' + idx;
             }
-            elContent.className = 'itemContent';
-            MarkdownRenderer.render(this.app,
-              remedyLatex(htmlToMarkdown(item.content)), elContent, item.link, this);
+            if(elContent) { // Check elContent is not null
+              elContent.className = 'itemContent';
+              MarkdownRenderer.render(this.app,
+                remedyLatex(htmlToMarkdown(item.content)), elContent, item.link, this);
+            }
           }
+         return; // Handled
       }
       if (target.className === 'askChatGPT') {
-        const idx = this.getNumFromId(target.id, 'askChatGPT');
+        const idx = getNumFromId(target.id, 'askChatGPT');
         const item = GLB.feedsStore[GLB.currentFeed].items[idx];
-        if (!item.content) {
-          return;
-        }
-        const elID = item.link;
-        const el = document.getElementById('shortNoteContainer' + idx);
-        if (el === null) {
-          const elActionContainer = document.getElementById('actionContainer' + idx);
-          if (elActionContainer === null) {
-            return;
-          }
-          const shortNoteContainer = elActionContainer.createEl('div');
-          shortNoteContainer.id = 'shortNoteContainer' + idx;
-          const shortNote = shortNoteContainer.createEl('textarea');
-          shortNote.className = 'shortNote';
-          shortNote.id = 'shortNote' + idx;
-          shortNote.rows = 2;
-          shortNote.placeholder = 'Waiting for ChatGPT to reply...';
-        }
-        const apiKey = this.settings.chatGPTAPIKey;
-        const promptText = this.settings.chatGPTPrompt;
-        try {
-          let replyByGPT = await fetchChatGPT(apiKey, 0.0,
-            promptText + '\n' + item.content);
-          replyByGPT = replyByGPT.trim();
-          if (replyByGPT !== '') {
-            const shortNote = document.getElementById('shortNote' + idx) as HTMLTextAreaElement;
-            let existingNote = shortNote.value;
-            if (existingNote !== '') {
-              existingNote = existingNote + '\n\n';
-            }
-            shortNote.value = existingNote + replyByGPT;
-          }
-        } catch (e) {
-          console.log(e);
-        };
+         if (!item.content) {
+           return;
+         }
+         const elID = item.link;
+         const el = document.getElementById('shortNoteContainer' + idx);
+         if (el === null) {
+           const elActionContainer = document.getElementById('actionContainer' + idx);
+           if (elActionContainer === null) {
+             return;
+           }
+           const shortNoteContainer = elActionContainer.createEl('div');
+           shortNoteContainer.id = 'shortNoteContainer' + idx;
+           const shortNote = shortNoteContainer.createEl('textarea');
+           shortNote.className = 'shortNote';
+           shortNote.id = 'shortNote' + idx;
+           shortNote.rows = 2;
+           shortNote.placeholder = 'Waiting for ChatGPT to reply...';
+         }
+         const apiKey = this.settings.chatGPTAPIKey;
+         const promptText = this.settings.chatGPTPrompt;
+         try {
+           let replyByGPT = await fetchChatGPT(apiKey, 0.0,
+             promptText + '\n' + item.content);
+           replyByGPT = replyByGPT.trim();
+           if (replyByGPT !== '') {
+             const shortNote = document.getElementById('shortNote' + idx) as HTMLTextAreaElement;
+             let existingNote = shortNote.value;
+             if (existingNote !== '') {
+               existingNote = existingNote + '\n\n';
+             }
+             shortNote.value = existingNote + replyByGPT;
+           }
+         } catch (e) {
+           console.log(e);
+         };
+        return; // Handled
       }
       if (target.className === 'noteThis') {
-        if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
-          await this.app.vault.createFolder(GLB.feeds_reader_dir);
-        }
-
-        const idx = this.getNumFromId(target.id, 'noteThis');
-        const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
-        let dt_str: string = '';
-        if (the_item.pubDate != '') {
-          dt_str = the_item.pubDate;
-        } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
-          dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
-        } else {
-          dt_str = nowdatetime();
-        }
-        dt_str = dt_str.substring(0, 10) + '-';
-        const fname: string = dt_str +
-                              str2filename(
-                              (GLB.currentFeedName === ''? '' :
-                               GLB.currentFeedName.replace(/(\s+)/g, '-') + '-') +
-                              the_item.title.trim()
-                              .replace(/(<([^>]+)>)/g, " ")
-                              .replace(/[:!?@#\*\^\$]+/g, '')) + '.md';
-        const fpath: string = GLB.feeds_reader_dir + '/' + fname;
-        let shortNoteContent = '';
-        const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
-        if (elShortNote !== null) {
-          shortNoteContent = elShortNote.value;
-        }
-        let abstractOpen = '-';
-        let theContent = '';
-        if (GLB.saveContent) {
-          let author_text = the_item.creator ? the_item.creator.trim() : '';
-          if (author_text !== '') {
-            author_text = '\n> ' + htmlToMarkdown(author_text);
-          }
-          let ctt = '';
-          if (the_item.content) {
-            ctt = the_item.content;
-          }
-          theContent = remedyLatex(
-                          htmlToMarkdown(unEscape(
-                            handle_tags(
-                            handle_a_tag(
-                            handle_img_tag(
-                            ctt.replace(/\n/g, ' '))))
-                            .replace(/ +/g, ' ')
-                            .replace(/\s+$/g, '')
-                            .replace(/^\s+/g, '')))) + author_text;
-        }
-        if (! await this.app.vault.adapter.exists(fpath)) {
-          await this.app.vault.create(fpath,
-            shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
-            the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
-            '](' + sanitizeHTMLToDom(the_item.link).textContent + ')\n> ' + theContent);
-          new Notice(fpath + " saved.", 1000);
-        } else {
-          new Notice(fpath + " already exists.", 1000);
-        }
+        const idx = getNumFromId(target.id, 'noteThis');
+         if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
+           await this.app.vault.createFolder(GLB.feeds_reader_dir);
+         }
+         const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
+         let dt_str: string = '';
+         if (the_item.pubDate != '') {
+           dt_str = the_item.pubDate;
+         } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
+           dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
+         } else {
+           dt_str = nowdatetime(); 
+         }
+         dt_str = dt_str.substring(0, 10) + '-';
+         const fname: string = dt_str +
+                               str2filename(
+                               (GLB.currentFeedName === ''? '' :
+                                GLB.currentFeedName.replace(/(\s+)/g, '-') + '-') +
+                               the_item.title.trim()
+                               .replace(/(<([^>]+)>)/g, " ")
+                               .replace(/[:!?@#\*\^\$]+/g, '')) + '.md';
+         const fpath: string = GLB.feeds_reader_dir + '/' + fname;
+         let shortNoteContent = '';
+         const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
+         if (elShortNote !== null) {
+           shortNoteContent = elShortNote.value;
+         }
+         let abstractOpen = '-';
+         let theContent = '';
+         if (GLB.saveContent) {
+           let author_text = the_item.creator ? the_item.creator.trim() : '';
+           if (author_text !== '') {
+             author_text = '\n> ' + htmlToMarkdown(author_text);
+           }
+           let ctt = the_item.content ? the_item.content : ''; // Handle undefined content
+           // Assuming helper functions are globally available or imported in main.ts
+           theContent = remedyLatex(
+                           htmlToMarkdown(unEscape(
+                             handle_tags(
+                             handle_a_tag(
+                             handle_img_tag(
+                             ctt.replace(/\n/g, ' '))))
+                             .replace(/ +/g, ' ')
+                             .replace(/\s+$/g, '')
+                             .replace(/^\s+/g, '')))) + author_text;
+         }
+         if (! await this.app.vault.adapter.exists(fpath)) {
+           await this.app.vault.create(fpath,
+             shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
+             the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
+             '](' + sanitizeHTMLToDom(the_item.link).textContent + ')\n> ' + theContent);
+           new Notice(fpath + " saved.", 1000);
+         } else {
+           new Notice(fpath + " already exists.", 1000);
+         }
+        return; // Handled
       }
       if (target.className === 'saveSnippet') {
-        if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
-          await this.app.vault.createFolder(GLB.feeds_reader_dir);
-        }
-
-        const idx = this.getNumFromId(target.id, 'saveSnippet');
-        const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
-        const fpath: string = GLB.feeds_reader_dir + '/' + GLB.saved_snippets_fname;
-        const link_text = sanitizeHTMLToDom(the_item.link).textContent || '';
-        let shortNoteContent = '';
-        const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
-        if (elShortNote !== null) {
-          shortNoteContent = elShortNote.value;
-        }
-        let abstractOpen = '-';
-        // if (shortNoteContent !== '') {
-        //   abstractOpen = '-';
-        // }
-        let dt_str: string = nowdatetime();
-        if (the_item.pubDate != '') {
-          dt_str = the_item.pubDate;
-        } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
-          dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
-        }
-        if (dt_str !== '') {
-          dt_str = '\n> <small>' + dt_str + '</small>';
-        }
-        let feedNameStr = GLB.currentFeedName;
-        if (feedNameStr !== '') {
-          feedNameStr = '\n> <small>' + feedNameStr + '</small>';
-        }
-        let theContent = '';
-        if (GLB.saveContent) {
-          let author_text = the_item.creator ? the_item.creator.trim() : '';
-          if (author_text !== '') {
-            author_text = '\n> ' + htmlToMarkdown(author_text);
-          }
-          let ctt = '';
-          if (the_item.content) {
-            ctt = the_item.content;
-          }
-          theContent = remedyLatex(
-                          htmlToMarkdown(unEscape(
-                            handle_tags(
-                            handle_a_tag(
-                            handle_img_tag(
-                            ctt.replace(/\n/g, ' '))))
-                            .replace(/ +/g, ' ')
-                            .replace(/\s+$/g, '')
-                            .replace(/^\s+/g, '')))) + author_text;
-        }
-        const snippet_content: string = (
-            shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
-            the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
-            '](' + link_text + ')\n> ' + theContent + dt_str + feedNameStr);
-        if (! await this.app.vault.adapter.exists(fpath)) {
-          await this.app.vault.create(fpath, snippet_content);
-          new Notice(fpath + " saved.", 1000);
-        } else {
-          const prevContent: string = (await this.app.vault.adapter.read(fpath)) || '';
-          if (prevContent.includes(link_text)) {
-            new Notice("Snippet url already exists.", 1000);
-          } else {
-            if (GLB.saveSnippetNewToOld) {
-              await this.app.vault.process(this.app.vault.getAbstractFileByPath(fpath) as TFile,
-                (data) => {return snippet_content + '\n\n<hr>\n\n' + data;});
-            } else {
-              await this.app.vault.adapter.append(fpath,
-                '\n\n<hr>\n\n' + snippet_content);
-            }
-            new Notice("Snippet saved to " + fpath + ".", 1000);
-          }
-        }
+        const idx = getNumFromId(target.id, 'saveSnippet');
+         if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
+           await this.app.vault.createFolder(GLB.feeds_reader_dir);
+         }
+         const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
+         const fpath: string = GLB.feeds_reader_dir + '/' + GLB.saved_snippets_fname;
+         const link_text = sanitizeHTMLToDom(the_item.link).textContent || '';
+         let shortNoteContent = '';
+         const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
+         if (elShortNote !== null) {
+           shortNoteContent = elShortNote.value;
+         }
+         let abstractOpen = '-';
+         let dt_str: string = nowdatetime();
+         if (the_item.pubDate != '') {
+           dt_str = the_item.pubDate;
+         } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
+           dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
+         }
+         if (dt_str !== '') {
+           dt_str = '\n> <small>' + dt_str + '</small>';
+         }
+         let feedNameStr = GLB.currentFeedName;
+         if (feedNameStr !== '') {
+           feedNameStr = '\n> <small>' + feedNameStr + '</small>';
+         }
+         let theContent = '';
+         if (GLB.saveContent) {
+           let author_text = the_item.creator ? the_item.creator.trim() : '';
+           if (author_text !== '') {
+             author_text = '\n> ' + htmlToMarkdown(author_text);
+           }
+           let ctt = the_item.content ? the_item.content : ''; // Handle undefined content
+           theContent = remedyLatex(
+                           htmlToMarkdown(unEscape(
+                             handle_tags(
+                             handle_a_tag(
+                             handle_img_tag(
+                             ctt.replace(/\n/g, ' '))))
+                             .replace(/ +/g, ' ')
+                             .replace(/\s+$/g, '')
+                             .replace(/^\s+/g, '')))) + author_text;
+         }
+         const snippet_content: string = (
+             shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
+             the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
+             '](' + link_text + ')\n> ' + theContent + dt_str + feedNameStr);
+         if (! await this.app.vault.adapter.exists(fpath)) {
+           await this.app.vault.create(fpath, snippet_content);
+           new Notice(fpath + " saved.", 1000);
+         } else {
+           const prevContent: string = (await this.app.vault.adapter.read(fpath)) || '';
+           if (prevContent.includes(link_text)) {
+             new Notice("Snippet url already exists.", 1000);
+           } else {
+             if (GLB.saveSnippetNewToOld) {
+               await this.app.vault.process(this.app.vault.getAbstractFileByPath(fpath) as TFile,
+                 (data) => {return snippet_content + '\n\n<hr>\n\n' + data;});
+             } else {
+               await this.app.vault.adapter.append(fpath,
+                 '\n\n<hr>\n\n' + snippet_content);
+             }
+             new Notice("Snippet saved to " + fpath + ".", 1000);
+           }
+         }
+        return; // Handled
       }
+
+      // --- Handlers updated to use target.closest --- 
+      // Restore the logic that was previously commented out, keeping target.closest
+      if (target.closest('.toggleRead')) { 
+          const toggleReadDiv = target.closest('.toggleRead') as HTMLElement;
+          const idx = getNumFromId(toggleReadDiv.id, 'toggleRead'); 
+          const toggleSpan = toggleReadDiv?.querySelector('span');
+          if (toggleSpan) {
+            GLB.feedsStoreChange = true;
+            GLB.feedsStoreChangeList.add(GLB.currentFeed);
+            if (GLB.feedsStore[GLB.currentFeed].items[idx].read === '') { // Currently unread
+              GLB.feedsStore[GLB.currentFeed].items[idx].read = nowdatetime();
+              setIcon(toggleSpan, 'check'); // Set icon to read
+              toggleReadDiv.title = 'Mark as unread'; // Update title
+              GLB.hideThisItem = true;
+              if (GLB.elUnreadCount) {
+                GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
+              }
+            } else { // Currently read
+              GLB.feedsStore[GLB.currentFeed].items[idx].read = '';
+              setIcon(toggleSpan, 'circle'); // Set icon to unread
+              toggleReadDiv.title = 'Mark as read'; // Update title
+              GLB.hideThisItem = false;
+              if (!GLB.feedsStore[GLB.currentFeed].items[idx].deleted) {
+                if (GLB.elUnreadCount) {
+                  GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
+                }
+              }
+            }
+            const idxOf = GLB.undoList.indexOf(idx);
+            if (idxOf > -1) {
+              GLB.undoList.splice(idxOf, 1);
+            }
+            GLB.undoList.unshift(idx);
+            if ((!GLB.showAll) && GLB.hideThisItem) {
+              const el = document.getElementById(
+                GLB.feedsStore[GLB.currentFeed].items[idx].link);
+              if (el) el.className = 'hidedItem';
+            }
+          }
+          return; // Handled
+      }
+      if (target.closest('.toggleDelete')) { 
+          const toggleDeleteDiv = target.closest('.toggleDelete') as HTMLElement;
+          const idx = getNumFromId(toggleDeleteDiv.id, 'toggleDelete');
+          const toggleSpan = toggleDeleteDiv?.querySelector('span');
+          if (toggleSpan) {
+              GLB.feedsStoreChange = true;
+              GLB.feedsStoreChangeList.add(GLB.currentFeed);
+              if (GLB.feedsStore[GLB.currentFeed].items[idx].deleted === '') { // Currently not deleted
+                  GLB.feedsStore[GLB.currentFeed].items[idx].deleted = nowdatetime();
+                  setIcon(toggleSpan, 'history'); // Set icon to deleted (can be restored)
+                  toggleDeleteDiv.title = 'Undelete'; // Update title
+                  GLB.hideThisItem = true;
+                  if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
+                  if (GLB.elUnreadCount) {
+                      GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
+                  }
+                  }
+              } else { // Currently deleted
+                  GLB.feedsStore[GLB.currentFeed].items[idx].deleted = '';
+                  setIcon(toggleSpan, 'trash-2'); // Set icon to not deleted
+                  toggleDeleteDiv.title = 'Delete'; // Update title
+                  GLB.hideThisItem = false;
+                  if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
+                  if (GLB.elUnreadCount) {
+                      GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
+                  }
+                  }
+              }
+              const idxOf = GLB.undoList.indexOf(idx);
+              if (idxOf > -1) {
+                  GLB.undoList.splice(idxOf, 1);
+              }
+              GLB.undoList.unshift(idx);
+              if ((!GLB.showAll) && GLB.hideThisItem) {
+                  const el = document.getElementById(
+                  GLB.feedsStore[GLB.currentFeed].items[idx].link);
+                  if (el) el.className = 'hidedItem';
+              }
+          }
+          return; // Handled
+      }
+      if (target.closest('.jotNotes')) {
+          const jotDiv = target.closest('.jotNotes') as HTMLElement;
+          if (!jotDiv) return;
+          const idx = getNumFromId(jotDiv.id, 'jotNotes');
+           const el = document.getElementById('shortNoteContainer' + idx);
+           if (el !== null) {
+             return;
+           }
+           const elActionContainer = document.getElementById('actionContainer' + idx);
+           if (elActionContainer === null) {
+             return;
+           }
+           const shortNoteContainer = elActionContainer.createEl('div');
+           const shortNote = shortNoteContainer.createEl('textarea');
+           shortNoteContainer.id = 'shortNoteContainer' + idx;
+           shortNote.className = 'shortNote';
+           shortNote.id = 'shortNote' + idx;
+           shortNote.rows = 2;
+           shortNote.placeholder = 'Enter notes here to be saved in the markdown or the snippets file.';
+          return; // Handled
+      }
+      if (target.closest('.saveSnippet')) {
+          const saveSnippetDiv = target.closest('.saveSnippet') as HTMLElement;
+          if (!saveSnippetDiv) return;
+          const idx = getNumFromId(saveSnippetDiv.id, 'saveSnippet');
+           if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
+             await this.app.vault.createFolder(GLB.feeds_reader_dir);
+           }
+           const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
+           const fpath: string = GLB.feeds_reader_dir + '/' + GLB.saved_snippets_fname;
+           const link_text = sanitizeHTMLToDom(the_item.link).textContent || '';
+           let shortNoteContent = '';
+           const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
+           if (elShortNote !== null) {
+             shortNoteContent = elShortNote.value;
+           }
+           let abstractOpen = '-';
+           let dt_str: string = nowdatetime();
+           if (the_item.pubDate != '') {
+             dt_str = the_item.pubDate;
+           } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
+             dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
+           }
+           if (dt_str !== '') {
+             dt_str = '\n> <small>' + dt_str + '</small>';
+           }
+           let feedNameStr = GLB.currentFeedName;
+           if (feedNameStr !== '') {
+             feedNameStr = '\n> <small>' + feedNameStr + '</small>';
+           }
+           let theContent = '';
+           if (GLB.saveContent) {
+             let author_text = the_item.creator ? the_item.creator.trim() : '';
+             if (author_text !== '') {
+               author_text = '\n> ' + htmlToMarkdown(author_text);
+             }
+             let ctt = the_item.content ? the_item.content : '';
+             theContent = remedyLatex(
+                             htmlToMarkdown(unEscape(
+                               handle_tags(
+                               handle_a_tag(
+                               handle_img_tag(
+                               ctt.replace(/\n/g, ' '))))
+                               .replace(/ +/g, ' ')
+                               .replace(/\s+$/g, '')
+                               .replace(/^\s+/g, '')))) + author_text;
+           }
+           const snippet_content: string = (
+               shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
+               the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
+               '](' + link_text + ')\n> ' + theContent + dt_str + feedNameStr);
+           if (! await this.app.vault.adapter.exists(fpath)) {
+             await this.app.vault.create(fpath, snippet_content);
+             new Notice(fpath + " saved.", 1000);
+           } else {
+             const prevContent: string = (await this.app.vault.adapter.read(fpath)) || '';
+             if (prevContent.includes(link_text)) {
+               new Notice("Snippet url already exists.", 1000);
+             } else {
+               if (GLB.saveSnippetNewToOld) {
+                 await this.app.vault.process(this.app.vault.getAbstractFileByPath(fpath) as TFile,
+                   (data) => {return snippet_content + '\n\n<hr>\n\n' + data;});
+               } else {
+                 await this.app.vault.adapter.append(fpath,
+                   '\n\n<hr>\n\n' + snippet_content);
+               }
+               new Notice("Snippet saved to " + fpath + ".", 1000);
+             }
+           }
+          return; // Handled
+      }
+      if (target.closest('.noteThis')) {
+          const noteThisDiv = target.closest('.noteThis') as HTMLElement;
+          if (!noteThisDiv) return;
+          const idx = getNumFromId(noteThisDiv.id, 'noteThis');
+           if (! await this.app.vault.adapter.exists(GLB.feeds_reader_dir)) {
+             await this.app.vault.createFolder(GLB.feeds_reader_dir);
+           }
+           const the_item = GLB.feedsStore[GLB.currentFeed].items[idx];
+           let dt_str: string = '';
+           if (the_item.pubDate != '') {
+             dt_str = the_item.pubDate;
+           } else if (GLB.feedsStore[GLB.currentFeed].pubDate != '') {
+             dt_str = GLB.feedsStore[GLB.currentFeed].pubDate;
+           } else {
+             dt_str = nowdatetime();
+           }
+           dt_str = dt_str.substring(0, 10) + '-';
+           const fname: string = dt_str +
+                                 str2filename(
+                                 (GLB.currentFeedName === ''? '' :
+                                  GLB.currentFeedName.replace(/(\s+)/g, '-') + '-') +
+                                 the_item.title.trim()
+                                 .replace(/(<([^>]+)>)/g, " ")
+                                 .replace(/[:!?@#\*\^\$]+/g, '')) + '.md';
+           const fpath: string = GLB.feeds_reader_dir + '/' + fname;
+           let shortNoteContent = '';
+           const elShortNote = document.getElementById('shortNote' + idx) as HTMLInputElement;
+           if (elShortNote !== null) {
+             shortNoteContent = elShortNote.value;
+           }
+           let abstractOpen = '-';
+           let theContent = '';
+           if (GLB.saveContent) {
+             let author_text = the_item.creator ? the_item.creator.trim() : '';
+             if (author_text !== '') {
+               author_text = '\n> ' + htmlToMarkdown(author_text);
+             }
+             let ctt = the_item.content ? the_item.content : '';
+             theContent = remedyLatex(
+                             htmlToMarkdown(unEscape(
+                               handle_tags(
+                               handle_a_tag(
+                               handle_img_tag(
+                               ctt.replace(/\n/g, ' '))))
+                               .replace(/ +/g, ' ')
+                               .replace(/\s+$/g, '')
+                               .replace(/^\s+/g, '')))) + author_text;
+           }
+           if (! await this.app.vault.adapter.exists(fpath)) {
+             await this.app.vault.create(fpath,
+               shortNoteContent + '\n> [!abstract]' + abstractOpen + ' [' +
+               the_item.title.trim().replace(/(<([^>]+)>)/gi, " ").replace(/\n/g, " ") +
+               '](' + sanitizeHTMLToDom(the_item.link).textContent + ')\n> ' + theContent);
+             new Notice(fpath + " saved.", 1000);
+           } else {
+             new Notice(fpath + " already exists.", 1000);
+           }
+          return; // Handled
+      }
+      if (target.closest('.renderMath')) {
+          const renderMathDiv = target.closest('.renderMath') as HTMLElement;
+          if (!renderMathDiv) return;
+          const idx = getNumFromId(renderMathDiv.id, 'renderMath');
+           let elContent = document.getElementById('itemContent' + idx);
+           const item = GLB.feedsStore[GLB.currentFeed].items[idx];
+           if (item.content) {
+               const elID = item.link;
+               if (elContent !== null) {
+                 elContent.empty();
+               } else {
+                 const itemEl = document.getElementById(elID);
+                 if (!itemEl) {
+                   new Notice('Failed to find element with ID: ' + elID, 1000);
+                   return;
+                 }
+                 elContent = itemEl.createEl('div');
+                 elContent.id = 'itemContent' + idx;
+               }
+               if(elContent) {
+                 elContent.className = 'itemContent';
+                 MarkdownRenderer.render(this.app,
+                   remedyLatex(htmlToMarkdown(item.content)), elContent, item.link, this);
+               }
+             }
+          return; // Handled
+      }
+      if (target.closest('.askChatGPT')) {
+          const askChatGPTDiv = target.closest('.askChatGPT') as HTMLElement;
+          if (!askChatGPTDiv) return;
+          const idx = getNumFromId(askChatGPTDiv.id, 'askChatGPT');
+           const item = GLB.feedsStore[GLB.currentFeed].items[idx];
+           if (!item.content) {
+             return;
+           }
+           const elID = item.link;
+           const el = document.getElementById('shortNoteContainer' + idx);
+           if (el === null) {
+             const elActionContainer = document.getElementById('actionContainer' + idx);
+             if (elActionContainer === null) {
+               return;
+             }
+             const shortNoteContainer = elActionContainer.createEl('div');
+             shortNoteContainer.id = 'shortNoteContainer' + idx;
+             const shortNote = shortNoteContainer.createEl('textarea');
+             shortNote.className = 'shortNote';
+             shortNote.id = 'shortNote' + idx;
+             shortNote.rows = 2;
+             shortNote.placeholder = 'Waiting for ChatGPT to reply...';
+           }
+           const apiKey = this.settings.chatGPTAPIKey;
+           const promptText = this.settings.chatGPTPrompt;
+           try {
+             let replyByGPT = await fetchChatGPT(apiKey, 0.0,
+               promptText + '\n' + item.content);
+             replyByGPT = replyByGPT.trim();
+             if (replyByGPT !== '') {
+               const shortNote = document.getElementById('shortNote' + idx) as HTMLTextAreaElement;
+               let existingNote = shortNote.value;
+               if (existingNote !== '') {
+                 existingNote = existingNote + '\n\n';
+               }
+               shortNote.value = existingNote + replyByGPT;
+             }
+           } catch (e) {
+             console.log(e);
+           };
+          return; // Handled
+      }
+      if (target.closest('.elEmbedButton')) {
+          const embedDiv = target.closest('.elEmbedButton') as HTMLElement;
+          if (!embedDiv) return;
+          const idx = embedDiv.getAttribute('_idx');
+           const elID = embedDiv.getAttribute('_link');
+           if (document.getElementById('embeddedIframe' + idx) !== null) {
+             return;
+           }
+           let elContent = document.getElementById('itemContent' + idx);
+           if (elContent !== null) {
+             elContent.empty();
+           } else {
+             const itemEl = document.getElementById(elID as string) as HTMLElement;
+             if (!itemEl) {
+               new Notice('Failed to find element with ID: ' + elID, 1000);
+               return;
+             }
+             elContent = itemEl.createEl('div');
+             elContent.className = 'itemContent';
+             elContent.id = 'itemContent' + idx;
+           }
+           const url = embedDiv.getAttribute('url');
+           if (elContent && url) { 
+             const embeddedIframe = elContent.createEl('iframe');
+             embeddedIframe.className = 'embeddedIframe';
+             embeddedIframe.id = 'embeddedIframe' + idx;
+             embeddedIframe.src = url as string;
+           }
+          return; // Handled
+      }
+      if (target.closest('.elFetch')) {
+          const fetchDiv = target.closest('.elFetch') as HTMLElement;
+          if (!fetchDiv) return;
+          const idx = fetchDiv.getAttribute('_idx');
+           const elID = fetchDiv.getAttribute('_link');
+           const url = fetchDiv.getAttribute('url');
+           if (!url) {
+             new Notice('Failed to get URL for fetching.', 1000);
+             return;
+           }
+           if (document.getElementById('fetchContainer' + idx) !== null) {
+             return;
+           }
+           let pageSrc: string | null = null;
+           try {
+             const response = await request({url: url, method: "GET"});
+             if (response === null) {
+               new Notice('Fail to fetch ' + url, 1000);
+               return;
+             }
+             pageSrc = response;
+           } catch (e) {
+             new Notice('Fail to fetch ' + url, 1000);
+             return;
+           }
+           let elContent = document.getElementById('itemContent' + idx);
+           if (elContent !== null) {
+             elContent.empty();
+           } else {
+             const itemEl = document.getElementById(elID as string);
+             if (itemEl === null) return;
+             elContent = itemEl.createEl('div');
+             elContent.className = 'itemContent';
+             elContent.id = 'itemContent' + idx;
+           }
+           if(elContent && pageSrc) { 
+             const fetchContainer = elContent.createEl('div');
+             fetchContainer.className = 'fetchContainer';
+             fetchContainer.id = 'fetchContainer' + idx;
+             fetchContainer.appendChild(sanitizeHTMLToDom(pageSrc));
+           }
+          return; // Handled
+      }
+
+      // Fallback/other handlers (e.g., markPageRead/Deleted)
       if ((target.className === 'markPageRead') ||
           (target.className === 'markPageDeleted')) {
         if (!GLB.feedsStore.hasOwnProperty(GLB.currentFeed)) {
@@ -565,235 +1005,7 @@ export default class FeedsReader extends Plugin {
           show_feed();
         }
       }
-
-      if (target.className === 'toggleRead') {
-        const idx = this.getNumFromId(target.id, 'toggleRead');
-        GLB.feedsStoreChange = true;
-        GLB.feedsStoreChangeList.add(GLB.currentFeed);
-        const el = document.getElementById(target.id);
-        if (el && el.innerText === 'Read') {
-          GLB.feedsStore[GLB.currentFeed].items[idx].read = nowdatetime();
-          el.innerText = 'Unread';
-          GLB.hideThisItem = true;
-          if (GLB.elUnreadCount) {
-            GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
-          }
-        } else {
-          GLB.feedsStore[GLB.currentFeed].items[idx].read = '';
-          if (el) {
-            el.innerText = 'Read';
-          }
-          GLB.hideThisItem = false;
-          if (!GLB.feedsStore[GLB.currentFeed].items[idx].deleted) {
-            if (GLB.elUnreadCount) {
-              GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
-            }
-          }
-        }
-        const idxOf = GLB.undoList.indexOf(idx);
-        if (idxOf > -1) {
-          GLB.undoList.splice(idxOf, 1);
-        }
-        GLB.undoList.unshift(idx);
-        if ((!GLB.showAll) && GLB.hideThisItem) {
-          const el = document.getElementById(
-            GLB.feedsStore[GLB.currentFeed].items[idx].link);
-          if (el) el.className = 'hidedItem';
-        }
-      }
-      if (target.className === 'toggleDelete') {
-        const idx = this.getNumFromId(target.id, 'toggleDelete');
-        GLB.feedsStoreChange = true;
-        GLB.feedsStoreChangeList.add(GLB.currentFeed);
-        const el = document.getElementById(target.id);
-        if (el) {
-          if (el.innerText === 'Delete') {
-            GLB.feedsStore[GLB.currentFeed].items[idx].deleted = nowdatetime();
-            el.innerText = 'Undelete';
-            GLB.hideThisItem = true;
-            if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
-              if (GLB.elUnreadCount) {
-                GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) - 1).toString();
-              }
-            }
-          } else {
-            GLB.feedsStore[GLB.currentFeed].items[idx].deleted = '';
-            el.innerText = 'Delete';
-            GLB.hideThisItem = false;
-            if (!GLB.feedsStore[GLB.currentFeed].items[idx].read) {
-              if (GLB.elUnreadCount) {
-                GLB.elUnreadCount.innerText = (parseInt(GLB.elUnreadCount.innerText) + 1).toString();
-              }
-            }
-          }
-          const idxOf = GLB.undoList.indexOf(idx);
-          if (idxOf > -1) {
-            GLB.undoList.splice(idxOf, 1);
-          }
-          GLB.undoList.unshift(idx);
-          if ((!GLB.showAll) && GLB.hideThisItem) {
-            const el = document.getElementById(
-              GLB.feedsStore[GLB.currentFeed].items[idx].link);
-            if (el) el.className = 'hidedItem';
-          }
-        }
-      }
-
-      if (target.className === 'jotNotes') {
-        const idx = this.getNumFromId(target.id, 'jotNotes');
-        const el = document.getElementById('shortNoteContainer' + idx);
-        if (el !== null) {
-          //el.remove();
-          return;
-        }
-        const elActionContainer = document.getElementById('actionContainer' + idx);
-        if (elActionContainer === null) {
-          return;
-        }
-        const shortNoteContainer = elActionContainer.createEl('div');
-        const shortNote = shortNoteContainer.createEl('textarea');
-        shortNoteContainer.id = 'shortNoteContainer' + idx;
-        shortNote.className = 'shortNote';
-        shortNote.id = 'shortNote' + idx;
-        shortNote.rows = 2;
-        shortNote.placeholder = 'Enter notes here to be saved in the markdown or the snippets file.';
-      }
-
-      if (target.id === 'showAll') {
-        let toggle = document.getElementById('showAll');
-        if (toggle) {
-          if (toggle.innerText == 'Show all') {
-            toggle.innerText = 'Unread only';
-            GLB.showAll = false;
-          } else {
-            toggle.innerText = 'Show all';
-            GLB.showAll = true;
-          }
-        }
-      }
-      if (target.id === 'titleOnly') {
-        let toggle = document.getElementById('titleOnly');
-        if (toggle) {
-          if (toggle.innerText === 'Title only') {
-            toggle.innerText = 'Show content';
-            GLB.titleOnly = false;
-          } else {
-            toggle.innerText = 'Title only';
-            GLB.titleOnly = true;
-          }
-        }
-      }
-      if (target.id === 'toggleOrder') {
-        let toggle = document.getElementById('toggleOrder');
-        if (toggle) {
-          if (toggle.innerText === 'New to old') {
-            toggle.innerText = 'Old to new';
-          } else if (toggle.innerText === 'Old to new') {
-            toggle.innerText = 'Random';
-          } else {
-            toggle.innerText = 'New to old';
-          }
-          GLB.itemOrder = toggle.innerText;
-        }
-      }
-      if ((target.id === 'saveFeedsData') || (target.id === 'save_data_toggling')) {
-        const nSaved = await saveFeedsData();
-        if (nSaved > 0) {
-          new Notice("Data saved: " + nSaved.toString() + 'file(s) updated.', 1000);
-        } else {
-          new Notice("No need to save.", 1000);
-        }
-      }
-      if ((target.id === 'toggleNavi') && (GLB.currentFeed != '')) {
-        const toggle = document.getElementById('toggleNavi');
-        if (toggle) {
-          if (toggle.innerText === '>') {
-            toggle.innerText = '<';
-            const toggleNaviAux = document.getElementById('toggleNaviAux');
-            if (toggleNaviAux) {
-              const elUnreadcountWhileToggling = toggleNaviAux.createEl('span', {text: GLB.elUnreadCount?.innerText});
-              elUnreadcountWhileToggling.className = 'unreadcountWhileToggling';
-              GLB.elUnreadCount = elUnreadcountWhileToggling;
-              const save_data_toggling = toggleNaviAux.createEl('span', {text: 'Save progress'});
-              save_data_toggling.id = 'save_data_toggling';
-              save_data_toggling.className = 'save_data_toggling';
-            }
-            const naviBar = document.getElementById('naviBar');
-            if (naviBar) naviBar.className = 'navigation naviBarHidden';
-            const contentBox = document.getElementById('contentBox');
-            if (contentBox) contentBox.className = 'content contentBoxFullpage';
-            const toggleNaviContainer = document.getElementById('toggleNaviContainer');
-            if (toggleNaviContainer) toggleNaviContainer.className = 'toggleNaviContainer';
-          } else {
-            toggle.innerText = '>';
-            const s = GLB.elUnreadCount?.innerText;
-            GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed) || undefined;
-            if (GLB.elUnreadCount && s) GLB.elUnreadCount.innerText = s;
-            const toggleNaviAux = document.getElementById('toggleNaviAux');
-            if (toggleNaviAux) toggleNaviAux.empty();
-            const naviBar = document.getElementById('naviBar');
-            if (naviBar) naviBar.className = 'navigation naviBarShown';
-            const contentBox = document.getElementById('contentBox');
-            if (contentBox) contentBox.className = 'content contentBoxRightpage';
-            const toggleNaviContainer = document.getElementById('toggleNaviContainer');
-            if (toggleNaviContainer) toggleNaviContainer.className = 'toggleNaviContainer';
-          }
-        }
-      }
-      if (target.id === 'search') {
-        const searchTermsEl = document.getElementById('searchTerms') as HTMLInputElement;
-        const wordWiseEl = document.getElementById('checkBoxWordwise') as HTMLInputElement;
-        if (searchTermsEl && wordWiseEl) {
-          const wordWise = wordWiseEl.checked;
-          const searchTerms = ([...new Set((document.getElementById('searchTerms') as HTMLInputElement).value.toLowerCase().split(/[ ,;\t\n]+/))]
-                            .filter(i => i)
-                            .sort((a: string, b: string) => b.length - a.length)) as string[];
-          if (searchTerms.length === 0) {
-            return;
-          }
-          const fd = GLB.feedsStore[GLB.currentFeed].items;
-          const sep = /\s+/;
-          GLB.displayIndices = [];
-          for (let i=0; i<fd.length; i++) {
-            let item = fd[i];
-            let sItems;
-            let sCreator='', sContent='';
-            if (item.creator) {
-              sCreator = item.creator;
-            }
-            if (item.content) {
-              sContent = item.content;
-            }
-            if (wordWise) {
-              sItems = (item.title.toLowerCase().split(sep)
-                  .concat(sCreator.toLowerCase().split(sep))
-                  .concat(sContent.toLowerCase().split(sep)));
-            } else {
-              sItems = [item.title.toLowerCase(), sCreator.toLowerCase(),
-                        sContent.toLowerCase()].join(' ');
-            }
-            let found = true;
-            for (let j=0; j<searchTerms.length; j++) {
-              if (!sItems.includes(searchTerms[j])) {
-                found = false;
-                break;
-              }
-            }
-            if (found) {
-              GLB.displayIndices.push(i);
-            }
-          }
-          show_feed();
-          this.close();
-        }
-      }
-      if (target.id === 'addFeed') {
-        new AddFeedModal(this.app).open();
-      }
-      if (target.id === 'manageFeeds') {
-        new ManageFeedsModal(this.app).open();
-      }
-		});
+    });
 
 		// this.registerInterval(window.setInterval(async () => await saveFeedsData(), 5 * 60 * 1000));
 	}
@@ -864,11 +1076,6 @@ export default class FeedsReader extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-
-  getNumFromId(idstr: string, pref: string) {
-    const n = pref.length;
-    return parseInt(idstr.substring(n));
-  }
 
   close() {
     // モーダルを閉じる処理
@@ -1840,12 +2047,29 @@ async function show_feed() {
 
    const elPageAction = feed_content.createEl('div');
    elPageAction.className = 'pageActions';
-   const markPageRead = elPageAction.createEl('span', {text: 'Mark all as read'});
-   markPageRead.className = 'markPageRead';
-   const markPageDeleted = elPageAction.createEl('span', {text: 'Mark all as deleted'});
-   markPageDeleted.className = 'markPageDeleted';
-   const removePageContent = elPageAction.createEl('span', {text: 'Remove all content'});
-   removePageContent.className = 'removePageContent';
+   // const markPageRead = elPageAction.createEl('span', {text: 'Mark all as read'});
+   // markPageRead.className = 'markPageRead';
+   const markPageReadDiv = elPageAction.createEl('div');
+   const markPageReadSpan = markPageReadDiv.createEl('span');
+   setIcon(markPageReadSpan, 'check-check');
+   markPageReadDiv.title = 'Mark all as read';
+   markPageReadDiv.className = 'markPageRead pageActionButton'; // Keep class, add general class
+
+   // const markPageDeleted = elPageAction.createEl('span', {text: 'Mark all as deleted'});
+   // markPageDeleted.className = 'markPageDeleted';
+   const markPageDeletedDiv = elPageAction.createEl('div');
+   const markPageDeletedSpan = markPageDeletedDiv.createEl('span');
+   setIcon(markPageDeletedSpan, 'trash');
+   markPageDeletedDiv.title = 'Mark all as deleted';
+   markPageDeletedDiv.className = 'markPageDeleted pageActionButton'; // Keep class, add general class
+
+   // const removePageContent = elPageAction.createEl('span', {text: 'Remove all content'});
+   // removePageContent.className = 'removePageContent';
+   const removePageContentDiv = elPageAction.createEl('div');
+   const removePageContentSpan = removePageContentDiv.createEl('span');
+   setIcon(removePageContentSpan, 'eraser');
+   removePageContentDiv.title = 'Remove all content';
+   removePageContentDiv.className = 'removePageContent pageActionButton'; // Keep class, add general class
 
    let nDisplayed = 0;
    for (let i=GLB.idxItemStart;
@@ -1889,78 +2113,116 @@ async function show_feed() {
      itemActionOneRow.className = 'itemActions';
 
      if (GLB.settings.showJot) {
-       const jot = itemActionOneRow.createEl('div', {text: 'Jot'});
-       jot.className = 'jotNotes';
-       jot.id = 'jotNotes' + idx;
+       const jotDiv = itemActionOneRow.createEl('div');
+       const jotSpan = jotDiv.createEl('span');
+       setIcon(jotSpan, 'sticky-note');
+       jotDiv.title = 'Jot';
+       jotDiv.className = 'jotNotes'; // Add class to the div
+       jotDiv.id = 'jotNotes' + idx; // Keep id on the div
      }
 
      if (GLB.settings.showSnippet) {
-       const saveSnippet = itemActionOneRow.createEl('div', {text: "Snippet"});
-       saveSnippet.className = 'saveSnippet';
-       saveSnippet.id = 'saveSnippet' + idx;
+       const saveSnippetDiv = itemActionOneRow.createEl('div');
+       const saveSnippetSpan = saveSnippetDiv.createEl('span');
+       setIcon(saveSnippetSpan, 'bookmark');
+       saveSnippetDiv.title = 'Snippet';
+       saveSnippetDiv.className = 'saveSnippet';
+       saveSnippetDiv.id = 'saveSnippet' + idx;
      }
 
      if (GLB.settings.showRead) {
-       let t_read = "Read";
+       let t_read_icon = "eye-off"; // Changed from "circle"
+       let t_read_title = "Mark as read";
        if (item.read && (item.read !== '')) {
-         t_read = 'Unread';
+         t_read_icon = 'eye'; // Changed from "check"
+         t_read_title = 'Mark as unread';
        }
-       const toggleRead = itemActionOneRow.createEl('div', {text: t_read});
-       toggleRead.className = 'toggleRead';
-       toggleRead.id = 'toggleRead' + idx;
+       const toggleReadDiv = itemActionOneRow.createEl('div');
+       const toggleReadSpan = toggleReadDiv.createEl('span');
+       setIcon(toggleReadSpan, t_read_icon);
+       toggleReadDiv.title = t_read_title;
+       toggleReadDiv.className = 'toggleRead';
+       toggleReadDiv.id = 'toggleRead' + idx;
      }
 
      if (GLB.settings.showSave) {
-       const noteThis = itemActionOneRow.createEl('div', {text: "Save"});
-       noteThis.className = 'noteThis';
-       noteThis.id = 'noteThis' + idx;
+       const noteThisDiv = itemActionOneRow.createEl('div');
+       const noteThisSpan = noteThisDiv.createEl('span');
+       setIcon(noteThisSpan, 'file-output');
+       noteThisDiv.title = 'Save';
+       noteThisDiv.className = 'noteThis';
+       noteThisDiv.id = 'noteThis' + idx;
      }
 
      if (GLB.settings.showMath) {
-       const renderMath = itemActionOneRow.createEl('div', {text: "Math"});
-       renderMath.className = 'renderMath';
-       renderMath.id = 'renderMath' + idx;
+       const renderMathDiv = itemActionOneRow.createEl('div');
+       const renderMathSpan = renderMathDiv.createEl('span');
+       setIcon(renderMathSpan, 'calculator');
+       renderMathDiv.title = 'Render Math';
+       renderMathDiv.className = 'renderMath';
+       renderMathDiv.id = 'renderMath' + idx;
      }
 
      if (GLB.settings.showGPT) {
-       const askChatGPT = itemActionOneRow.createEl('div', {text: "GPT"});
-       askChatGPT.className = 'askChatGPT';
-       askChatGPT.id = 'askChatGPT' + idx;
+       const askChatGPTDiv = itemActionOneRow.createEl('div');
+       const askChatGPTSpan = askChatGPTDiv.createEl('span');
+       setIcon(askChatGPTSpan, 'brain');
+       askChatGPTDiv.title = 'Ask GPT';
+       askChatGPTDiv.className = 'askChatGPT';
+       askChatGPTDiv.id = 'askChatGPT' + idx;
      }
 
      if (GLB.settings.showEmbed) {
-       const embed = itemActionOneRow.createEl('div', {text: "Embed"});
-       embed.setAttribute('url', item.link);
-       embed.setAttribute('_idx', idx.toString());
-       embed.setAttribute('_link', item.link);
-       embed.className = 'elEmbedButton';
+       const embedDiv = itemActionOneRow.createEl('div');
+       const embedSpan = embedDiv.createEl('span');
+       setIcon(embedSpan, 'code-2');
+       embedDiv.title = 'Embed';
+       embedDiv.setAttribute('url', item.link);
+       embedDiv.setAttribute('_idx', idx.toString());
+       embedDiv.setAttribute('_link', item.link);
+       embedDiv.className = 'elEmbedButton';
      }
 
      if (GLB.settings.showFetch) {
-       const fetch = itemActionOneRow.createEl('div', {text: "Fetch"});
-       fetch.setAttribute('url', item.link);
-       fetch.setAttribute('_idx', idx.toString());
-       fetch.setAttribute('_link', item.link);
-       fetch.className = 'elFetch';
+       const fetchDiv = itemActionOneRow.createEl('div');
+       const fetchSpan = fetchDiv.createEl('span');
+       setIcon(fetchSpan, 'download');
+       fetchDiv.title = 'Fetch';
+       fetchDiv.setAttribute('url', item.link);
+       fetchDiv.setAttribute('_idx', idx.toString());
+       fetchDiv.setAttribute('_link', item.link);
+       fetchDiv.className = 'elFetch';
      }
 
      if (GLB.settings.showLink) {
-       const elLink = itemActionOneRow.createEl('div');
-       elLink.setAttribute('url', item.link);
-       elLink.setAttribute('_idx', idx.toString());
-       elLink.setAttribute('_link', item.link);
-       elLink.className = 'elLink';
-       elLink.createEl('a', {text: "Link", href: item.link});
+       // Create an anchor tag directly for the link button
+       const elLink = itemActionOneRow.createEl('a', {
+         href: item.link
+         // Remove target and rel from here
+       });
+       // Set target and rel using setAttribute
+       elLink.setAttribute('target', '_blank'); 
+       elLink.setAttribute('rel', 'noopener noreferrer');
+       elLink.className = 'elLink'; // Apply class to the anchor
+       elLink.title = 'Open link in browser'; // Set tooltip
+       // Add the icon inside the anchor
+       const linkSpan = elLink.createEl('span'); 
+       setIcon(linkSpan, 'external-link');
      }
 
      if (GLB.settings.showDelete) {
-       let t_delete = "Delete";
+       let t_delete_icon = "trash-2"; // Icon for not deleted
+       let t_delete_title = "Delete";
        if (item.deleted && (item.deleted !== '')) {
-         t_delete = 'Undelete';
+         t_delete_icon = 'history'; // Icon for deleted (can be restored)
+         t_delete_title = 'Undelete';
        }
-       const toggleDelete = itemActionOneRow.createEl('div', {text: t_delete});
-       toggleDelete.className = 'toggleDelete';
-       toggleDelete.id = 'toggleDelete' + idx;
+       const toggleDeleteDiv = itemActionOneRow.createEl('div');
+       const toggleDeleteSpan = toggleDeleteDiv.createEl('span');
+       setIcon(toggleDeleteSpan, t_delete_icon);
+       toggleDeleteDiv.title = t_delete_title;
+       toggleDeleteDiv.className = 'toggleDelete';
+       toggleDeleteDiv.id = 'toggleDelete' + idx;
      }
 
      if ((!GLB.titleOnly) && item.content) {
@@ -2216,7 +2478,7 @@ async function removeFileFragments_gzipped(folder: string, fname_base: string, n
   }
 }
 
-async function fetchChatGPT(apiKey: string, temperature: number, text: string) {
+export async function fetchChatGPT(apiKey: string, temperature: number, text: string) {
   const res = await
     fetch('https://api.openai.com/v1/chat/completions',
           {method: 'POST',

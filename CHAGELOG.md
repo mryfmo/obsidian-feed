@@ -1,6 +1,25 @@
 # Changelog
 
-## [0.0.1] - YYYY-MM-DD
+## [0.0.2] - 2025-04-30
+
+### Changed
+
+*   **UI Overhaul (Icons):** Replaced most text-based buttons in the navigation bar ("Manage" section) and item action lists with icons provided by the Obsidian API (`setIcon`). Tooltips (`title` attribute) were added for clarity. [16, 1]
+*   **Styling Update:** Adjusted `styles.css` to accommodate the new icon-based buttons, consolidating styling rules and using CSS variables for colors and hover effects. [1]
+*   **Event Handling Refactoring:**
+    *   Moved most item-specific event handling logic (like toggle read/delete, jot, save snippet, embed, fetch, etc.) from the main `plugin.ts` into the `FRView` class (`view.ts`), attaching the listener specifically to the content area. [15, 16]
+    *   Updated event handlers to use `target.closest()` for more reliable detection of clicks on icon buttons. [15, 16]
+    *   The main `plugin.ts` event listener now primarily handles the top-level navigation/manage buttons. [15]
+*   **Code Structure:** Moved several helper functions (`getNumFromId`, `nowdatetime`, `str2filename`, `unEscape`, `handle_img_tag`, `handle_a_tag`, `handle_tags`, `remedyLatex`) from `main.ts` to `view.ts`. [15, 16]
+*   **Dependencies & Metadata:** Updated version number in `manifest.json`, `package.json`, and `versions.json` to `0.0.2`. [12, 11, 10]
+*   **Feed Parsing:** Re-added the `description` field parsing within the `buildItem` function in `src/getFeed.ts`. [14]
+*   **Ribbon Icon:** Changed the plugin's ribbon icon from the custom circle to the standard `rss` icon. [15]
+
+### Fixed
+
+*   Improved reliability of button clicks by using `target.closest()` in event listeners, especially for the new icon buttons. [15, 16]
+
+## [0.0.1] - 2024-04-30
 
 This version represents a fork or renaming of the original `obsidian-feed-master` plugin (v1.2.0) by `fjdu`. The project ownership and identity have changed.
 

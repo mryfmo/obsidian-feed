@@ -154,7 +154,7 @@ function getContent(element: Element | Document, names: string[]): string {
 function buildItem(element: Element): RssFeedItem {
     return {
         title: getContent(element, ["title", "rss:title"]),
-        // description: getContent(element, ["content", "content:encoded", "itunes:summary", "description", "summary", "media:description"]),
+        description: getContent(element, ["content", "content:encoded", "itunes:summary", "description", "summary", "media:description"]),
         content: getContent(element, ["itunes:summary", "description", "summary", "media:description", "ns0:encoded", "abstract", "content", "content:encoded", "rss:description"]),
         category: getContent(element, ["category"]),
         link: getContent(element, ["link", "link#href", "rss:link"]),
@@ -193,11 +193,6 @@ async function requestFeed(feedUrl: string) : Promise<string> {
                          });
 }
 
-export function nowdatetime(): string {
-  const a = new Date();
-  return a.toISOString();
-}
-
 export async function getFeedItems(feedUrl: string): Promise<RssFeedContent | undefined> {
     let data;
     try {
@@ -212,14 +207,12 @@ export async function getFeedItems(feedUrl: string): Promise<RssFeedContent | un
     const items: RssFeedItem[] = [];
     const rawItems = getAllItems(data);
 
-    const now_str = nowdatetime();
-
     rawItems.forEach((rawItem) => {
         const item = buildItem(rawItem);
         if (item.title !== undefined && item.title.length !== 0) {
             item.read = '';
             item.deleted = '';
-            item.downloaded = now_str;
+            item.downloaded = '';
 
             items.push(item);
         }

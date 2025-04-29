@@ -84,20 +84,37 @@ td.showFeed {
 }
 
 #toggleNavi, .save_data_toggling, .unreadcountWhileToggling {
-  border: 1px solid;
+  border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
-  padding: 1px 0.2em;
   margin-right: 0.2em;
-  opacity: 0.6;
-  background-color: #777777;
+  opacity: 0.8;
+  background-color: var(--background-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  cursor: pointer;
 }
 
-#toggleNavi {
-  padding-right: 1em;
+#toggleNavi > svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-muted);
 }
 
-.toggleNavi:hover, .save_data_toggling:hover {
+#toggleNavi:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+#toggleNavi:hover > svg {
+    stroke: var(--interactive-accent);
+}
+
+.save_data_toggling:hover {
   color: #f15500;
+  background-color: var(--background-modifier-hover);
 }
 
 .manage {
@@ -108,7 +125,7 @@ td.showFeed {
 }
 
 .manage :hover {
-  font-weight: bold;
+  font-weight: normal;
 }
 
 .feedTableDiv :is(table,tr,td) {
@@ -131,14 +148,11 @@ table.manageFeedsForm, table.manageFeedsForm :is(tbody, tr, th, td) {
   cursor: pointer;
 }
 
-.pageActions span {
-  margin-right: 1em;
-}
-
-.itemActions div {
-  display: inline;
+.itemActions > div,
+.itemActions > a.elLink {
   margin-right: 0.5mm;
   width: auto !important;
+  vertical-align: middle;
 }
 
 td.itemActions {
@@ -211,15 +225,65 @@ table.actionTable {
   font-size: xx-small;
 }
 
-.markPageRead, .markPageDeleted, .removePageContent, .toggleRead, .elEmbedButton, .elFetch, .elLink, .noteThis, .renderMath, .askChatGPT, .saveSnippet, .toggleDelete, .jotNotes {
-  font-size: x-small;
-  border: 1px solid;
+.markPageRead, .markPageDeleted, .removePageContent, .toggleRead, .elEmbedButton, .elFetch, .elLink, .noteThis, .renderMath, .askChatGPT, .saveSnippet, .toggleDelete, .jotNotes,
+.pageActionButton {
+  border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
-  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  line-height: 0;
+  text-decoration: none;
+  color: inherit;
+  margin-right: 0;
 }
 
-.markPageRead:hover, .markPageDeleted:hover, .removePageContent:hover, .toggleRead:hover, .elFetch:hover, .elLink:hover, .elEmbedButton:hover, .noteThis:hover, .renderMath:hover, .askChatGPT:hover, .saveSnippet:hover, .toggleDelete:hover, .jotNotes:hover {
-  color: #f15500;
+.toggleRead > span,
+.elEmbedButton > span,
+.elFetch > span,
+.noteThis > span,
+.renderMath > span,
+.askChatGPT > span,
+.saveSnippet > span,
+.toggleDelete > span,
+.jotNotes > span,
+.elLink > span,
+.pageActionButton > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.toggleRead:hover, .elEmbedButton:hover, .elFetch:hover, .noteThis:hover, .renderMath:hover, .askChatGPT:hover, .saveSnippet:hover, .toggleDelete:hover, .jotNotes:hover,
+.elLink:hover,
+.pageActionButton:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.toggleRead:hover > span,
+.elEmbedButton:hover > span,
+.elFetch:hover > span,
+.noteThis:hover > span,
+.renderMath:hover > span,
+.askChatGPT:hover > span,
+.saveSnippet:hover > span,
+.toggleDelete:hover > span,
+.jotNotes:hover > span,
+.elLink:hover > span,
+.pageActionButton:hover > span {
+  stroke: var(--interactive-accent);
+}
+
+.pageActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
 }
 
 .shortNote {
@@ -317,3 +381,108 @@ input.addFeedInput, input.searchTerms {
 .thanks a {
   text-decoration: none;
 }
+
+/* Navigation Bar Icon Styling */
+.manage > div {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  margin: 2px;
+  cursor: pointer;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  vertical-align: middle;
+}
+
+.manage > div > span svg {
+  stroke: var(--text-muted);
+  width: 18px;
+  height: 18px;
+}
+
+.manage > div:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.manage > div:hover > span svg {
+  stroke: var(--interactive-accent);
+}
+
+/* Adjust toggleOrder span vertical alignment if needed */
+#toggleOrder {
+    vertical-align: middle;
+    display: inline-block;
+    padding: 5px;
+    margin: 2px;
+    height: 28px;
+    line-height: 18px;
+}
+
+/* Remove default hover effect from the parent manage div */
+.manage :hover {
+  font-weight: normal;
+}
+
+/* Consolidate and set explicit default icon color and size */
+.manage > div > span svg,
+#toggleNavi > svg,
+.toggleRead > span,
+.elEmbedButton > span,
+.elFetch > span,
+.noteThis > span,
+.renderMath > span,
+.askChatGPT > span,
+.saveSnippet > span,
+.toggleDelete > span,
+.jotNotes > span,
+.elLink > span,
+.pageActionButton > span {
+  stroke: var(--text-muted); /* Explicit default: Muted text color */
+  width: 18px;  /* Consistent size */
+  height: 18px; /* Consistent size */
+}
+
+/* Consolidate and set explicit hover icon color */
+.manage > div:hover > span svg,
+#toggleNavi:hover > svg,
+.toggleRead:hover > span,
+.elEmbedButton:hover > span,
+.elFetch:hover > span,
+.noteThis:hover > span,
+.renderMath:hover > span,
+.askChatGPT:hover > span,
+.saveSnippet:hover > span,
+.toggleDelete:hover > span,
+.jotNotes:hover > span,
+.elLink:hover > span,
+.pageActionButton:hover > span {
+  stroke: var(--interactive-accent); /* Explicit hover: Accent color */
+}
+
+/* Keep background hover effect using standard variable */
+.manage > div:hover,
+#toggleNavi:hover,
+.toggleRead:hover, .elEmbedButton:hover, .elFetch:hover, .noteThis:hover, .renderMath:hover, .askChatGPT:hover, .saveSnippet:hover, .toggleDelete:hover, .jotNotes:hover,
+.elLink:hover,
+.pageActionButton:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* Remove old/individual icon color rules */
+/* Example: Remove or comment out rules like these if they exist separately */
+/* 
+#toggleNavi > svg {
+    stroke: var(--icon-color);
+}
+#toggleNavi:hover > svg {
+    stroke: var(--icon-color-hover);
+}
+.toggleRead > span > svg, ... {
+    stroke: var(--icon-color);
+}
+.toggleRead:hover > span > svg, ... {
+    stroke: var(--icon-color-hover);
+}
+*/

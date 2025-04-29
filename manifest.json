@@ -1,7 +1,7 @@
 {
 	"id": "contents-feeds-reader",
 	"name": "Contents Feeds Reader",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"minAppVersion": "0.15.0",
 	"description": "Read RSS/Atom, YouTube, Podcasts, and other contents within Obsidian.",
 	"author": "mryfmo",
