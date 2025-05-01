@@ -1,4 +1,3 @@
-// Add these type declarations at the top of the file as a workaround
 type CompressionFormat = "gzip" | "deflate" | "deflate-raw";
 interface CompressionStream {
     readonly readable: ReadableStream<Uint8Array>;
@@ -23,8 +22,6 @@ import { App, MarkdownRenderer, htmlToMarkdown, Modal, Notice, addIcon, Plugin, 
 import { FRView, VIEW_TYPE_FEEDS_READER, createFeedBar, waitForElm, getNumFromId, nowdatetime } from "./view";
 import { getFeedItems, RssFeedContent, itemKeys } from "./getFeed";
 import { GLB } from "./globals";
-
-// Remember to rename these classes and interfaces!
 
 interface FeedsReaderSettings {
 	feeds_reader_dir: string;
@@ -82,7 +79,6 @@ export default class FeedsReader extends Plugin {
     );
 
 		// This creates an icon in the left ribbon.
-    //addIcon("circle", `<rect x="120" width="100" height="100" rx="15" fill="currentColor" />`);
     addIcon("circle", `<circle cx="50" cy="50" r="50" fill="currentColor" /> <circle cx="50" cy="50" r="30" fill="cyan" /> <circle cx="50" cy="50" r="10" fill="green" />`);
 		const ribbonIconEl = this.addRibbonIcon('rss', 'Feeds reader', async (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
@@ -111,7 +107,7 @@ export default class FeedsReader extends Plugin {
               }
             });
           } else if (buttonId === 'search') {
-            new SearchModal(this.app).open(); // Assuming SearchModal needs app instance
+            new SearchModal(this.app).open();
           } else if (buttonId === 'showAll') {
             let toggle = document.getElementById('showAll') as HTMLElement;
             const spanInside = toggle?.querySelector('span'); // Get the span inside the div
@@ -189,7 +185,7 @@ export default class FeedsReader extends Plugin {
           } else if (buttonId === 'manageFeeds') {
             new ManageFeedsModal(this.app).open();
           }
-          return; // Prevent further checks if a manage button was clicked
+          return;
       }
 
       // Handle toggleNavi click
@@ -282,29 +278,27 @@ export default class FeedsReader extends Plugin {
         show_feed();
       }
       if (target.className === 'showItemContent') {
-        const target = evt.target as HTMLElement;
-        if (!target) return;
-        const idx = parseInt(target.getAttribute('_idx') || '0');
-        if (!idx) return;
+        const idx = target.getAttribute('_idx');
+		if (!idx) return;
         if (target.getAttribute('showContent') === '0') {
           const elID = target.getAttribute('_link');
-          if (!elID) return;
+		  if (!elID) return;
           let elContent = document.getElementById('itemContent' + idx);
           if (elContent !== null) {
             elContent.empty();
           } else {
-            const parentEl = document.getElementById(elID as string);
-            if (!parentEl) return;
-            elContent = parentEl.createEl('div');
+			const itemEl = document.getElementById(elID);
+			if (!itemEl) return;
+            elContent = itemEl.createEl('div');
             elContent.className = 'itemContent';
             elContent.id = 'itemContent' + idx;
           }
-          const item = GLB.feedsStore[GLB.currentFeed].items[idx];
+          const item = GLB.feedsStore[GLB.currentFeed].items[Number(idx)];
           const itemLink = sanitizeHTMLToDom(item.link).textContent;
 
           if (item.content) {
             try {
-              elContent.appendChild(document.createTextNode(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
+              elContent.appendChild(sanitizeHTMLToDom(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
             } catch (e) {
               elContent.appendChild(document.createTextNode(item.content.replace(/<img src="\/\//g,"<img src=\"https://")));
             }
@@ -324,14 +318,68 @@ export default class FeedsReader extends Plugin {
       }
       if (target.className === 'elEmbedButton' && !target.closest('.elEmbedButton')) { // Handle direct click if not handled by closest
         const idx = target.getAttribute('_idx');
-        const elID = target.getAttribute('_link');
-         // ... (rest of elEmbedButton logic) ...
-         return; // Handled
+        const elID = target.getAttribute('_link'); // Can be null
+        if (!elID) return; // Add null check for elID
+        if (document.getElementById('embeddedIframe' + idx) !== null) {
+			return;
+		  }
+		  let elContent = document.getElementById('itemContent' + idx);
+		  if (elContent !== null) {
+			elContent.empty();
+		  } else {
+			const itemEl = document.getElementById(elID); // Can be null
+			if (!itemEl) return; // Add null check for itemEl
+			elContent = itemEl.createEl('div');
+			elContent.className = 'itemContent';
+			elContent.id = 'itemContent' + idx;
+		  }
+		  const url = target.getAttribute('url'); // Can be null
+		  if (!url) return; // Add null check for url
+		  const embeddedIframe = elContent.createEl('iframe');
+		  embeddedIframe.className = 'embeddedIframe';
+		  embeddedIframe.id = 'embeddedIframe' + idx;
+		  embeddedIframe.src = url;
+		  // const embeddedIframe = elContent.createEl('object');
+		  // embeddedIframe.className = 'embeddedIframe';
+		  // embeddedIframe.id = 'embeddedIframe' + idx;
+		  // embeddedIframe.data = url;
       }
       if (target.className === 'elFetch' && !target.closest('.elFetch')) { // Handle direct click if not handled by closest
         const idx = target.getAttribute('_idx');
-        const elID = target.getAttribute('_link');
-        // ... (rest of elFetch logic) ...
+        const elID = target.getAttribute('_link'); // Can be null
+        const url = target.getAttribute('url'); // Can be null
+        if (!elID || !url) return; // Add null checks
+        if (document.getElementById('fetchContainer' + idx) !== null) {
+          return;
+        }
+        let pageSrc: string | null = null; // Initialize as null
+        try {
+          // request expects string, url is already checked
+          const response = await request({url: url, method: "GET"});
+          pageSrc = response; // Assign potentially null response
+          if (pageSrc === null) { // Check if response itself is null
+              new Notice('Fail to fetch (null response) ' + url, 1000);
+              return;
+          }
+        } catch (e) {
+          new Notice('Fail to fetch ' + url, 1000);
+          return;
+        }
+        let elContent = document.getElementById('itemContent' + idx);
+        if (elContent !== null) {
+          elContent.empty();
+        } else {
+          const itemEl = document.getElementById(elID);
+          if (!itemEl) return; // Add null check for itemEl
+          elContent = itemEl.createEl('div');
+          elContent.className = 'itemContent';
+          elContent.id = 'itemContent' + idx;
+        }
+        // pageSrc is checked for null above
+        const fetchContainer = elContent.createEl('div');
+        fetchContainer.className = 'fetchContainer';
+        fetchContainer.id = 'fetchContainer' + idx;
+        fetchContainer.appendChild(sanitizeHTMLToDom(pageSrc));
         return; // Handled
       }
 
@@ -1006,8 +1054,6 @@ export default class FeedsReader extends Plugin {
         }
       }
     });
-
-		// this.registerInterval(window.setInterval(async () => await saveFeedsData(), 5 * 60 * 1000));
 	}
 
 	async onunload() {
@@ -1078,7 +1124,6 @@ export default class FeedsReader extends Plugin {
 	}
 
   close() {
-    // モーダルを閉じる処理
     this.app.workspace.activeLeaf?.detach();
   }
 }
@@ -2047,24 +2092,18 @@ async function show_feed() {
 
    const elPageAction = feed_content.createEl('div');
    elPageAction.className = 'pageActions';
-   // const markPageRead = elPageAction.createEl('span', {text: 'Mark all as read'});
-   // markPageRead.className = 'markPageRead';
    const markPageReadDiv = elPageAction.createEl('div');
    const markPageReadSpan = markPageReadDiv.createEl('span');
    setIcon(markPageReadSpan, 'check-check');
    markPageReadDiv.title = 'Mark all as read';
    markPageReadDiv.className = 'markPageRead pageActionButton'; // Keep class, add general class
 
-   // const markPageDeleted = elPageAction.createEl('span', {text: 'Mark all as deleted'});
-   // markPageDeleted.className = 'markPageDeleted';
    const markPageDeletedDiv = elPageAction.createEl('div');
    const markPageDeletedSpan = markPageDeletedDiv.createEl('span');
    setIcon(markPageDeletedSpan, 'trash');
    markPageDeletedDiv.title = 'Mark all as deleted';
    markPageDeletedDiv.className = 'markPageDeleted pageActionButton'; // Keep class, add general class
 
-   // const removePageContent = elPageAction.createEl('span', {text: 'Remove all content'});
-   // removePageContent.className = 'removePageContent';
    const removePageContentDiv = elPageAction.createEl('div');
    const removePageContentSpan = removePageContentDiv.createEl('span');
    setIcon(removePageContentSpan, 'eraser');
@@ -2117,8 +2156,8 @@ async function show_feed() {
        const jotSpan = jotDiv.createEl('span');
        setIcon(jotSpan, 'sticky-note');
        jotDiv.title = 'Jot';
-       jotDiv.className = 'jotNotes'; // Add class to the div
-       jotDiv.id = 'jotNotes' + idx; // Keep id on the div
+       jotDiv.className = 'jotNotes'; 
+       jotDiv.id = 'jotNotes' + idx;
      }
 
      if (GLB.settings.showSnippet) {
@@ -2131,10 +2170,10 @@ async function show_feed() {
      }
 
      if (GLB.settings.showRead) {
-       let t_read_icon = "eye-off"; // Changed from "circle"
+       let t_read_icon = "eye-off";
        let t_read_title = "Mark as read";
        if (item.read && (item.read !== '')) {
-         t_read_icon = 'eye'; // Changed from "check"
+         t_read_icon = 'eye';
          t_read_title = 'Mark as unread';
        }
        const toggleReadDiv = itemActionOneRow.createEl('div');
@@ -2203,18 +2242,17 @@ async function show_feed() {
        // Set target and rel using setAttribute
        elLink.setAttribute('target', '_blank'); 
        elLink.setAttribute('rel', 'noopener noreferrer');
-       elLink.className = 'elLink'; // Apply class to the anchor
-       elLink.title = 'Open link in browser'; // Set tooltip
-       // Add the icon inside the anchor
+       elLink.className = 'elLink';
+       elLink.title = 'Open link in browser';
        const linkSpan = elLink.createEl('span'); 
        setIcon(linkSpan, 'external-link');
      }
 
      if (GLB.settings.showDelete) {
-       let t_delete_icon = "trash-2"; // Icon for not deleted
+       let t_delete_icon = "trash-2";
        let t_delete_title = "Delete";
        if (item.deleted && (item.deleted !== '')) {
-         t_delete_icon = 'history'; // Icon for deleted (can be restored)
+         t_delete_icon = 'history';
          t_delete_title = 'Undelete';
        }
        const toggleDeleteDiv = itemActionOneRow.createEl('div');
@@ -2252,7 +2290,6 @@ async function show_feed() {
      nextPage.id = "nextPage";
    }
    const stats = getFeedStats(GLB.currentFeed);
-   //  GLB.elUnreadCount = document.getElementById('unreadCount' + GLB.currentFeed);
    GLB.elTotalCount = document.getElementById('totalCount' + GLB.currentFeed) || undefined;
    GLB.elSepUnreadTotal = document.getElementById('sepUnreadTotal' + GLB.currentFeed) || undefined;
    if (GLB.elUnreadCount) {
@@ -2540,4 +2577,3 @@ async function decompress(byteArray: Uint8Array, format: CompressionFormat) {
   const a = await r.arrayBuffer();
   return new TextDecoder().decode(a);
 }
-

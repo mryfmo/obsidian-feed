@@ -1,245 +1,245 @@
 .itemContent, .itemTitle, .embeddedIframe, .fetchContainer {
-    -moz-user-select: text;
-    -webkit-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
+  -moz-user-select: text;
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 .itemContent p {
-    padding: 0 0;
-    margin-top: 0;
-    margin-bottom: 0;
+  padding: 0 0;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .hidedItem {
-  display: none;
+display: none;
 }
 
 .navigation {
-  height: 92%;
-  width: 160px;
-  position: fixed;
-  z-index: 1;
-  top: 6.2em;
-  left: 0;
-  text-align: left;
-  padding-left: 1mm;
-  display: block;
-  overflow-y: auto;
-  padding-bottom: 2em;
+height: 92%;
+width: 160px;
+position: fixed;
+z-index: 1;
+top: 6.2em;
+left: 0;
+text-align: left;
+padding-left: 1mm;
+display: block;
+overflow-y: auto;
+padding-bottom: 2em;
 }
 
 .content {
-  margin-left: 160px;
-  padding: 0px 1% 3em 0px;
-  overflow-y: auto;
+margin-left: 160px;
+padding: 0px 1% 3em 0px;
+overflow-y: auto;
 }
 
 @media only screen and (max-width: 480px) {
-  .navigation {
-    height: 80%;
-  }
+.navigation {
+  height: 80%;
+}
 }
 
 .navigation .showFeed:hover {
-  color: #f15500;
+color: #f15500;
 }
 
 .naviBarShown {
-  display: block;
+display: block;
 }
 
 .naviBarHidden {
-  display: none;
+display: none;
 }
 
 .contentBoxRightpage {
-  margin-left: 160px;
+margin-left: 160px;
 }
 
 .contentBoxFullpage {
-  margin-left: 0px;
+margin-left: 0px;
 }
 
 td.showFeed {
-  text-decoration: none;
-  display: block;
-  padding-left: 2mm;
+text-decoration: none;
+display: block;
+padding-left: 2mm;
 }
 
 .showingFeed {
-  color: #f15500;
+color: #f15500;
 }
 
 .nonShowingFeed {
 }
 
 .toggleNaviContainer {
-  position:absolute;
-  top: 2.9em;
-  left: 1.5mm;
-  z-index: 2;
-  font-size: medium;
-  font-weight: bold;
+position:absolute;
+top: 2.9em;
+left: 1.5mm;
+z-index: 2;
+font-size: medium;
+font-weight: bold;
 }
 
 #toggleNavi, .save_data_toggling, .unreadcountWhileToggling {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  margin-right: 0.2em;
-  opacity: 0.8;
-  background-color: var(--background-secondary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 5px;
-  cursor: pointer;
+border: 1px solid var(--background-modifier-border);
+border-radius: 6px;
+margin-right: 0.2em;
+opacity: 0.8;
+background-color: var(--background-secondary);
+display: inline-flex;
+align-items: center;
+justify-content: center;
+width: 28px;
+height: 28px;
+padding: 5px;
+cursor: pointer;
 }
 
 #toggleNavi > svg {
-    width: 18px;
-    height: 18px;
-    stroke: var(--text-muted);
+  width: 18px;
+  height: 18px;
+  stroke: var(--text-muted);
 }
 
 #toggleNavi:hover {
-  background-color: var(--background-modifier-hover);
+background-color: var(--background-modifier-hover);
 }
 
 #toggleNavi:hover > svg {
-    stroke: var(--interactive-accent);
+  stroke: var(--interactive-accent);
 }
 
 .save_data_toggling:hover {
-  color: #f15500;
-  background-color: var(--background-modifier-hover);
+color: #f15500;
+background-color: var(--background-modifier-hover);
 }
 
 .manage {
-  text-decoration: none;
-  color: #818181;
-  display: block;
-  font-style: italic;
+text-decoration: none;
+color: #818181;
+display: block;
+font-style: italic;
 }
 
 .manage :hover {
-  font-weight: normal;
+font-weight: normal;
 }
 
 .feedTableDiv :is(table,tr,td) {
-  border: none;
-  border-spacing: 0 0.5em;
-  padding-right: 3px;
-  padding-left: 0;
-  border-collapse: separate;
+border: none;
+border-spacing: 0 0.5em;
+padding-right: 3px;
+padding-left: 0;
+border-collapse: separate;
 }
 
 table.manageFeedsForm, table.manageFeedsForm :is(tbody, tr, th, td) {
-  text-align: left;
-  font-size: xx-small;
-  border: 1px solid #bbaaaa;
-  border-collapse: collapse;
-  padding: 0px 0px;
+text-align: left;
+font-size: xx-small;
+border: 1px solid #bbaaaa;
+border-collapse: collapse;
+padding: 0px 0px;
 }
 
 .manageFeedsForm th:nth-child(n+1):nth-child(-n+7) {
-  cursor: pointer;
+cursor: pointer;
 }
 
 .itemActions > div,
 .itemActions > a.elLink {
-  margin-right: 0.5mm;
-  width: auto !important;
-  vertical-align: middle;
+margin-right: 0.5mm;
+width: auto !important;
+vertical-align: middle;
 }
 
 td.itemActions {
-  word-wrap: break-word;
-  word-break: break-all;
+word-wrap: break-word;
+word-break: break-all;
 }
 
 table.actionTable {
-  table-layout: fixed;
-  width: 100%;
+table-layout: fixed;
+width: 100%;
 }
 
 .elLink {
-  cursor: default;
-  font-weight: bold;
-  color: var(--link-color);
-  padding-left: 0;
-  padding-right: 1em;
+cursor: default;
+font-weight: bold;
+color: var(--link-color);
+padding-left: 0;
+padding-right: 1em;
 }
 
 .embeddedIframe {
-  width: 100%;
-  height: 60vh;
+width: 100%;
+height: 60vh;
 }
 
 .feedFolder {
-  font-weight: bold;
-  font-size: large;
+font-weight: bold;
+font-size: large;
 }
 
 .feedFolder:hover {
-  color: #7f7f7f;
+color: #7f7f7f;
 }
 
 .feedTitle a {
-  text-decoration: none;
+text-decoration: none;
 }
 
 .oneFeedItem {
-  display: block;
-  width: 100%;
-  margin-top: 1em;
-  margin-bottom: 1em;
+display: block;
+width: 100%;
+margin-top: 1em;
+margin-bottom: 1em;
 }
 
 .oneFeedItem a {
-  text-decoration: none;
+text-decoration: none;
 }
 
 .oneFeedItem hr {
-  margin: 1em 0;
+margin: 1em 0;
 }
 
 .activeItem {
-  border: 1px solid;
-  border-radius: 6px;
-  padding: 2px 4px;
+border: 1px solid;
+border-radius: 6px;
+padding: 2px 4px;
 }
 
 .refreshFeed:hover {
-  color: #f15500;
+color: #f15500;
 }
 
 .itemTitle {
-  font-weight: bold;
-  color: var(--link-color);
+font-weight: bold;
+color: var(--link-color);
 }
 
 .elPubDate {
-  font-size: xx-small;
+font-size: xx-small;
 }
 
 .markPageRead, .markPageDeleted, .removePageContent, .toggleRead, .elEmbedButton, .elFetch, .elLink, .noteThis, .renderMath, .askChatGPT, .saveSnippet, .toggleDelete, .jotNotes,
 .pageActionButton {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
-  line-height: 0;
-  text-decoration: none;
-  color: inherit;
-  margin-right: 0;
+border: 1px solid var(--background-modifier-border);
+border-radius: 6px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+padding: 5px;
+cursor: pointer;
+width: 28px;
+height: 28px;
+line-height: 0;
+text-decoration: none;
+color: inherit;
+margin-right: 0;
 }
 
 .toggleRead > span,
@@ -253,17 +253,17 @@ table.actionTable {
 .jotNotes > span,
 .elLink > span,
 .pageActionButton > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+width: 100%;
+height: 100%;
 }
 
 .toggleRead:hover, .elEmbedButton:hover, .elFetch:hover, .noteThis:hover, .renderMath:hover, .askChatGPT:hover, .saveSnippet:hover, .toggleDelete:hover, .jotNotes:hover,
 .elLink:hover,
 .pageActionButton:hover {
-  background-color: var(--background-modifier-hover);
+background-color: var(--background-modifier-hover);
 }
 
 .toggleRead:hover > span,
@@ -277,152 +277,152 @@ table.actionTable {
 .jotNotes:hover > span,
 .elLink:hover > span,
 .pageActionButton:hover > span {
-  stroke: var(--interactive-accent);
+stroke: var(--interactive-accent);
 }
 
 .pageActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
+display: flex;
+align-items: center;
+gap: 0.5em;
 }
 
 .shortNote {
-  width: 100%;
-  resize: both;
+width: 100%;
+resize: both;
 }
 
 .itemContent, .itemTitle {
-  margin-top: 0;
-  margin-bottom: 0;
+margin-top: 0;
+margin-bottom: 0;
 }
 
 .showItemContent {
-  display: block;
-  width: 100%;
-  cursor: default;
+display: block;
+width: 100%;
+cursor: pointer;
 }
 
 .divAsSep {
-  width: 100%;
-  height: 1mm;
+width: 100%;
+height: 1mm;
 }
 
 .itemCreator {
-  font-size: xx-small;
-  max-height: 3em;
-  overflow-y: auto;
+font-size: xx-small;
+max-height: 3em;
+overflow-y: auto;
 }
 
 .unreadCount {
-  z-index: -1;
-  pointer-events: none;
+z-index: -1;
+pointer-events: none;
 }
 
 .elUnreadTotalAndRefresh {
-  font-size: 40%;
-  font-weight: bold;
-  z-index: 2;
+font-size: 40%;
+font-weight: bold;
+z-index: 2;
 }
 
 .elUnreadTotalAndRefresh:hover {
-  color: #f15500;
+color: #f15500;
 }
 
 .searchForm, .addFeedTable {
-  width: 100%;
+width: 100%;
 }
 
 .searchCol1, .addFeedCol1 {
-  width: 30%;
+width: 30%;
 }
 
 .searchCol2, .addFeedCol2 {
-  width: 70%;
+width: 70%;
 }
 
 input.addFeedInput, input.searchTerms {
-  width: 100%;
+width: 100%;
 }
 
 .cellNameContainer {
-  width: 42%;
+width: 42%;
 }
 
 .cellNameContainer input {
-  display: block;
-  width: 100%;
-  border: 0;
+display: block;
+width: 100%;
+border: 0;
 }
 
 .cellFolderContainer {
-  width: 15%;
+width: 15%;
 }
 
 .cellFolderContainer input {
-  width: 100%;
-  border: 0;
+width: 100%;
+border: 0;
 }
 
 .next_prev, .next_prev span {
-  font-weight: bold;
-  margin-right: 1em;
-  margin-top: 1em;
+font-weight: bold;
+margin-right: 1em;
+margin-top: 1em;
 }
 
 .next_prev:hover {
-  color: #f15500;
+color: #f15500;
 }
 
 .thanks {
-  font-size: 56%;
-  font-weight: bold;
+font-size: 56%;
+font-weight: bold;
 }
 
 .thanks a {
-  text-decoration: none;
+text-decoration: none;
 }
 
 /* Navigation Bar Icon Styling */
 .manage > div {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px;
-  margin: 2px;
-  cursor: pointer;
-  border-radius: 4px;
-  width: 28px;
-  height: 28px;
-  vertical-align: middle;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+padding: 5px;
+margin: 2px;
+cursor: pointer;
+border-radius: 4px;
+width: 28px;
+height: 28px;
+vertical-align: middle;
 }
 
 .manage > div > span svg {
-  stroke: var(--text-muted);
-  width: 18px;
-  height: 18px;
+stroke: var(--text-muted);
+width: 18px;
+height: 18px;
 }
 
 .manage > div:hover {
-    background-color: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
 }
 
 .manage > div:hover > span svg {
-  stroke: var(--interactive-accent);
+stroke: var(--interactive-accent);
 }
 
 /* Adjust toggleOrder span vertical alignment if needed */
 #toggleOrder {
-    vertical-align: middle;
-    display: inline-block;
-    padding: 5px;
-    margin: 2px;
-    height: 28px;
-    line-height: 18px;
+  vertical-align: middle;
+  display: inline-block;
+  padding: 5px;
+  margin: 2px;
+  height: 28px;
+  line-height: 18px;
 }
 
 /* Remove default hover effect from the parent manage div */
 .manage :hover {
-  font-weight: normal;
+font-weight: normal;
 }
 
 /* Consolidate and set explicit default icon color and size */
@@ -439,9 +439,9 @@ input.addFeedInput, input.searchTerms {
 .jotNotes > span,
 .elLink > span,
 .pageActionButton > span {
-  stroke: var(--text-muted); /* Explicit default: Muted text color */
-  width: 18px;  /* Consistent size */
-  height: 18px; /* Consistent size */
+stroke: var(--text-muted); /* Explicit default: Muted text color */
+width: 18px;  /* Consistent size */
+height: 18px; /* Consistent size */
 }
 
 /* Consolidate and set explicit hover icon color */
@@ -458,7 +458,7 @@ input.addFeedInput, input.searchTerms {
 .jotNotes:hover > span,
 .elLink:hover > span,
 .pageActionButton:hover > span {
-  stroke: var(--interactive-accent); /* Explicit hover: Accent color */
+stroke: var(--interactive-accent); /* Explicit hover: Accent color */
 }
 
 /* Keep background hover effect using standard variable */
@@ -467,22 +467,20 @@ input.addFeedInput, input.searchTerms {
 .toggleRead:hover, .elEmbedButton:hover, .elFetch:hover, .noteThis:hover, .renderMath:hover, .askChatGPT:hover, .saveSnippet:hover, .toggleDelete:hover, .jotNotes:hover,
 .elLink:hover,
 .pageActionButton:hover {
-  background-color: var(--background-modifier-hover);
+background-color: var(--background-modifier-hover);
 }
 
-/* Remove old/individual icon color rules */
-/* Example: Remove or comment out rules like these if they exist separately */
-/* 
-#toggleNavi > svg {
-    stroke: var(--icon-color);
+/* Add hover effect for linked titles */
+.itemTitle a:hover {
+  background-color: var(--background-modifier-hover);
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: inline-block; /* Ensure background and padding apply correctly */
 }
-#toggleNavi:hover > svg {
-    stroke: var(--icon-color-hover);
+
+/* Add hover effect for title-only divs */
+.showItemContent:hover {
+  background-color: var(--background-modifier-hover);
+  padding: 2px 4px; /* Consistent padding */
+  border-radius: 4px; /* Consistent radius */
 }
-.toggleRead > span > svg, ... {
-    stroke: var(--icon-color);
-}
-.toggleRead:hover > span > svg, ... {
-    stroke: var(--icon-color-hover);
-}
-*/
