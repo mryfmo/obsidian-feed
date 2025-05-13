@@ -3,12 +3,21 @@ import { FeedsReaderSettings } from './types';
 import { safeGetPluginFeedsReaderDir, safePathJoin } from './view/utils'; // Path joining utility
 import { HTML_CACHE_DIR } from './constants';
 import axios from 'axios'; // Using axios for more control
+import { createHttpClient } from "./network/httpClient";
 
-const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-const AXIOS_TIMEOUT = 15000; // 15 seconds timeout
+const USER_AGENT = 
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const ACCEPT = 
+  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+const AXIOS_TIMEOUT = 15000; // 15 ms timeout
+
+const http = createHttpClient();
 
 export class NetworkError extends Error {
-  constructor(message: string, public status?: number) { super(message); this.name = "NetworkError"; }
+  constructor(message: string, public status?: number) {
+    super(message);
+    this.name = "NetworkError";
+  }
 }
 
 /**
@@ -18,8 +27,15 @@ export class NetworkError extends Error {
 export class NetworkService {
   private cacheBasePath: string;
 
-  constructor(private adapter: FileSystemAdapter, private settings: FeedsReaderSettings, private pluginId: string) {
-    const pluginDataDir = safeGetPluginFeedsReaderDir(this.pluginId, this.adapter.getBasePath());
+  constructor(
+    private adapter: FileSystemAdapter,
+    private settings: FeedsReaderSettings,
+    private pluginId: string
+  ) {
+    const pluginDataDir = safeGetPluginFeedsReaderDir(
+      this.pluginId,
+      this.adapter.getBasePath()
+    );
     this.cacheBasePath = safePathJoin(pluginDataDir, HTML_CACHE_DIR);
   }
 
@@ -29,9 +45,12 @@ export class NetworkService {
     return safePathJoin(this.cacheBasePath, `${hashedUrl}.html`);
   }
 
-  async fetchHtml(url: string, forceNoCache: boolean = false): Promise<string | null> {
+  async fetchHtml(
+    url: string,
+    forceNoCache: boolean = false
+  ): Promise<string | null> {
     if (!this.settings.enableHtmlCache || forceNoCache) {
-      return this.fetchWithAxios(url);
+      return this.fetchWithHttp(url);
     }
 
     if (!(await this.adapter.exists(this.cacheBasePath))) {
@@ -43,7 +62,7 @@ export class NetworkService {
       if (await this.adapter.exists(cachePath)) {
         const stats = await this.adapter.stat(cachePath);
         const cacheAgeMinutes = (Date.now() - (stats?.mtime || 0)) / (1000 * 60);
-        if (cacheAgeMinutes < (this.settings.htmlCacheDurationMinutes || 1440)) {
+        if (cacheAgeMinutes < (this.settings.htmlCacheDurationMinutes ?? 1440)) {
           console.log(`NetworkService: Serving HTML from cache for ${url}`);
           return await this.adapter.read(cachePath);
         } else {
@@ -54,7 +73,7 @@ export class NetworkService {
       console.warn(`NetworkService: Error accessing cache for ${url}. Fetching directly. Error:`, e);
     }
 
-    const html = await this.fetchWithAxios(url);
+    const html = await this.fetchWithHttp(url);
     if (html) {
       try {
         await this.adapter.write(cachePath, html);
@@ -67,15 +86,14 @@ export class NetworkService {
   }
 
   async fetchText(url: string): Promise<string> { // Public method for fetching text
-    return await this.fetchWithAxios(url) ?? ""; // Return empty string if null
+    return await this.fetchWithHttp(url) ?? ""; // Return empty string if null
   }
 
   async fetchBinary(url: string): Promise<ArrayBuffer | null> {
     try {
       console.log(`NetworkService: Fetching binary with axios: ${url}`);
-      // Fetch using axios, expect ArrayBuffer
-      const response = await axios.get<ArrayBuffer>(url, {
-        headers: { 'User-Agent': USER_AGENT }, // Keep it simple for binary files
+      const response = await http.get<ArrayBuffer>(url, {
+        headers: { 'User-Agent': USER_AGENT, Accept: ACCEPT }, // Keep it simple for binary files
         timeout: AXIOS_TIMEOUT * 2, // Allow longer timeout for potentially large assets
         responseType: 'arraybuffer',
       });      
@@ -89,15 +107,14 @@ export class NetworkService {
     }
   }
 
-  // Internal method using axios
-  private async fetchWithAxios(url: string): Promise<string | null> {
+  // Internal method using http client
+  private async fetchWithHttp(url: string): Promise<string | null> {
     try {
-      console.log(`NetworkService: Fetching with axios: ${url}`);
-      const response = await axios.get<string>(url, {
-        headers: { 'User-Agent': USER_AGENT, 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' },
+      console.log(`NetworkService: Fetching with http: ${url}`);
+      const response = await http.get<string>(url, {
+        headers: { 'User-Agent': USER_AGENT, 'Accept': ACCEPT },
         timeout: AXIOS_TIMEOUT,
         responseType: 'text', // Ensure response is treated as text
-        // httpsAgent: new https.Agent({ keepAlive: true }), // KeepAlive might cause issues in Obsidian env? Test without first.
       });      
       return response.data;
     } catch (error: unknown) {

@@ -164,10 +164,11 @@ export default class FeedsReaderPlugin extends Plugin {
       return;
     }
 
-    let leaf: WorkspaceLeaf | null = this.app.workspace.getRightLeaf(false);
-    if (!leaf) {
-      leaf = this.app.workspace.getLeaf(true);
+    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeaf();  
+    if (!leaf) {  
+      leaf = this.app.workspace.getLeaf(true);  
     }
+
     if (leaf) {
       await leaf.setViewState({
         type: VIEW_TYPE_FEEDS_READER,
