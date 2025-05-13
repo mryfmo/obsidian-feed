@@ -1,236 +1,271 @@
-import {request, Notice} from "obsidian";
+import { Notice } from "obsidian";
+import { RssFeedContent, RssFeedContentSchema, FeedInfo, RssFeedItemWithBlocks } from "./types";
+import { parseISO, isValid, formatISO } from 'date-fns';
+import Parser from 'rss-parser';
+import { NetworkService, NetworkError } from './networkService';
+import { ContentParserService } from "./contentParserService";
+import FeedsReaderPlugin from "./main";
+import { AssetService } from "./assetService";
 
-/**
- This file is adapted from https://github.com/joethei/obsidian-rss/blob/master/src/parser/rssParser.ts, with a few modifications.
- */
+const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (HTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-export interface RssFeedContent {
-    subtitle: string,
-    title: string,
-    name: string,
-    link: string,
-    image: string | null,
-    folder: string,
-    description: string,
-    pubDate: string,
-    items: RssFeedItem[]
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    // eslint-disable-next-line no-var
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
-export interface RssFeedItem {
-    title: string,
-    content?: string,
-    category: string,
-    link: string,
-    creator?: string,
-    pubDate: string,
-    read: string | null,
-    deleted: string | null,
-    downloaded: string | null,
-    [key: string]: string | null | undefined;
+export function getCurrentIsoDateTime(): string {
+  return new Date().toISOString();
 }
 
-export const itemKeys = ["title", "content", "link", "creator", "pubDate", "read", "deleted", "downloaded"];
-
-/**
- * return the node with the specified name
- * : to get namespaced element
- * . to get nested element
- * @param element
- * @param name
- */
-function getElementByName(element: Element | Document, name: string): ChildNode | undefined {
-    let value: ChildNode | undefined;
-    if (typeof element.getElementsByTagName !== 'function' && typeof element.getElementsByTagNameNS !== 'function') {
-        //the required methods do not exist on element, aborting
-        return;
-    }
-
-    if (name.includes(":")) {
-        const [namespace, tag] = name.split(":");
-        const namespaceUri = element.lookupNamespaceURI(namespace);
-        const byNamespace = element.getElementsByTagNameNS(namespaceUri, tag);
-        if (byNamespace.length > 0) {
-            value = byNamespace[0].childNodes[0];
-        } else {
-            //there is no element in that namespace, probably because no namespace has been defined
-            const tmp = element.getElementsByTagName(name);
-            if (tmp.length > 0) {
-                if (tmp[0].childNodes.length === 0) {
-                    value = tmp[0];
-                } else {
-                    const node = tmp[0].childNodes[0];
-                    if (node !== undefined) {
-                        value = node;
-                    }
-                }
-            }
-        }
-
-    } else if (name.includes(".")) {
-        const [prefix, tag] = name.split(".");
-        if (element.getElementsByTagName(prefix).length > 0) {
-            const nodes = Array.from(element.getElementsByTagName(prefix)[0].childNodes);
-            nodes.forEach((node) => {
-                if (node.nodeName == tag) {
-                    value = node;
-                }
-            });
-        }
-
-    } else {
-        const els = element.getElementsByTagName(name);
-        if (els.length > 0) {
-          const el = els[0];
-          if (el.childNodes.length === 0) {
-            value = el;
-          } else {
-            //value = el.firstChild;
-            value = Array.from(el.childNodes).reduce((a, b) => {return getElLen(a) > getElLen(b) ? a : b;});
-          }
-        }
-    }
-
-    return value;
+function sanitizeFeedNameForFolderName(feedName: string): string { // Keep this utility
+  return feedName.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 50) || `feed_${Date.now()}`;
 }
 
-function getElLen(el: Node) {
-  const possibleTextTags = ['innerHTML', 'wholeText', 'innerText', 'nodeValue', 'textContent', 'data'];
-  const len_s = [0];
-  for (const t of possibleTextTags) {
-    if ((typeof (el as any)[t]) === 'string') {
-      len_s.push((el as any)[t].length);
-    }
-  }
-  return Math.max(...len_s);
-}
+export async function getFeedItems(
+  plugin: FeedsReaderPlugin,
+  feedInfo: FeedInfo,
+  networkService: NetworkService,
+  contentParserService: ContentParserService,
+  assetService: AssetService
+  ): Promise<RssFeedContent> {
+  const { feedUrl, name: feedName } = feedInfo;
+  let feedData;
 
-function getElPossibleText(el: Node) {
-  const possibleTextTags = ['innerHTML', 'wholeText', 'innerText', 'nodeValue', 'textContent', 'data'];
-  const possibleTexts = [''];
-  for (const t of possibleTextTags) {
-    if ((typeof (el as any)[t]) === 'string') {
-      possibleTexts.push((el as any)[t]);
-    }
-  }
-  return possibleTexts;
-}
-
-/**
- * # to get attribute
- * Always returns the longest value for names
- * @param element
- * @param names possible names
- */
-function getContent(element: Element | Document, names: string[]): string {
-    let value: string = '';
-    let values: string [] = [];
-    for (const name of names) {
-        if (name.includes("#")) {
-            const [elementName, attr] = name.split("#");
-            const data = getElementByName(element, elementName);
-            if (data) {
-                if (data.nodeName === elementName) {
-                    //@ts-ignore
-                    const tmp = data.getAttribute(attr);
-                    if (tmp.length > 0) {
-                        value = tmp;
-                    }
-                }
-            }
-        } else {
-            const data = getElementByName(element, name);
-            if (data) {
-                value = getElPossibleText(data as Node).reduce((a, b) => {return a.length > b.length ? a : b;});
-            }
-        }
-        if (value === undefined) {
-          value = '';
-        }
-        values.push(value);
-    }
-    return values.reduce((a, b) => {return a.length > b.length ? a : b;});
-}
-
-function buildItem(element: Element): RssFeedItem {
-    return {
-        title: getContent(element, ["title", "rss:title"]),
-        description: getContent(element, ["content", "content:encoded", "itunes:summary", "description", "summary", "media:description"]),
-        content: getContent(element, ["itunes:summary", "description", "summary", "media:description", "ns0:encoded", "abstract", "content", "content:encoded", "rss:description"]),
-        category: getContent(element, ["category"]),
-        link: getContent(element, ["link", "link#href", "rss:link"]),
-        creator: getContent(element, ["creator", "dc:creator", "author", "author.name"]),
-        pubDate: getContent(element, ["pubDate", "published", "updated", "dc:date", "prism:publicationDate"]),
-        read: null,
-        deleted: null,
-        downloaded: null
-    }
-}
-
-function getAllItems(doc: Document): Element[] {
-    const items: Element[] = [];
-
-    let elItems = doc.getElementsByTagName("item");
-    if ((elItems === null) || (elItems.length ===0)) {
-      elItems = doc.getElementsByTagName("entry");
-    }
-    if ((elItems === null) || (elItems.length ===0)) {
-      elItems = doc.getElementsByTagNameNS("http://purl.org/rss/1.0/", "item");
-    }
-    if (elItems) {
-        for (const elementsByTagNameKey in elItems) {
-            const entry = elItems[elementsByTagNameKey];
-            items.push(entry);
-
-        }
-    }
-    return items;
-}
-
-async function requestFeed(feedUrl: string) : Promise<string> {
-    return await request({url: feedUrl,
-                          method: "GET",
-                          headers: {"Cache-Control": "max-age=0, no-cache"}
-                         });
-}
-
-export async function getFeedItems(feedUrl: string): Promise<RssFeedContent | undefined> {
-    let data;
+  try {
+    // Try to parse as RSS/Atom first
     try {
-        const rawData = await requestFeed(feedUrl);
-        data = new window.DOMParser().parseFromString(rawData, "text/xml");
-    } catch (e) {
-        new Notice('Fail to fetch ' + feedUrl, 3000);
-        return Promise.resolve(undefined);
+      const rssParser = new Parser({
+        requestOptions: { headers: { "User-Agent": USER_AGENT } },
+        // Explicitly set common fields for normalization if parser supports it
+        customFields: {
+          feed: ['subtitle', 'image', 'logo', 'icon', 'lastBuildDate', 'updated', 'pubDate'],
+          item: ['summary', 'creator', 'dc:creator', 'author', 'published', 'updated', 'media:group', 'media:thumbnail', 'content:encoded', 'guid'],
+        }
+      });
+      feedData = await rssParser.parseURL(feedUrl);
+    } catch (rssError) {
+      // If RSS parsing fails, try fetching as plain text to check if it's JSON Feed
+      console.warn(`getFeedItems: RSS parsing for "${feedName}" failed. Attempting JSON Feed parse. Error:`, rssError);
+      const rawText = await networkService.fetchText(feedUrl); // Use networkService for potential caching
+      if (rawText.trim().startsWith("{")) {
+        const jsonData = JSON.parse(rawText);
+        // Basic JSON Feed to rss-parser compatible structure transformation
+        feedData = {
+          title: jsonData.title,
+          link: jsonData.home_page_url || feedUrl,
+          description: jsonData.description,
+          image: (jsonData.icon || jsonData.favicon) ? { url: jsonData.icon || jsonData.favicon } : undefined,
+          items: jsonData.items?.map((item: { 
+            title?: string; 
+            url?: string; 
+            id?: string; 
+            date_published?: string; 
+            date_modified?: string; 
+            content_html?: string; 
+            content_text?: string; 
+            summary?: string; 
+            author?: { name?: string }; 
+          }) => ({
+            title: item.title || 'Untitled',
+            link: item.url || item.id,
+            id: item.id || item.url,
+            pubDate: item.date_published || item.date_modified,
+            content: item.content_html || item.content_text,
+            summary: item.summary,
+            author: item.author?.name,
+            // TODO: Potentially map other JSON Feed fields
+          })) || [],
+        };
+      } else {
+        throw rssError; // Re-throw original RSS error if not JSON
+      }
     }
 
+    // Define a type for potential feed data properties
+    type PotentialFeedData = {
+      title?: string;
+      link?: string;
+      image?: { url?: string };
+      logo?: string;
+      icon?: string;
+      description?: string;
+      subtitle?: string;
+      lastBuildDate?: string;
+      updated?: string;
+      pubDate?: string;
+      items?: PotentialItem[]; // Use PotentialItem[] instead of any[]
+    };
+    const typedFeedData = feedData as PotentialFeedData;
 
-    const items: RssFeedItem[] = [];
-    const rawItems = getAllItems(data);
+    const feedTitle = typedFeedData.title || feedName;
+    const feedLink = typedFeedData.link || feedUrl;
+    const feedImage = typedFeedData.image?.url || typedFeedData.logo || typedFeedData.icon;
+    const feedDescription = typedFeedData.description || typedFeedData.subtitle;
+    const feedPubDate = parseDateString(typedFeedData.lastBuildDate || typedFeedData.updated || typedFeedData.pubDate);
 
-    rawItems.forEach((rawItem) => {
-        const item = buildItem(rawItem);
-        if (item.title !== undefined && item.title.length !== 0) {
-            item.read = '';
-            item.deleted = '';
-            item.downloaded = '';
-
-            items.push(item);
-        }
-    })
-    const image = getContent(data, ["image", "image.url", "icon"]);
-
-    const content: RssFeedContent = {
-        title: getContent(data, ["title"]),
-        subtitle: getContent(data, ["subtitle"]),
-        link: getContent(data, ["link"]),
-        pubDate: getContent(data, ["pubDate", 'dc:date', 'published', 'updated', 'sy:updateBase']),
-        //we don't want any leading or trailing slashes in image urls(i.e. reddit does that)
-        image: image ? image.replace(/^\/|\/$/g, '') : null,
-        description: getContent(data, ["description"]),
-        items: items,
-        name: '',
-        folder: ''
+    const feedObj: RssFeedContent = {
+      name: feedName,
+      folder: feedInfo.folder || sanitizeFeedNameForFolderName(feedName), // Use existing or generate
+      title: feedTitle,
+      link: feedLink,
+      image: feedImage,
+      description: feedDescription,
+      pubDate: feedPubDate,
+      items: []
     };
 
-    return Promise.resolve(content);
+    if (!feedData.items || feedData.items.length === 0) {
+      console.log(`getFeedItems: No items found in feed "${feedName}".`);
+      return feedObj; // Return feed metadata even if no items
+    }
+
+    // Define PotentialItem type based on accessed properties
+    type PotentialItem = {
+      guid?: string;
+      id?: string;
+      link?: string;
+      title?: string;
+      content?: string;
+      contentSnippet?: string;
+      'content:encoded'?: string;
+      summary?: string;
+      description?: string;
+      creator?: string;
+      'dc:creator'?: string;
+      author?: string | { name?: string };
+      pubDate?: string;
+      isoDate?: string;
+      published?: string;
+      updated?: string; 
+      categories?: string | string[];
+    };
+
+    for (const rawItem of feedData.items) {
+      const itemTitle = rawItem.title || "Untitled Item";
+      const itemLink = rawItem.link || rawItem.guid; // Prefer link, fallback to guid
+
+      if (!itemLink || typeof itemLink !== 'string') {
+        console.warn(`getFeedItems: Item in "${feedName}" (title: "${itemTitle}") has no valid link or guid. Skipping.`);
+        continue;
+      }
+
+      const itemId = rawItem.guid || rawItem.id || itemLink || generateUUID();
+      const itemContentHtml = rawItem.content || rawItem.contentSnippet || rawItem['content:encoded'] || rawItem.summary || rawItem.description || "";
+      const itemCreator = rawItem.creator || rawItem['dc:creator'] || (typeof rawItem.author === 'string' ? rawItem.author : rawItem.author?.name);
+      const itemPubDate = parseDateString(rawItem.pubDate || rawItem.isoDate || rawItem.published || (rawItem as PotentialItem).updated); // Cast here if needed
+      const itemCategories = Array.isArray(rawItem.categories) ? rawItem.categories.join(', ') : (typeof rawItem.categories === 'string' ? rawItem.categories : "");
+
+      const feedItem: RssFeedItemWithBlocks = {
+        id: itemId,
+        title: itemTitle,
+        link: itemLink,
+        content: "", // Will be populated with Markdown from blocks
+        category: itemCategories,
+        creator: (typeof itemCreator === 'string' ? itemCreator : (itemCreator as { name?: string })?.name) ?? '', // Provide fallback for undefined
+        pubDate: itemPubDate,
+        read: "0",
+        deleted: "0",
+        downloaded: "0",
+        blocks: [],
+        sourceHtml: "" // Initialize sourceHtml
+      };
+
+      let finalHtmlForParsing = ""; // Temporary variable to hold HTML for parsing
+
+      // Fetch full HTML if enabled and link exists.
+      // The condition (itemContentHtml || !itemContentHtml) from patch.ts means it always tries to fetch if cache is enabled and link exists.
+      if (plugin.settings.enableHtmlCache !== false && itemLink) {
+        try {
+          const fetchedHtml = await networkService.fetchHtml(itemLink);
+          if (fetchedHtml) {
+            finalHtmlForParsing = fetchedHtml; // Prioritize fetched HTML
+          } else if (itemContentHtml) { // Fallback to feed's content if fetch failed or returned null
+            finalHtmlForParsing = itemContentHtml;
+          }
+        } catch (fetchErr) {
+          console.warn(`getFeedItems: Failed to fetch full HTML for "${itemTitle}" from "${itemLink}". Using feed content if available. Error:`, fetchErr);
+          if (itemContentHtml) { // If fetching threw an error, but we have content from the feed, use that.
+            finalHtmlForParsing = itemContentHtml;
+          }
+        }
+      } else if (itemContentHtml) { // If cache is not enabled, but feed provides content
+        finalHtmlForParsing = itemContentHtml;
+      }
+      // If neither fetching nor the feed provided HTML, finalHtmlForParsing remains ""
+
+      feedItem.sourceHtml = finalHtmlForParsing; // Store the determined HTML in sourceHtml
+
+      // Process sourceHtml (either fetched or from feed) into blocks and markdown
+      if (feedItem.sourceHtml) { // Only process if we have some HTML
+        try {
+          // Use the async contentParserService
+          const generatedBlocks = await contentParserService.htmlToContentBlocks(feedItem.sourceHtml, itemLink);
+          feedItem.blocks = generatedBlocks; // Assign generated blocks
+          
+          if (plugin.settings.enableAssetDownload && feedItem.blocks && feedItem.blocks.length > 0) {
+            // Download assets and update localSrc in blocks
+            // This happens AFTER blocks are generated, and BEFORE markdown conversion
+            feedItem.blocks = await assetService.downloadAssetsForBlocks(feedItem.blocks, itemLink);
+          }
+          
+          // Convert the (potentially updated with localSrc) blocks to Markdown
+          feedItem.content = contentParserService.contentBlocksToMarkdown(feedItem.blocks);
+        } catch (parseError) {
+          console.error(`getFeedItems: Error parsing content for "${itemTitle}". Using raw content. Error:`, parseError);
+          feedItem.content = feedItem.sourceHtml; // Fallback to raw HTML if block parsing fails
+          feedItem.blocks = [{ type: 'text', content: feedItem.sourceHtml }]; // Store raw as a single text block
+        }
+      } else { // No HTML content available at all
+        feedItem.content = "No content available.";
+        feedItem.blocks = [{ type: 'text', content: "No content available." }];
+      }
+
+      feedObj.items.push(feedItem);
+    }
+
+    const validationResult = RssFeedContentSchema.safeParse(feedObj);
+    if (!validationResult.success) {
+      console.warn(`getFeedItems: Constructed RssFeedContent for "${feedName}" has validation errors. Some data might be missing or incorrect. Details:`, validationResult.error.flatten(), "\nFeed Object (first 500 chars):", JSON.stringify(feedObj).substring(0,500));
+      return feedObj as RssFeedContent; // Return partially valid object
+    }
+    return validationResult.data;
+
+  } catch (e: unknown) {
+    if (e instanceof NetworkError) { // Handle specific network errors from axios
+        // Explicitly narrow the type within the block
+        const networkErr = e as NetworkError;
+        const errorMessage = `Network Error fetching "${feedName}": ${networkErr.message} (Status: ${networkErr.status ?? 'N/A'}). Check URL or network connection.`;
+        console.error(errorMessage, networkErr); 
+        new Notice(errorMessage, 7000); 
+        throw networkErr; // Re-throw specific error
+    }
+    const errorMessage = `Failed to get or parse feed "${feedName}" from URL "${feedUrl}".`;
+    console.error(errorMessage, e);
+    new Notice(errorMessage + ` Details: ${(e instanceof Error) ? e.message : String(e)}`, 7000);
+    throw new Error(errorMessage + ` (Technical details: ${(e instanceof Error) ? e.message : String(e)} )`); // Throw generic error
+  }
+}
+
+function parseDateString(dateString: string | null | undefined): string {
+  if (!dateString) return "";
+  try {
+    // Try ISO 8601 parsing first (common in Atom and modern RSS)
+    let date = parseISO(dateString.trim());
+    if (isValid(date)) return formatISO(date);
+
+    // Try RFC 2822 (common in older RSS)
+    // date-fns parseRFC2822 is strict. Let's try a more lenient new Date() and reformat if valid.
+    date = new Date(dateString.trim()); // This can be quite lenient
+    if (isValid(date)) return formatISO(date);
+
+    // If specific formats are known to be common and not parsed by the above:
+    // date = parse(dateString, 'yyyy-MM-dd HH:mm:ss XXXX', new Date()); // Example for a specific format
+    // if (isValid(date)) return formatISO(date);
+
+  } catch { /* Fall through to return original string if all parsing fails */ }
+  return dateString; // Return original if no parse method works
 }
