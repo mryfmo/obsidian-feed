@@ -17,6 +17,15 @@ function resolveItemId(item: RssFeedItem): string {
   return item.id;
 }
 
+/**
+ * Renders a dynamic controls bar with interactive buttons for managing RSS feeds in the FeedsReader plugin view.
+ *
+ * Populates the provided container element with buttons for adding, managing, updating, and saving feeds. When a feed is selected, additional controls for searching, filtering, toggling content display, changing sort order, and undoing actions are shown. Button actions trigger modals, update feed data, and refresh the view as appropriate.
+ *
+ * @param controlsEl - The HTML element to populate with control buttons.
+ * @param view - The current FeedsReader view instance.
+ * @param plugin - The FeedsReader plugin instance.
+ */
 export function renderControlsBar(
   controlsEl: HTMLElement,
   view: FeedsReaderView,
