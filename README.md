@@ -17,7 +17,9 @@ This plugin is a fork and significant modification of the original [obsidian-fee
 - The `Title only`/`Show content` toggle icon (`layout-list`/`layout-grid`) is for switching whether to show the full content of each item below its title. Glancing over titles is often enough to decide whether to read an article in detail.
 - The `Sort order` icon (`sort-desc`/`sort-asc`/`shuffle`) cycles the display order through `New to old`, `Old to new`, and `Random`.
 - The `Save data` icon (💾) is for manually saving the current state of your feeds (read/deleted markers) to disk, preventing accidental loss of reading progress. Data is also typically saved automatically when switching feeds or closing Obsidian.
-- The `Update all` icon (🔄) fetches new items for all subscribed feeds.
+- The `Update all` icon (🔄) sequentially refreshes every feed, preloading stored
+  items before each fetch to preserve read status while avoiding too many
+  concurrent network requests.
 - The `Undo` icon (↩️) undoes the most recent `mark as read`/`unread` or `delete`/`restore` actions for the **currently selected feed**.
 - The `Add feed` icon (➕) opens a dialog to add new feed subscriptions (RSS/Atom URLs). Shorter, unique feed names are preferred.
    - *Be careful with the feed provider! While feed content is sanitized using Obsidian's `sanitizeHTMLToDom` API, always subscribe to trusted sources.*
