@@ -2,36 +2,95 @@ import { Notice } from "obsidian";
 import { FeedsReaderView } from "../../view";
 import FeedsReaderPlugin from "../../main";
 import { renderFeedItemCard } from "./FeedItemCardComponent";
+import { RssFeedItem } from "../../types";
+import { isVisibleItem, shuffleArray } from "../../utils";
+
+export function renderFeedItemListStyle(
+  item: RssFeedItem,
+  parentEl: HTMLElement,
+  view: FeedsReaderView,
+  plugin: FeedsReaderPlugin
+): void {
+  // Simple text list item rendering (placeholder)
+  const itemDiv = parentEl.createEl("div", { cls: "fr-item-list" });
+  itemDiv.setText(item.title ?? "(No title)");
+  itemDiv.onclick = () => {
+    view.setSelectedItemById(item.id!);
+    view.toggleItemExpansion(item.id!);
+  };
+}
 
 export function renderFeedItemsList(
   contentAreaEl: HTMLElement,
+  items: RssFeedItem[],
   view: FeedsReaderView,
   plugin: FeedsReaderPlugin
 ): void {
   contentAreaEl.empty();
-  if (!view.currentFeed || !plugin.feedsStore[view.currentFeed]) {
-    contentAreaEl.setText(view.currentFeed ? `Data for feed "${view.currentFeed}" is not ready.` : "Select a feed.");
+  if (!items || items.length === 0) {
+    const placeholder = (() => {
+      if (plugin.settings.mixedFeedView) {
+        return "No items in any feed.";
+      }
+
+      if (!view.currentFeed) {
+        return "No feed selected. Please pick a feed from the sidebar.";
+      }
+
+      return `No items available in feed "${view.currentFeed}".`;
+    })();
+
+    contentAreaEl.setText(placeholder);
     return;
   }
-  const feedContent = plugin.feedsStore[view.currentFeed];
-  if (!feedContent.items || feedContent.items.length === 0) {
-    contentAreaEl.setText(`No items found for feed "${view.currentFeed}".`);
-    return;
+
+  let itemsToShow = [...items];
+
+  if (!view.plugin.settings.mixedFeedView && view.currentFeed) {
+    const feedContent = plugin.feedsStore[view.currentFeed];
+    if (!feedContent) {
+        contentAreaEl.setText(`Data for feed "${view.currentFeed}" is not ready.`);
+        return;
+    }
+    itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view['showAll']));
+  } else if (view.plugin.settings.mixedFeedView) {
+    itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view['showAll']));
   }
-  let itemsToShow = [...feedContent.items];
-  if (!view['showAll']) itemsToShow = itemsToShow.filter(i => i.read === "0" && i.deleted === "0");
+
   const itemOrder = view['itemOrder'];
-  if (itemOrder === "New to old") itemsToShow.sort((a, b) => (b.pubDate || "").localeCompare(a.pubDate || ""));
-  else if (itemOrder === "Old to new") itemsToShow.sort((a, b) => (a.pubDate || "").localeCompare(b.pubDate || ""));
-  else if (itemOrder === "Random") itemsToShow.sort(() => Math.random() - 0.5);
+  if (itemOrder === "New to old") {
+    itemsToShow.sort((a, b) => {
+      const dA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const dB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return dB - dA; // recent first
+    });
+  } else if (itemOrder === "Old to new") {
+    itemsToShow.sort((a, b) => {
+      const dA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const dB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return dA - dB; // oldest first
+    });
+  }
+  else if (itemOrder === "Random") shuffleArray(itemsToShow);
   const start = view['currentPage'] * view.itemsPerPage;
   const end = start + view.itemsPerPage;
   const pageItems = itemsToShow.slice(start, end);
   if (pageItems.length === 0) {
-    contentAreaEl.setText(view['currentPage'] === 0 ? `No items match filter for "${view.currentFeed}".` : "No more items.");
+    const baseMsg = plugin.settings.mixedFeedView
+      ? "No items match the current filter."
+      : (view.currentFeed ? `No items match filter for "${view.currentFeed}".` : "No feed selected.");
+
+    contentAreaEl.setText(view['currentPage'] === 0 ? baseMsg : "No more items.");
     return;
   }
-  pageItems.forEach(item => renderFeedItemCard(item, contentAreaEl, view, plugin));
+
+  pageItems.forEach(item => {
+    if (plugin.settings.viewStyle === "card") {
+      renderFeedItemCard(item, contentAreaEl, view, plugin);
+    } else {
+      renderFeedItemListStyle(item, contentAreaEl, view, plugin);
+    }
+  });  
 }
 
 export async function handleContentAreaClick(event: MouseEvent, view: FeedsReaderView, plugin: FeedsReaderPlugin): Promise<void> {
@@ -40,6 +99,13 @@ export async function handleContentAreaClick(event: MouseEvent, view: FeedsReade
   const titleElement = target.closest(".fr-item-title[data-action='toggle-item-content']") as HTMLElement;
 
   if (actionButton) {
+    // Keep keyboard-selection state in sync with the element the user just
+    // clicked so that they can seamlessly switch back to keyboard shortcuts.
+    const parentItem = actionButton.closest(".fr-item") as HTMLElement | null;
+    if (parentItem && parentItem.dataset.itemId) {
+      view.setSelectedItemById(parentItem.dataset.itemId);
+    }
+
     const action = actionButton.dataset.action;
     const itemId = actionButton.dataset.itemId;
     if (!itemId || !view.currentFeed) { new Notice("Action error: Missing context."); return; }
@@ -113,6 +179,11 @@ export async function handleContentAreaClick(event: MouseEvent, view: FeedsReade
     }
   } else if (titleElement) {
     const itemId = titleElement.dataset.itemId;
-    if (itemId) view.toggleItemExpansion(itemId);
+    if (itemId) {
+      // Update selection first, then toggle expansion so highlight + scroll
+      // position are correct even if the item moves due to re-rendering.
+      view.setSelectedItemById(itemId);
+      view.toggleItemExpansion(itemId);
+    }
   }
 }

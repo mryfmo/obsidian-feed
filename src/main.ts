@@ -1,3 +1,6 @@
+// Initialise debug logging behaviour **before** anything else executes
+import "./debug";
+
 import { Plugin, Notice, sanitizeHTMLToDom, WorkspaceLeaf, FileSystemAdapter } from "obsidian";
 import { FeedInfo, RssFeedContent, FeedsReaderSettings, RssFeedItem, RssFeedItemWithBlocks } from "./types";
 import { FeedsReaderView, VIEW_TYPE_FEEDS_READER } from "./view";
@@ -38,23 +41,21 @@ declare global {
 }
 
 const DEFAULT_SETTINGS: FeedsReaderSettings = {
+  mixedFeedView: false,
   nItemPerPage: 20, saveContent: false, saveSnippetNewToOld: true,
   showJot: true, showSnippet: true, showRead: true, showSave: true, showMath: true,
   showGPT: true, showEmbed: true, showFetch: true, showLink: true, showDelete: true,
+  showThumbnails: true,
   chatGPTApiKey: "", chatGPTPrompt: "Summarize the following content (max 4000 chars):\n\n{{content}}",
   chatGPTModel: "gpt-4o-mini",
   enableHtmlCache: true,
   htmlCacheDurationMinutes: 1440, // 24 hours
   enableAssetDownload: false,
-  assetDownloadPath: "feeds_assets" // Relative to plugin data directory  
+  assetDownloadPath: "feeds_assets", // Relative to plugin data directory
+  latestNOnly: false,
+  latestNCount: 0,
+  viewStyle: "card"
 };
-
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 export default class FeedsReaderPlugin extends Plugin {
   settings!: FeedsReaderSettings;
@@ -74,6 +75,10 @@ export default class FeedsReaderPlugin extends Plugin {
 
   private saveTimeout: number | null = null;
   private readonly SAVE_DEBOUNCE_MS = 2000; // Debounce save calls by 2 seconds
+
+  // --- Serialisation helpers for savePendingChanges ----------------------
+  private isSaving: boolean = false;       // true while an async save is running
+  private queuedSave: boolean = false;     // another save request arrived during save
 
 
   async onload() {
@@ -209,11 +214,19 @@ export default class FeedsReaderPlugin extends Plugin {
 
   /** Saves all pending changes marked in feedsStoreChangeList */
   async savePendingChanges(immediate = false): Promise<void> {
-    if (this.saveTimeout && !immediate) { // If an immediate save is not forced, let the timeout handle it
+    // If a save is already running, remember that another save is requested
+    // and exit early.  When the running save finishes it will immediately run
+    // another round to process the queued changes.
+    if (this.isSaving) {
+      this.queuedSave = true;
+      return;
+    }
+
+    if (this.saveTimeout && !immediate) {
       console.log("Save request ignored, waiting for debounce timeout.");
       return;
     }
-    if (this.saveTimeout && immediate) { // If immediate save forced, clear timeout
+    if (this.saveTimeout && immediate) {
       window.clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
@@ -224,35 +237,67 @@ export default class FeedsReaderPlugin extends Plugin {
       return;
     }
 
-    const feedsToSaveNow = new Set(this.feedsStoreChangeList); // Copy the set
-    console.log(`Saving pending changes for feeds: ${Array.from(feedsToSaveNow).join(', ')}`);
+    // Mark as saving **after** all early-return conditions pass
+    this.isSaving = true;
+
+    const feedsToSaveAttempt = new Set(this.feedsStoreChangeList); // Keep a copy of what we attempted to save
+    console.log(`Attempting to save pending changes for feeds: ${Array.from(feedsToSaveAttempt).join(', ')}`);
 
     try {
-      const successfullySaved = await saveFeedsData(this, feedsToSaveNow);
+      // saveFeedsData now returns a Set of successfully saved feed names
+      const successfullySavedFeeds = await saveFeedsData(this, feedsToSaveAttempt);
 
       // Update the main change list - remove successfully saved ones
-      successfullySaved.forEach(savedName => {
+      successfullySavedFeeds.forEach(savedName => {
         this.feedsStoreChangeList.delete(savedName);
       });
 
-      // If *all* pending changes were successfully saved, reset the flag
-      if (this.feedsStoreChangeList.size === 0) {
-        this.feedsStoreChange = false;
-        // console.log("All pending changes saved successfully. Change flag reset.");
-        new Notice("Feed data saved successfully.", 3000);  
-      } else {
-        console.warn(`${this.feedsStoreChangeList.size} feed(s) failed to save and remain pending.`);
-        // Keep feedsStoreChange = true
+      if (successfullySavedFeeds.size > 0 && successfullySavedFeeds.size === feedsToSaveAttempt.size) {
+        // All attempted feeds were saved successfully
+        new Notice("Feed data saved successfully.", 3000);
+        console.log(`savePendingChanges: All attempted feeds were saved successfully.`);
+      } else if (successfullySavedFeeds.size > 0) {
+        // Some feeds were saved, but some failed
+        const failedFeedsCount = feedsToSaveAttempt.size - successfullySavedFeeds.size;
+        new Notice(`${successfullySavedFeeds.size} feed(s) saved. ${failedFeedsCount} feed(s) failed to save.`, 5000);
+        console.log(`savePendingChanges: ${successfullySavedFeeds.size} feed(s) saved. ${failedFeedsCount} feed(s) failed to save.`);
+      } else if (feedsToSaveAttempt.size > 0) {
+        // No feeds were saved, though an attempt was made
+        // Errors within saveFeedsData for individual feeds should have already shown a Notice.
+        // This notice is a fallback or general summary if nothing got saved.
+        new Notice(`Failed to save data for ${feedsToSaveAttempt.size} feed(s). Check console for details.`, 7000);
+        console.log(`savePendingChanges: Failed to save data for ${feedsToSaveAttempt.size} feed(s). Check console for details.`);
       }
 
-      // Always save subscriptions after attempting feed data saves,
-      // as unread counts or 'updated' timestamps might have changed even if save failed for some feeds.
-      await saveSubscriptions(this, this.feedList); // Pass the current feedList
+      // If all *pending* changes were successfully processed (i.e., list is now empty or only contains feeds that failed), reset the flag
+      if (this.feedsStoreChangeList.size === 0) {
+        this.feedsStoreChange = false;
+      } else {
+        console.warn(`${this.feedsStoreChangeList.size} feed(s) remain in pending list after save attempt (these likely failed).`);
+        // Keep feedsStoreChange = true if there are still unsaved changes that failed
+      }
 
-    } catch (error) {
-      const errorMessage = "An error occurred while saving some feed data. Some changes might be lost. Please check the console for details.";
+      // Always try to save subscriptions, as unread counts might change even if feed data save failed for some
+      // saveSubscriptions will throw its own errors if it fails, which will be caught by the outer catch.
+      await saveSubscriptions(this, this.feedList);
+
+    } catch (error) { // Catch errors from saveSubscriptions or other unexpected issues during the process
+      const errorMessage = "An unexpected error occurred during the save process. Some changes might be lost.";
       console.error("FeedsReaderPlugin.savePendingChanges: Error during save process:", error);
-      new Notice(errorMessage, 7000);
+      new Notice(errorMessage + " Check console for details.", 7000);
+      // If the caller relies on this throwing, it needs adjustment.
+      // Based on previous changes, addNewFeed has its own try/catch for savePendingChanges.
+      throw error;
+    } finally {
+      // Mark save finished before possibly starting a queued one
+      this.isSaving = false;
+      if (this.queuedSave) {
+        // Clear the flag and immediately handle the queued request
+        this.queuedSave = false;
+        // We use `void` to ignore the returned promise; caller can await the
+        // original call.  Serialisation guarantee is maintained.
+        void this.savePendingChanges(true);
+      }
     }
   }
 
@@ -278,13 +323,12 @@ export default class FeedsReaderPlugin extends Plugin {
 
     let feedContent;
     try {
-      // getFeedItems is assumed to potentially throw FeedFetchError or FeedParseError
-      const tempFeedInfo: FeedInfo = { name, feedUrl: url, unread: 0, updated: 0, folder: "" }; // Temporary for getFeedItems
+      const tempFeedInfo: FeedInfo = { name, feedUrl: url, unread: 0, updated: 0, folder: "" };
       feedContent = await getFeedItems(this, tempFeedInfo, this.networkService, this.contentParserService, this.assetService);
-      feedContent.items.forEach(item => { if (!item.id) item.id = item.link || generateUUID(); });
     } catch (error: unknown) {
       if (error instanceof FeedFetchError || error instanceof FeedParseError) {
-        throw error; // Re-throw custom error from getFeedItems
+        console.log("Feed fetch or parse error, re-throwing.");
+        throw error; 
       }
       const internalMsg = `Error during getFeedItems for feed "${name}" from URL "${url}": ${(error instanceof Error) ? error.message : String(error)}`;
       const userMsg = `Could not retrieve or understand the feed from the URL. Please check the URL or try again later.`;
@@ -294,19 +338,28 @@ export default class FeedsReaderPlugin extends Plugin {
 
     const folderName = name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 50) || `feed_${Date.now()}`;
     const newFeedFolderRelative = `${FEEDS_STORE_BASE}/${folderName}`;
-    feedContent.folder = newFeedFolderRelative; // Ensure feedContent has the correct folder
+
+    // getFeedItems may already have determined the folder (e.g., for existing feeds).
+    // Only assign the default folder if it's not already set, to prevent duplicate creation.
+    if (!feedContent.folder) {
+      feedContent.folder = newFeedFolderRelative;
+    }
+
     const newFeed: FeedInfo = {
       name,
       feedUrl: url,
       unread: feedContent.items.filter(i => i.read === "0" && i.deleted === "0").length,
-      updated: Date.now(),
+      updated: Date.now(), // updated should reflect when the feed *metadata* was last known to be current
       folder: newFeedFolderRelative
     };
 
     const feedFolderPathAbsolute = `${this.feeds_reader_dir}/${newFeed.folder}`;
+    let folderCreated = false; 
+
     if (!(await this.app.vault.adapter.exists(feedFolderPathAbsolute))) {
       try {
         await this.app.vault.createFolder(feedFolderPathAbsolute);
+        folderCreated = true;
       } catch (folderError: unknown) {
         const internalMsg = `Failed to create storage folder "${feedFolderPathAbsolute}" for feed "${name}": ${(folderError instanceof Error) ? folderError.message : String(folderError)}`;
         const userMsg = `Could not create a storage folder for the new feed. Please check plugin permissions or disk space.`;
@@ -315,25 +368,47 @@ export default class FeedsReaderPlugin extends Plugin {
       }
     }
 
-    this.feedList.push(newFeed);
-    this.feedsStore[name] = feedContent;
-    this.feedsStoreChange = true;
-    this.feedsStoreChangeList.add(name);
-
     try {
-      await this.savePendingChanges(true); // Assumed to throw FeedStorageError on failure
-    } catch (saveError: unknown) {
-      if (saveError instanceof FeedStorageError) {
-        throw saveError;
-      }
-      const internalMsg = `Failed to save data for new feed "${name}" after adding to memory: ${(saveError instanceof Error) ? saveError.message : String(saveError)}`;
-      const userMsg = `The new feed was prepared but could not be saved permanently. It might be temporary. Please try saving again or check the console.`;
-      console.error(`FeedsReaderPlugin.addNewFeed: ${internalMsg}`, saveError);
-      throw new FeedStorageError(internalMsg, userMsg);
-    }
+      this.feedList.push(newFeed);
+      this.feedsStore[name] = feedContent; 
+      this.feedsStoreChangeList.add(name);
+      this.feedsStoreChange = true; 
 
-    this.refreshView();
-    new Notice(`Feed "${name}" added successfully.`); // Success notice remains here
+      console.log("Saving pending changes for new feed. Feed list:", this.feedList);
+
+      await this.savePendingChanges(true); // This will attempt to save this new feed and any other pending changes.
+      await saveSubscriptions(this, this.feedList); // Save the updated feedList
+
+      this.refreshView();
+      new Notice(`Feed "${name}" added successfully.`);
+
+    } catch (saveError: unknown) { // This catch is for errors explicitly thrown by savePendingChanges or other logic within this try block
+      console.error(`FeedsReaderPlugin.addNewFeed: Save operation failed for new feed "${name}". Initiating rollback.`, saveError);
+
+      const feedIndex = this.feedList.findIndex(f => f.name === newFeed.name && f.feedUrl === newFeed.feedUrl);
+      if (feedIndex > -1) {
+        this.feedList.splice(feedIndex, 1);
+      }
+      delete this.feedsStore[name];
+      this.feedsStoreChangeList.delete(name);
+      if (this.feedsStoreChangeList.size === 0) {
+        this.feedsStoreChange = false;
+      }
+
+      if (folderCreated && await this.app.vault.adapter.exists(feedFolderPathAbsolute)) {
+        try {
+          await this.app.vault.adapter.rmdir(feedFolderPathAbsolute, true);
+          console.log(`FeedsReaderPlugin.addNewFeed: Rolled back folder creation: ${feedFolderPathAbsolute}`);
+        } catch (rmdirError) {
+          console.warn(`FeedsReaderPlugin.addNewFeed: Failed to roll back folder creation ${feedFolderPathAbsolute}:`, rmdirError);
+        }
+      }
+
+      // Re-throw as FeedStorageError for consistent error handling by the caller (e.g. AddFeedModal)
+      const internalMsg = `Failed to save new feed "${name}" to persistent storage. ${(saveError instanceof Error) ? saveError.message : String(saveError)}`;
+      const userMsg = `Could not save the new feed "${name}" permanently. Changes may have been rolled back.`;
+      throw new FeedStorageError(internalMsg, userMsg); 
+    }
   }
 
   async markAllRead(feedName: string): Promise<void> {
@@ -561,7 +636,6 @@ export default class FeedsReaderPlugin extends Plugin {
     if (!this.feedsStore[feedName]) {
       const feedMeta = this.feedList.find(f => f.name === feedName);
       if (feedMeta) {
-        // console.log(`Data for ${feedName} not in cache, loading...`); // Less verbose
         const loadedData = await loadFeedsStoredData(this, feedMeta);
         this.feedsStore[feedName] = loadedData; // Update cache
         return loadedData;

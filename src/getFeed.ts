@@ -6,19 +6,60 @@ import { NetworkService, NetworkError } from './networkService';
 import { ContentParserService } from "./contentParserService";
 import FeedsReaderPlugin from "./main";
 import { AssetService } from "./assetService";
+import { generateDeterministicItemId, generateRandomUUID } from "./utils";
 
 const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (HTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    // eslint-disable-next-line no-var
-    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
 export function getCurrentIsoDateTime(): string {
   return new Date().toISOString();
+}
+
+// Define the shape for image objects, allowing url to be optional for broader compatibility initially
+type ImageObject = { url?: string; [key: string]: unknown }; // Use unknown instead of any for better type safety
+type ImageShape = string | ImageObject | Array<ImageObject>;
+
+// ---------------------------------------------------------------------------
+// Image URL normalization & sanitization
+// ---------------------------------------------------------------------------
+
+/**
+ * Very small allow-list based check to avoid XSS vectors such as
+ * `javascript:alert(1)` being injected via the `src` attribute of an <img>.
+ *
+ * • Allows full http/https URLs
+ * • Allows protocol-relative URLs starting with //
+ * • Rejects all other schemes (data:, javascript:, etc.) and relative paths –
+ *   those would need to be resolved first in caller code using absolute()
+ */
+function isSafeImageUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /^(https?:)?\/\//i.test(trimmed);
+}
+
+function normalizeImage(img?: ImageShape | null): string | undefined {
+  if (!img) return undefined;
+
+  // Handle string input directly.
+  if (typeof img === "string") {
+    return isSafeImageUrl(img) ? img : undefined;
+  }
+
+  // Handle array of image objects.
+  if (Array.isArray(img)) {
+    const found = img.find(
+      (item): item is ImageObject & { url: string } =>
+        item && typeof item === "object" && typeof (item as ImageObject).url === "string" &&
+        isSafeImageUrl((item as ImageObject).url as string),
+    );
+    return found?.url;
+  }
+
+  // Handle single image object.
+  if (typeof img === "object" && img !== null && typeof img.url === "string") {
+    return isSafeImageUrl(img.url) ? img.url : undefined;
+  }
+
+  return undefined;
 }
 
 function sanitizeFeedNameForFolderName(feedName: string): string { // Keep this utility
@@ -97,13 +138,14 @@ export async function getFeedItems(
       lastBuildDate?: string;
       updated?: string;
       pubDate?: string;
-      items?: PotentialItem[]; // Use PotentialItem[] instead of any[]
+      items?: PotentialItem[];
     };
     const typedFeedData = feedData as PotentialFeedData;
 
     const feedTitle = typedFeedData.title || feedName;
     const feedLink = typedFeedData.link || feedUrl;
-    const feedImage = typedFeedData.image?.url || typedFeedData.logo || typedFeedData.icon;
+    const feedImageInput = typedFeedData.image as ImageShape | undefined;
+    const feedImage = normalizeImage(feedImageInput) || typedFeedData.logo || typedFeedData.icon;
     const feedDescription = typedFeedData.description || typedFeedData.subtitle;
     const feedPubDate = parseDateString(typedFeedData.lastBuildDate || typedFeedData.updated || typedFeedData.pubDate);
 
@@ -140,8 +182,9 @@ export async function getFeedItems(
       pubDate?: string;
       isoDate?: string;
       published?: string;
-      updated?: string; 
+      updated?: string;
       categories?: string | string[];
+      image?: ImageShape;
     };
 
     for (const rawItem of feedData.items) {
@@ -153,16 +196,22 @@ export async function getFeedItems(
         continue;
       }
 
-      const itemId = rawItem.guid || rawItem.id || itemLink || generateUUID();
+      const itemId =
+        rawItem.guid ||
+        rawItem.id ||
+        generateDeterministicItemId(itemLink) ||
+        generateRandomUUID();
       const itemContentHtml = rawItem.content || rawItem.contentSnippet || rawItem['content:encoded'] || rawItem.summary || rawItem.description || "";
       const itemCreator = rawItem.creator || rawItem['dc:creator'] || (typeof rawItem.author === 'string' ? rawItem.author : rawItem.author?.name);
       const itemPubDate = parseDateString(rawItem.pubDate || rawItem.isoDate || rawItem.published || (rawItem as PotentialItem).updated); // Cast here if needed
       const itemCategories = Array.isArray(rawItem.categories) ? rawItem.categories.join(', ') : (typeof rawItem.categories === 'string' ? rawItem.categories : "");
+      const itemImage = normalizeImage(rawItem.image);
 
       const feedItem: RssFeedItemWithBlocks = {
         id: itemId,
         title: itemTitle,
         link: itemLink,
+        image: itemImage,
         content: "", // Will be populated with Markdown from blocks
         category: itemCategories,
         creator: (typeof itemCreator === 'string' ? itemCreator : (itemCreator as { name?: string })?.name) ?? '', // Provide fallback for undefined

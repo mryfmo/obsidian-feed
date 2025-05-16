@@ -11,6 +11,7 @@ export interface FeedInfo {
 
 /** Plugin settings structure. */
 export interface FeedsReaderSettings {
+  mixedFeedView: boolean;
   nItemPerPage: number;
   saveContent: boolean;
   saveSnippetNewToOld: boolean;
@@ -24,13 +25,17 @@ export interface FeedsReaderSettings {
   showFetch: boolean;
   showLink: boolean;
   showDelete: boolean;
+  showThumbnails: boolean;
   chatGPTApiKey: string;
   chatGPTPrompt: string;
   chatGPTModel?: string;
   enableHtmlCache?: boolean;
   htmlCacheDurationMinutes?: number;
   enableAssetDownload?: boolean;
-  assetDownloadPath?: string;  
+  assetDownloadPath?: string;
+  latestNOnly: boolean;
+  latestNCount: number;
+  viewStyle: "card" | "list";
 }
 
 /** Schema for individual feed item entries. */
@@ -40,11 +45,19 @@ export const RssFeedItemSchema = z.object({
   content: z.string(),
   category: z.string(),
   link: z.string(),
+  image: z
+    .union([
+      z.string(),
+      z.object({ url: z.string() }).passthrough(),
+      z.array(z.object({ url: z.string() }).passthrough())
+    ])
+    .optional(),
   creator: z.string(),
   pubDate: z.string(),
   read: z.string(),
   deleted: z.string(),
-  downloaded: z.string()
+  downloaded: z.string(),
+  __sourceFeed: z.string().optional() // Source feed name
 });
 export type RssFeedItem = z.infer<typeof RssFeedItemSchema>;
 
@@ -54,7 +67,13 @@ export const RssFeedContentSchema = z.object({
   title: z.string(),
   name: z.string(),
   link: z.string(),
-  image: z.string().optional(),
+  image: z
+    .union([
+      z.string(),
+      z.object({ url: z.string() }).passthrough(),
+      z.array(z.object({ url: z.string() }).passthrough())
+    ])
+    .optional(),  
   folder: z.string(),
   description: z.string().optional(),
   pubDate: z.string().optional(),

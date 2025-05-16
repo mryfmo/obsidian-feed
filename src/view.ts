@@ -5,6 +5,8 @@ import { renderControlsBar } from "./view/components/ControlsBarComponent";
 import { renderFeedNavigation } from "./view/components/FeedNavigationComponent";
 import { renderFeedItemsList, handleContentAreaClick as handleItemsListClick } from "./view/components/FeedItemsListComponent";
 import { renderSingleItemContent } from "./view/components/FeedItemCardComponent";
+import { isVisibleItem } from "./utils";
+import { RssFeedItem } from "./types";
 
 export const VIEW_TYPE_FEEDS_READER = "feeds-reader-view";
 
@@ -17,10 +19,42 @@ export class FeedsReaderView extends ItemView {
   private currentPage: number = 0;
   public undoList: UndoAction[] = [];
   public expandedItems: Set<string> = new Set();
+  private selectedIndex: number = -1; // index within currently rendered page
+  private focusArea: 'content' | 'nav' = 'content';
+  private navSelectedIndex: number = 0;
   private readonly MAX_UNDO_STEPS = 20;
+
+  /** Cached scroll callback so we attach it only once per view lifecycle. */
+  private _scrollCb?: () => void;
 
   public itemsPerPage = 20;
   private navHidden = false;
+
+  /**
+   * Returns the list of items currently in scope for the view, already filtered
+   * by `showAll` (read / deleted) flag.  This is used both for pagination
+   * calculations and for actual rendering (via `renderFeedContent`).  Keeping
+   * the logic in one place guarantees that the two stay in sync.
+   */
+  private getVisibleItems(): Array<RssFeedItem & { __sourceFeed?: string }> {
+    let pool: Array<RssFeedItem & { __sourceFeed?: string }> = [];
+
+    if (this.plugin.settings.mixedFeedView) {
+      for (const feed of Object.values(this.plugin.feedsStore)) {
+        const title = feed.title || "(unknown)";
+        pool = pool.concat(
+          feed.items.map(item => ({ ...item, __sourceFeed: title }))
+        );
+      }
+    } else {
+      if (!this.currentFeed) return [];
+      const feedContent = this.plugin.feedsStore[this.currentFeed];
+      if (!feedContent) return [];
+      pool = [...feedContent.items];
+    }
+
+    return pool.filter(i => isVisibleItem(i, this.showAll));
+  }
 
   // UI References
   private controlsEl!: HTMLElement;
@@ -29,7 +63,7 @@ export class FeedsReaderView extends ItemView {
   public actionIconsGroupEl!: HTMLElement; // Made public for components
 
   // Plugin Reference
-  private plugin: FeedsReaderPlugin;
+  public plugin: FeedsReaderPlugin;
 
   constructor(leaf: WorkspaceLeaf, plugin: FeedsReaderPlugin) {
     super(leaf);
@@ -78,6 +112,17 @@ export class FeedsReaderView extends ItemView {
 
     this.renderFeedList();
     this.registerDomEvent(this.contentAreaEl, "click", (event) => handleItemsListClick(event, this, this.plugin));
+
+    // Register a single scroll listener for reading-progress updates. Guard to
+    // ensure we don't attach multiple listeners if onOpen somehow executes
+    // more than once (shouldn't happen, but defensive).
+    if (!this._scrollCb) {
+      this._scrollCb = () => this.updateReadingProgress();
+      this.registerDomEvent(this.contentAreaEl, "scroll", this._scrollCb);
+    }
+
+    // Keyboard navigation
+    this.registerDomEvent(this.containerEl.ownerDocument, "keydown", (e: KeyboardEvent) => this.handleKeyDown(e));
   }
 
   public createControlButtons(): void {
@@ -89,25 +134,49 @@ export class FeedsReaderView extends ItemView {
   }
 
   public nextPage() {
-    if (!this.currentFeed || !this.plugin.feedsStore[this.currentFeed]?.items) { new Notice("No feed selected."); return;}
-    const feedContent = this.plugin.feedsStore[this.currentFeed];
-    const itemsToShow = this.showAll ? feedContent.items : feedContent.items.filter(i => i.read === "0" && i.deleted === "0");
-    const totalPages = Math.ceil(itemsToShow.length / this.itemsPerPage);
-    if (this.currentPage < totalPages - 1) { this.currentPage++; this.renderFeedContent(); }
-    else if (totalPages > 0) { new Notice("You are on the last page."); } // Only show if there are pages
-    else { new Notice("No items to paginate."); }
+    const items = this.getVisibleItems();
+    if (items.length === 0) {
+      new Notice("No items to paginate.");
+      return;
+    }
+
+    const totalPages = Math.ceil(items.length / this.itemsPerPage);
+    if (this.currentPage < totalPages - 1) {
+      this.currentPage++;
+      this.renderFeedContent();
+    } else {
+      new Notice("You are on the last page.");
+    }
   }
   public prevPage() {
-    if (this.currentPage > 0) { this.currentPage--; this.renderFeedContent(); }
-    else {
-      const feedContent = this.plugin.feedsStore[this.currentFeed!]; // Should be safe if currentFeed is set
-      if (feedContent?.items?.length > 0) new Notice("You are on the first page."); // Only show if there are items
-    }  
+    if (this.currentPage > 0) {
+      this.currentPage--;
+      this.renderFeedContent();
+    } else {
+      // Only notify if there is at least one page worth of items
+      if (this.getVisibleItems().length > 0) {
+        new Notice("You are on the first page.");
+      }
+    }
   }
 
   public renderFeedContent(): void {
+    const contentEl = this.contentAreaEl;
+    contentEl.empty();
+
+    const items = this.getVisibleItems();
+
+    if (!this.plugin.settings.mixedFeedView && !this.currentFeed) {
+      contentEl.setText("No feed selected to display items.");
+      return;
+    }
+
     if (!this.contentAreaEl ) { console.warn("Content area not ready."); return; }
-      renderFeedItemsList(this.contentAreaEl, this, this.plugin);
+      renderFeedItemsList(this.contentAreaEl, items, this, this.plugin);
+
+    // reset selection to first item of page
+    this.selectedIndex = 0;
+    this.highlightSelected();
   }
 
   public toggleItemExpansion(itemId: string): void {
@@ -131,6 +200,11 @@ export class FeedsReaderView extends ItemView {
           }
         }
       }
+
+      // Ensure the clicked/expanded item becomes the current selection so
+      // subsequent keyboard actions operate on the same element the user just
+      // interacted with using the mouse.
+      this.setSelectedItemById(itemId);
     }
   }
 
@@ -163,6 +237,186 @@ export class FeedsReaderView extends ItemView {
     this.undoList = []; // Clear undo for the new feed
     this.expandedItems = new Set(); // Clear expanded items
     this.updateUndoButtonState();
+  }
+
+  // ---------------- Keyboard Navigation ------------------
+  private handleKeyDown(e: KeyboardEvent): void {
+    // Only act if this view is the active workspace leaf
+    if (this.app.workspace.getActiveViewOfType(FeedsReaderView) !== this) return;
+
+    // Ignore if input/textarea is focused
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || (active as HTMLElement).isContentEditable)) return;
+
+    const key = e.key;
+    // Allow tab to toggle focus between nav and content
+    if (key === "Tab") {
+      e.preventDefault();
+      this.toggleFocusArea();
+      return;
+    }
+
+    const jOrDown = key === "j" || key === "ArrowDown";
+    const kOrUp = key === "k" || key === "ArrowUp";
+    const enterOrO = key === "Enter" || key === "o";
+    const markKey = key === "r";
+    const delKey = key === "d";
+    const nextPageKey = key === "PageDown" || key === " "; // space
+    const prevPageKey = key === "PageUp";
+
+    if (!(jOrDown || kOrUp || enterOrO || markKey || delKey || nextPageKey || prevPageKey)) return;
+    if (this.focusArea === 'nav') {
+      this.handleNavKey(jOrDown, kOrUp, enterOrO);
+      return;
+    }
+
+    // Prevent default to keep page from scrolling etc.
+    e.preventDefault();
+
+    if (nextPageKey) { this.nextPage(); this.selectedIndex = 0; this.highlightSelected(); return; }
+    if (prevPageKey) { this.prevPage(); this.selectedIndex = 0; this.highlightSelected(); return; }
+
+    const currentItems = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    if (currentItems.length === 0) return;
+
+    if (this.selectedIndex < 0 || this.selectedIndex >= currentItems.length) {
+      this.selectedIndex = 0;
+    }
+
+    if (jOrDown) {
+      if (this.selectedIndex < currentItems.length - 1) {
+        this.selectedIndex++;
+        this.highlightSelected();
+      } else { // end of list, advance page
+        this.nextPage();
+        this.selectedIndex = 0; this.highlightSelected();
+      }
+      return;
+    }
+
+    if (kOrUp) {
+      if (this.selectedIndex > 0) {
+        this.selectedIndex--; this.highlightSelected();
+      } else { // top of list, previous page
+        const prevPage = this.currentPage;
+        this.prevPage();
+        if (this.currentPage !== prevPage) {
+          const itemsAfter = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+          this.selectedIndex = itemsAfter.length - 1;
+          this.highlightSelected();
+        }
+      }
+      return;
+    }
+
+    const selectedItemEl = currentItems[this.selectedIndex];
+    const itemId = selectedItemEl?.dataset.itemId;
+    if (!itemId || !this.currentFeed) return;
+
+    if (enterOrO) {
+      this.toggleItemExpansion(itemId);
+      return;
+    }
+
+    if (markKey) {
+      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+      if (item) {
+        this.plugin.markItemReadState(this.currentFeed, itemId, item.read === "0");
+        this.renderFeedContent();
+        this.highlightSelected();
+      }
+      return;
+    }
+
+    if (delKey) {
+      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+      if (item) {
+        this.plugin.markItemDeletedState(this.currentFeed, itemId, item.deleted === "0");
+        this.renderFeedContent();
+        this.highlightSelected();
+      }
+    }
+  }
+
+  /**
+   * Updates the internally tracked selection (used for keyboard navigation)
+   * based on the DOM element that was interacted with.
+   * This keeps mouse and keyboard interaction in sync so that a user can
+   * freely switch between the two without losing context.
+   */
+  public setSelectedItemById(itemId: string): void {
+    if (!this.contentAreaEl) return;
+    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    const idx = items.findIndex(el => el.dataset.itemId === itemId);
+    if (idx !== -1) {
+      this.selectedIndex = idx;
+      this.highlightSelected();
+    }
+  }
+
+  private highlightSelected(): void {
+    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    items.forEach((el, idx) => {
+      if (idx === this.selectedIndex) el.classList.add("fr-item-selected");
+      else el.classList.remove("fr-item-selected");
+    });
+
+    const selectedEl = items[this.selectedIndex];
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  private toggleFocusArea(): void {
+    if (this.focusArea === 'content') {
+      // switch to nav if visible
+      if (!this.navEl.hidden) {
+        this.focusArea = 'nav';
+        this.highlightNav();
+      }
+    } else {
+      this.focusArea = 'content';
+      this.clearNavHighlight();
+      this.highlightSelected();
+    }
+  }
+
+  private handleNavKey(down: boolean, up: boolean, enter: boolean): void {
+    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item"));
+    if (feeds.length === 0) return;
+
+    if (down) {
+      this.navSelectedIndex = (this.navSelectedIndex + 1) % feeds.length;
+      this.highlightNav(); return;
+    }
+    if (up) {
+      this.navSelectedIndex = (this.navSelectedIndex - 1 + feeds.length) % feeds.length;
+      this.highlightNav(); return;
+    }
+    if (enter) {
+      const el = feeds[this.navSelectedIndex];
+      el.click();
+      this.focusArea = 'content';
+      this.selectedIndex = 0;
+      this.highlightSelected();
+    }
+  }
+
+  private highlightNav(): void {
+    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item"));
+    if (feeds.length === 0) return;
+    if (this.navSelectedIndex >= feeds.length) this.navSelectedIndex = feeds.length - 1;
+    if (this.navSelectedIndex < 0) this.navSelectedIndex = 0;
+
+    feeds.forEach((el, idx) => {
+      if (idx === this.navSelectedIndex) el.classList.add("fr-feed-item-selected");
+      else el.classList.remove("fr-feed-item-selected");
+    });
+    feeds[this.navSelectedIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  private clearNavHighlight(): void {
+    this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item-selected").forEach(el => el.classList.remove("fr-feed-item-selected"));
   }
 
   public resetToDefaultState(): void {
@@ -204,4 +458,45 @@ export class FeedsReaderView extends ItemView {
     if (actionUndone) { this.refreshView(); new Notice(noticeMessage || "Action undone."); }
     else { if(lastAction) this.pushUndo(lastAction); new Notice("Could not undo: Item state or context issue."); }
   }  
+
+  public updateReadingProgress(): void {
+    if (!this.contentAreaEl) return;
+    const container = this.contentAreaEl;
+    // No need for manual scroll position math; bounding rect handles it.
+    const items = container.querySelectorAll('.fr-item');
+    items.forEach(itemDiv => {
+      const contentEl = itemDiv.querySelector('.fr-item-content') as HTMLElement;
+      const progressEl = itemDiv.querySelector('.fr-item-progress') as HTMLElement;
+      if (!contentEl || !progressEl) return;
+      if (contentEl.hidden) {
+        progressEl.hidden = true;
+      } else {
+        progressEl.hidden = false;
+        // Calculate intersection between the item and the viewport using
+        // bounding rectangles so that nested offset contexts and transforms
+        // are handled correctly.
+        const containerRect = container.getBoundingClientRect();
+        const contentRect = contentEl.getBoundingClientRect();
+
+        let percent: number;
+        if (contentRect.bottom <= containerRect.top) {
+          // Item is completely above the viewport – treat as fully read.
+          percent = 100;
+        } else if (contentRect.top >= containerRect.bottom) {
+          // Item is completely below the viewport – not started.
+          percent = 0;
+        } else {
+          // Partial intersection.
+          const intersectHeight = Math.max(
+            0,
+            Math.min(containerRect.bottom, contentRect.bottom) -
+              Math.max(containerRect.top, contentRect.top),
+          );
+
+          percent = contentRect.height === 0 ? 0 : (intersectHeight / contentRect.height) * 100;
+        }
+        progressEl.textContent = Math.floor(percent) + '%';
+      }
+    });
+  }
 }

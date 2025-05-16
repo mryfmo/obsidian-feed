@@ -66,7 +66,82 @@ export class FeedReaderSettingTab extends PluginSettingTab {
       });
 
     /* UI Buttons Settings */
-    containerEl.createEl("h3", { text: "Item Action Buttons Visibility" });
+    containerEl.createEl("h3", { text: "Display Options" });
+
+    // ---------------------------------------------------------------------
+    // Latest-N auto-expand settings
+    // ---------------------------------------------------------------------
+
+    // We need a mutable reference because the toggle is defined *before* the
+    // numeric input; initialise with null to satisfy definite-assignment.
+    let latestNCountSetting: Setting | null = null;
+
+    new Setting(containerEl)
+      .setName("Only expand latest N articles")
+      .setDesc("When enabled, only the most recent N articles will be auto-expanded. Others remain collapsed.")
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.latestNOnly);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.latestNOnly = value;
+          await this.plugin.saveSettings();
+          if (latestNCountSetting) {
+            latestNCountSetting.settingEl.style.display = value ? "" : "none";
+          }
+        });
+      });
+
+    latestNCountSetting = new Setting(containerEl)
+      .setName("Number of articles to auto-expand")
+      .setDesc("Specify how many recent articles to expand automatically.")
+      .addText(text => {
+        text.inputEl.type = "number";
+        text.setValue(this.plugin.settings.latestNCount.toString());
+        text.onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num >= 0) {
+            this.plugin.settings.latestNCount = num;
+            await this.plugin.saveSettings();
+          }
+        });
+      });
+    latestNCountSetting.settingEl.style.display = this.plugin.settings.latestNOnly ? "" : "none";
+
+    new Setting(containerEl)
+      .setName("Display style")
+      .setDesc("Choose between card or list view.")
+      .addDropdown(drop => {
+        drop.addOption("card", "Card View")
+            .addOption("list", "List View")
+            .setValue(this.plugin.settings.viewStyle)
+            .onChange(async (value) => {
+              this.plugin.settings.viewStyle = value as FeedsReaderSettings['viewStyle'];
+              await this.plugin.saveSettings();
+            });
+      });
+
+    new Setting(containerEl)
+      .setName("Show thumbnails")
+      .setDesc("Display preview images if available.")
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.showThumbnails);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.showThumbnails = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+      new Setting(containerEl)
+      .setName("Unified Feed View")
+      .setDesc("If enabled, displays items from all feeds in a single timeline.")
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.mixedFeedView);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.mixedFeedView = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    containerEl.createEl("h3", { text: "Item Action Buttons Visibility" });    
     const buttonSettings: Array<{ key: BooleanSettingKey; name: string; desc: string }> = [
       { key: "showJot", name: "Show Jot Button", desc: "Show 'Jot' quick note button." },
       { key: "showSnippet", name: "Show Snippet Button", desc: "Show 'Snippet' button to save item to snippets note." },
@@ -95,6 +170,12 @@ export class FeedReaderSettingTab extends PluginSettingTab {
 
     /* Content Fetching & Caching Settings */
     containerEl.createEl("h3", { text: "Content Fetching & Caching" });
+    // ---------------------------------------------------------------------
+    // HTML cache settings – toggle + duration input
+    // ---------------------------------------------------------------------
+
+    let cacheDurationSetting: Setting | null = null;
+
     new Setting(containerEl)
       .setName("Enable HTML Cache")
       .setDesc("Cache fetched HTML content locally to reduce redundant requests and improve loading speed.")
@@ -103,12 +184,13 @@ export class FeedReaderSettingTab extends PluginSettingTab {
         toggle.onChange(async (value) => {
           this.plugin.settings.enableHtmlCache = value;
           await this.plugin.saveSettings();
-          // Show/hide cache duration setting based on this toggle
-          cacheDurationSetting.settingEl.style.display = value ? "" : "none";
+          if (cacheDurationSetting) {
+            cacheDurationSetting.settingEl.style.display = value ? "" : "none";
+          }
         });
       });
 
-    const cacheDurationSetting = new Setting(containerEl)
+    cacheDurationSetting = new Setting(containerEl)
       .setName("HTML Cache Duration (minutes)")
       .setDesc("How long to keep cached HTML content before re-fetching. Default is 1440 minutes (24 hours).")
       .addText(text => {
@@ -130,6 +212,12 @@ export class FeedReaderSettingTab extends PluginSettingTab {
     // Initially hide cache duration if caching is disabled
     cacheDurationSetting.settingEl.style.display = (this.plugin.settings.enableHtmlCache ?? true) ? "" : "none";
 
+    // ---------------------------------------------------------------------
+    // Asset download settings – toggle + path input
+    // ---------------------------------------------------------------------
+
+    let assetPathSetting: Setting | null = null;
+
     new Setting(containerEl)
       .setName("Enable Asset Downloading")
       .setDesc("Download images and videos found in feed items to your vault (within plugin's data folder). URLs in content will be updated to local paths.")
@@ -138,11 +226,13 @@ export class FeedReaderSettingTab extends PluginSettingTab {
         toggle.onChange(async (value) => {
           this.plugin.settings.enableAssetDownload = value;
           await this.plugin.saveSettings();
-          assetPathSetting.settingEl.style.display = value ? "" : "none";
+          if (assetPathSetting) {
+            assetPathSetting.settingEl.style.display = value ? "" : "none";
+          }
         });
       });
 
-    const assetPathSetting = new Setting(containerEl)
+    assetPathSetting = new Setting(containerEl)
       .setName("Asset Download Path")
       .setDesc("Subdirectory within the plugin's data folder to store downloaded assets (e.g., 'feeds_assets').")
       .addText(text => text
@@ -192,12 +282,12 @@ export class FeedReaderSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "Advanced ChatGPT Settings" });
     new Setting(containerEl)
         .setName("ChatGPT Model")
-        .setDesc("Specify the ChatGPT model to use (e.g., gpt-4o-mini, gpt-4, gpt-3.5-turbo). Default is gpt-4o-mini.")
+        .setDesc("Specify the ChatGPT model to use (e.g., gpt-4.1-nano, gpt-4o-mini). Default is gpt-4.1-nano.")
         .addText(text => {
-          text.setPlaceholder("gpt-4o-mini")
-            .setValue(this.plugin.settings.chatGPTModel || "gpt-4o-mini") // Provide default if not set
+          text.setPlaceholder("gpt-4.1-nano")
+            .setValue(this.plugin.settings.chatGPTModel || "gpt-4.1-nano") // Provide default if not set
             .onChange(async (value) => {
-              this.plugin.settings.chatGPTModel = value.trim() || "gpt-4o-mini"; // Ensure it's not empty
+              this.plugin.settings.chatGPTModel = value.trim() || "gpt-4.1-nano"; // Ensure it's not empty
               await this.plugin.saveSettings();
             });
         });

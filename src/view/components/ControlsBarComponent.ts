@@ -5,7 +5,17 @@ import { FRAddFeedModal } from "../../addFeedModal";
 import { FRManageFeedsModal } from "../../manageFeedsModal";
 import { FRSearchModal } from "../../searchModal";
 import { getFeedItems } from "../../getFeed";
-import { generateUUID } from "../utils";
+import { generateDeterministicItemId, generateRandomUUID } from "../../utils";
+import type { RssFeedItem } from "../../types";
+
+// Utility: ensure an item has a deterministic ID and return it
+function resolveItemId(item: RssFeedItem): string {
+  if (item.id) return item.id;
+
+  const base = (item.link || item.title || "") + (item.pubDate ?? "") + (item.content || "").substring(0, 100);
+  item.id = generateDeterministicItemId(base) || generateRandomUUID();
+  return item.id;
+}
 
 export function renderControlsBar(
   controlsEl: HTMLElement,
@@ -29,20 +39,32 @@ export function renderControlsBar(
     let changesMadeOverall = false; let feedsSuccessfullyUpdated = 0; let feedsFailedToUpdate = 0;
     const updatePromises = plugin.feedList.map(async (feedInfo) => {
       try {
-        // Pass the plugin instance and services to getFeedItems
         const newFeedContent = await getFeedItems(plugin, feedInfo, plugin.networkService, plugin.contentParserService, plugin.assetService);
         const existingFeed = plugin.feedsStore[feedInfo.name];
         let newItemsCount = 0; let feedChanged = false;
         if (existingFeed?.items) {
-          const existingItemIds = new Set(existingFeed.items.map(item => item.id || item.link || generateUUID()));
-          const freshItems = newFeedContent.items.filter(newItem => { if(!newItem.id) newItem.id=newItem.link||generateUUID(); return !existingItemIds.has(newItem.id); });
-          if(freshItems.length > 0) { freshItems.forEach(n=>{if(!n.id)n.id=n.link||generateUUID()}); existingFeed.items.unshift(...freshItems); newItemsCount = freshItems.length; feedChanged = true; }
+          // 1) Build a Set of existing IDs (once per item)
+          const existingItemIds = new Set(existingFeed.items.map(resolveItemId));
+
+          // 2) Ensure each incoming item has an ID and filter new ones in a single pass
+          const freshItems: typeof newFeedContent.items = [];
+          for (const newItem of newFeedContent.items) {
+            const id = resolveItemId(newItem);
+            if (!existingItemIds.has(id)) freshItems.push(newItem);
+          }
+
+          // 3) Merge if there is anything new
+          if (freshItems.length) {
+            existingFeed.items.unshift(...freshItems);
+            newItemsCount = freshItems.length;
+            feedChanged = true;
+          }
           if(existingFeed.title !== newFeedContent.title || existingFeed.description !== newFeedContent.description || existingFeed.image !== newFeedContent.image) { existingFeed.title=newFeedContent.title; existingFeed.description=newFeedContent.description; existingFeed.image=newFeedContent.image; feedChanged = true; }
           existingFeed.pubDate=newFeedContent.pubDate;
-          existingFeed.items.forEach(i=>{if(!i.id)i.id=i.link||generateUUID()});
+          existingFeed.items.forEach(resolveItemId);
           feedInfo.unread = existingFeed.items.filter(i=>i.read==="0"&&i.deleted==="0").length;
         } else {
-          newFeedContent.items.forEach(i=>{if(!i.id)i.id=i.link||generateUUID()});
+          newFeedContent.items.forEach(resolveItemId);
           plugin.feedsStore[feedInfo.name] = newFeedContent;
           feedInfo.unread = newFeedContent.items.filter(i=>i.read==="0"&&i.deleted==="0").length;
           newItemsCount = newFeedContent.items.length; feedChanged = true;

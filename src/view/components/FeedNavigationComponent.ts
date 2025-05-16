@@ -29,6 +29,10 @@ export function renderFeedNavigation(
           view.currentFeed = null; view.createControlButtons(); view['renderFeedList'](); return;
         }
         view.currentFeed = feedName;
+        // Update keyboard-navigation index so that the newly clicked feed is
+        // treated as the current selection when the user switches back to
+        // keyboard control.
+        view['navSelectedIndex'] = sortedFeedList.findIndex(f => f.name === feedName);
         view.resetFeedSpecificViewState();
         view['renderFeedList'](); view.renderFeedContent(); view.createControlButtons();
       } catch (error: unknown) {

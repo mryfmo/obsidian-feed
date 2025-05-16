@@ -12,8 +12,6 @@ export class PluginApi {
       // max_tokens: 1000, // Consider adding max_tokens if summaries are too long or costly
     };
 
-    // console.log("Sending to OpenAI:", JSON.stringify(body, null, 2).substring(0, 500)); // Log request body for debugging, can be verbose
-
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
