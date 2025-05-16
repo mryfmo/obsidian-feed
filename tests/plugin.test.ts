@@ -324,8 +324,8 @@ describe("FeedsReaderPlugin", () => {
        });
    });
 
-    describe("Method Interaction (Save/Load after state changes)", () => {
-        it("should save/load read state changes", async () => {
+  describe("Method Interaction (Save/Load after state changes)", () => {
+      it("should save/load read state changes", async () => {
             setupTestDataForPlugin();
             plugin.markItemReadState("TestFeed", "item1", true);
             expect(plugin.feedsStoreChange).toBe(true);
@@ -347,7 +347,85 @@ describe("FeedsReaderPlugin", () => {
             const loadedData = await DataFuncs.loadFeedsStoredData(plugin, plugin.feedList[0]);
             expect(loadedData?.items.find(i => i.id === "item1")?.read).not.toBe("0");
             expect(loadedData?.items.find(i => i.id === "item2")?.read).toBe("0");
-        });
+      });
+  });
+
+  describe("updating multiple feeds", () => {
+    it("updates sequentially and preserves read flags", async () => {
+      const feed1 = { name: "FeedOne", feedUrl: "http://one.com", unread: 1, updated: 0, folder: `${FEEDS_STORE_BASE}/FeedOne` };
+      const feed2 = { name: "FeedTwo", feedUrl: "http://two.com", unread: 1, updated: 0, folder: `${FEEDS_STORE_BASE}/FeedTwo` };
+      plugin.feedList = [feed1, feed2];
+      plugin.feedsStore = {
+        FeedOne: {
+          name: "FeedOne",
+          title: "F1",
+          link: "http://one.com",
+          folder: feed1.folder,
+          items: [
+            { id: "a1", title: "A1", read: "0", deleted: "0", link: "l1", content: "c1", category: "", creator: "", pubDate: "p1", downloaded: "0" },
+            { id: "a2", title: "A2", read: "old", deleted: "0", link: "l2", content: "c2", category: "", creator: "", pubDate: "p2", downloaded: "0" }
+          ]
+        },
+        FeedTwo: {
+          name: "FeedTwo",
+          title: "F2",
+          link: "http://two.com",
+          folder: feed2.folder,
+          items: [
+            { id: "b1", title: "B1", read: "0", deleted: "0", link: "l3", content: "c3", category: "", creator: "", pubDate: "p3", downloaded: "0" }
+          ]
+        }
+      };
+
+      const ensureSpy = vi.spyOn(plugin, "ensureFeedDataLoaded").mockImplementation(async (n) => plugin.feedsStore[n] as any);
+      vi.mocked(GetFeedFuncs.getFeedItems).mockImplementation(async (_p, info) => {
+        if (info.name === "FeedOne") {
+          return {
+            name: "FeedOne",
+            title: "F1",
+            link: "http://one.com",
+            folder: feed1.folder,
+            items: [
+              { id: "a1", title: "A1", read: "0", deleted: "0", link: "l1", content: "c1", category: "", creator: "", pubDate: "p1", downloaded: "0" },
+              { id: "n1", title: "New1", read: "0", deleted: "0", link: "ln1", content: "n1", category: "", creator: "", pubDate: "pn1", downloaded: "0" }
+            ]
+          } as RssFeedContent;
+        }
+        return {
+          name: "FeedTwo",
+          title: "F2",
+          link: "http://two.com",
+          folder: feed2.folder,
+          items: [
+            { id: "b1", title: "B1", read: "0", deleted: "0", link: "l3", content: "c3", category: "", creator: "", pubDate: "p3", downloaded: "0" }
+          ]
+        } as RssFeedContent;
+      });
+
+      const requestSaveSpy = vi.spyOn(plugin, "requestSave").mockImplementation(() => {});
+
+      let captured: any;
+      const fakeView = {
+        app: mockApp,
+        undoList: [] as any[],
+        registerDomEvent: (el: HTMLElement, evt: string, cb: any) => {
+          if (evt === "click" && el.getAttribute("aria-label") === "Update all feeds") captured = cb;
+        },
+        refreshView: vi.fn()
+      } as unknown as import("../src/view").FeedsReaderView;
+      const container = document.createElement("div");
+      renderControlsBar(container, fakeView, plugin);
+
+      await captured(new Event("click"));
+
+      expect(ensureSpy).toHaveBeenCalledTimes(2);
+      expect(plugin.feedsStore["FeedOne"].items.length).toBe(3);
+      expect(plugin.feedsStore["FeedOne"].items.find(i => i.id === "a2")?.read).toBe("old");
+      expect(plugin.feedsStore["FeedTwo"].items.length).toBe(1);
+      expect(plugin.feedsStoreChangeList.has("FeedOne")).toBe(true);
+      expect(plugin.feedsStoreChangeList.has("FeedTwo")).toBe(false);
+      expect(requestSaveSpy).toHaveBeenCalled();
     });
+  });
 
 });
