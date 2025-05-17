@@ -34,7 +34,11 @@ const obsidianAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promis
 };
 
 const corsAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promise<AxiosResponse<string>> => {
-  const proxied = `https://r.jina.ai/http://${encodeURIComponent(config.url!)}`;
+  let target = config.url ?? "";
+  if (!/^https?:\/\//i.test(target)) {
+    target = `http://${target}`;
+  }
+  const proxied = `https://r.jina.ai/${encodeURIComponent(target)}`;
   const resp = await fetch(proxied, { method: "GET" });
   const text = await resp.text();
   

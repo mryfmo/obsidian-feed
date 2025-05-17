@@ -17,6 +17,15 @@ function resolveItemId(item: RssFeedItem): string {
   return item.id;
 }
 
+/**
+ * Renders a dynamic controls bar with interactive buttons for managing RSS feeds in the FeedsReader plugin view.
+ *
+ * Populates the provided container element with buttons for adding, managing, updating, and saving feeds. When a feed is selected, additional controls for searching, filtering, toggling content display, changing sort order, and undoing actions are shown. Button actions trigger modals, update feed data, and refresh the view as appropriate.
+ *
+ * @param controlsEl - The HTML element to populate with control buttons.
+ * @param view - The current FeedsReader view instance.
+ * @param plugin - The FeedsReader plugin instance.
+ */
 export function renderControlsBar(
   controlsEl: HTMLElement,
   view: FeedsReaderView,
@@ -36,58 +45,72 @@ export function renderControlsBar(
   setIcon(updateBtn, "refresh-ccw");
   view.registerDomEvent(updateBtn, "click", async () => {
     const initialNotice = new Notice("Fetching updates for all feeds...", 0);
-    let changesMadeOverall = false; let feedsSuccessfullyUpdated = 0; let feedsFailedToUpdate = 0;
-    const updatePromises = plugin.feedList.map(async (feedInfo) => {
-      try {
-        const newFeedContent = await getFeedItems(plugin, feedInfo, plugin.networkService, plugin.contentParserService, plugin.assetService);
-        const existingFeed = plugin.feedsStore[feedInfo.name];
-        let newItemsCount = 0; let feedChanged = false;
-        if (existingFeed?.items) {
-          // 1) Build a Set of existing IDs (once per item)
-          const existingItemIds = new Set(existingFeed.items.map(resolveItemId));
+    let changesMadeOverall = false;
+    let feedsSuccessfullyUpdated = 0;
+    let feedsFailedToUpdate = 0;
 
-          // 2) Ensure each incoming item has an ID and filter new ones in a single pass
+    for (const feedInfo of plugin.feedList) {
+      try {
+        await plugin.ensureFeedDataLoaded(feedInfo.name);
+        const newFeedContent = await getFeedItems(
+          plugin,
+          feedInfo,
+          plugin.networkService,
+          plugin.contentParserService,
+          plugin.assetService
+        );
+        const existingFeed = plugin.feedsStore[feedInfo.name];
+        let feedChanged = false;
+        if (existingFeed?.items) {
+          const existingItemIds = new Set(existingFeed.items.map(resolveItemId));
           const freshItems: typeof newFeedContent.items = [];
           for (const newItem of newFeedContent.items) {
             const id = resolveItemId(newItem);
             if (!existingItemIds.has(id)) freshItems.push(newItem);
           }
-
-          // 3) Merge if there is anything new
           if (freshItems.length) {
             existingFeed.items.unshift(...freshItems);
-            newItemsCount = freshItems.length;
             feedChanged = true;
           }
-          if(existingFeed.title !== newFeedContent.title || existingFeed.description !== newFeedContent.description || existingFeed.image !== newFeedContent.image) { existingFeed.title=newFeedContent.title; existingFeed.description=newFeedContent.description; existingFeed.image=newFeedContent.image; feedChanged = true; }
-          existingFeed.pubDate=newFeedContent.pubDate;
+          if (
+            existingFeed.title !== newFeedContent.title ||
+            existingFeed.description !== newFeedContent.description ||
+            existingFeed.image !== newFeedContent.image
+          ) {
+            existingFeed.title = newFeedContent.title;
+            existingFeed.description = newFeedContent.description;
+            existingFeed.image = newFeedContent.image;
+            feedChanged = true;
+          }
+          existingFeed.pubDate = newFeedContent.pubDate;
           existingFeed.items.forEach(resolveItemId);
-          feedInfo.unread = existingFeed.items.filter(i=>i.read==="0"&&i.deleted==="0").length;
+          feedInfo.unread = existingFeed.items.filter(
+            (i) => i.read === "0" && i.deleted === "0"
+          ).length;
         } else {
           newFeedContent.items.forEach(resolveItemId);
           plugin.feedsStore[feedInfo.name] = newFeedContent;
-          feedInfo.unread = newFeedContent.items.filter(i=>i.read==="0"&&i.deleted==="0").length;
-          newItemsCount = newFeedContent.items.length; feedChanged = true;
+          feedInfo.unread = newFeedContent.items.filter(
+            (i) => i.read === "0" && i.deleted === "0"
+          ).length;
+          feedChanged = true;
         }
-        if(feedChanged) { plugin.feedsStoreChangeList.add(feedInfo.name); changesMadeOverall = true; }
-        return { status: 'fulfilled' as const, name: feedInfo.name, newItems: newItemsCount };
+        if (feedChanged) {
+          plugin.feedsStoreChangeList.add(feedInfo.name);
+          changesMadeOverall = true;
+        }
+        feedsSuccessfullyUpdated += 1;
       } catch (error: unknown) {
         console.error(`Update error for ${feedInfo.name}:`, error);
-        return { status: 'rejected' as const, name: feedInfo.name, reason: error };
+        feedsFailedToUpdate += 1;
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        new Notice(
+          `Failed to update feed "${feedInfo.name}". Reason: ${errorMessage.substring(0, 150)}...`,
+          7000
+        );
       }
-    });
-    const results = await Promise.allSettled(updatePromises);
-    results.forEach(result => {
-      if (result.status === 'fulfilled' && result.value.status === 'fulfilled') feedsSuccessfullyUpdated++; // Check inner status
-      else {
-        feedsFailedToUpdate++;
-        let feedName = 'Unknown Feed';
-        let errorMessage = 'Unknown error during update.';
-        if (result.status === 'fulfilled' && result.value.status === 'rejected') { feedName = result.value.name; errorMessage = result.value.reason instanceof Error ? result.value.reason.message : String(result.value.reason); }
-        else if (result.status === 'rejected') { feedName = (result.reason as { name?: string })?.name ?? feedName; errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason); }
-        new Notice(`Failed to update feed "${feedName}". Reason: ${errorMessage.substring(0, 150)}...`, 7000);
-      }
-    });
+    }
     initialNotice.hide();
     if (changesMadeOverall) { plugin.requestSave(); }
     new Notice(`Update finished. ${feedsSuccessfullyUpdated} updated. ${feedsFailedToUpdate > 0 ? `${feedsFailedToUpdate} failed.` : ''}`, 7000);
