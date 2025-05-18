@@ -1,4 +1,4 @@
-import { Notice } from "obsidian";
+import { Notice, request as obsidianRequest } from "obsidian";
 import { RssFeedContent, RssFeedContentSchema, FeedInfo, RssFeedItemWithBlocks } from "./types";
 import { parseISO, isValid, formatISO } from 'date-fns';
 import Parser from 'rss-parser';
@@ -7,6 +7,7 @@ import { ContentParserService } from "./contentParserService";
 import FeedsReaderPlugin from "./main";
 import { AssetService } from "./assetService";
 import { generateDeterministicItemId, generateRandomUUID } from "./utils";
+
 
 const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (HTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
@@ -81,15 +82,28 @@ export async function getFeedItems(
     try {
       const rssParser = new Parser({
         requestOptions: { headers: { "User-Agent": USER_AGENT } },
-        // Explicitly set common fields for normalization if parser supports it
         customFields: {
           feed: ['subtitle', 'image', 'logo', 'icon', 'lastBuildDate', 'updated', 'pubDate'],
           item: ['summary', 'creator', 'dc:creator', 'author', 'published', 'updated', 'media:group', 'media:thumbnail', 'content:encoded', 'guid'],
-        }
+        },
       });
-      feedData = await rssParser.parseURL(feedUrl);
+
+      try {
+        feedData = await rssParser.parseURL(feedUrl);
+      } catch (parseErr) {
+        // Network failures inside parseURL are common in unit tests where
+        // outbound HTTP is blocked.  As a fallback we retrieve the feed XML
+        // using Obsidian's request API (mocked in tests) and parse *from
+        // string* which does not require network access.
+        const rawXml = await obsidianRequest({ url: feedUrl, method: 'GET' }).catch(() => "");
+        if (rawXml) {
+          feedData = await rssParser.parseString(rawXml);
+        } else {
+          throw parseErr;
+        }
+      }
     } catch (rssError) {
-      // If RSS parsing fails, try fetching as plain text to check if it's JSON Feed
+      // If RSS/Atom parsing fails completely, try JSON Feed as last resort.
       console.warn(`getFeedItems: RSS parsing for "${feedName}" failed. Attempting JSON Feed parse. Error:`, rssError);
       const rawText = await networkService.fetchText(feedUrl); // Use networkService for potential caching
       if (rawText.trim().startsWith("{")) {
@@ -185,6 +199,8 @@ export async function getFeedItems(
       updated?: string;
       categories?: string | string[];
       image?: ImageShape;
+      'media:thumbnail'?: string | { url?: string } | Array<{ url?: string } | string>;
+      enclosure?: { url?: string };
     };
 
     for (const rawItem of feedData.items) {
@@ -205,7 +221,13 @@ export async function getFeedItems(
       const itemCreator = rawItem.creator || rawItem['dc:creator'] || (typeof rawItem.author === 'string' ? rawItem.author : rawItem.author?.name);
       const itemPubDate = parseDateString(rawItem.pubDate || rawItem.isoDate || rawItem.published || (rawItem as PotentialItem).updated); // Cast here if needed
       const itemCategories = Array.isArray(rawItem.categories) ? rawItem.categories.join(', ') : (typeof rawItem.categories === 'string' ? rawItem.categories : "");
-      const itemImage = normalizeImage(rawItem.image);
+      // Attempt to resolve thumbnail from various RSS extensions
+      const potentialImage =
+        rawItem.image ||
+        (rawItem as PotentialItem)['media:thumbnail'] ||
+        (rawItem as { enclosure?: { url?: string } }).enclosure?.url ||
+        undefined;
+      const itemImage = normalizeImage(potentialImage);
 
       const feedItem: RssFeedItemWithBlocks = {
         id: itemId,
@@ -248,6 +270,10 @@ export async function getFeedItems(
 
       feedItem.sourceHtml = finalHtmlForParsing; // Store the determined HTML in sourceHtml
 
+      // At this stage, `itemImage` comes from RSS extensions. We'll potentially
+      // override it later once the full content has been parsed into blocks –
+      // thereby avoiding an *extra* DOM traversal solely for thumbnails.
+
       // Process sourceHtml (either fetched or from feed) into blocks and markdown
       if (feedItem.sourceHtml) { // Only process if we have some HTML
         try {
@@ -261,8 +287,23 @@ export async function getFeedItems(
             feedItem.blocks = await assetService.downloadAssetsForBlocks(feedItem.blocks, itemLink);
           }
           
-          // Convert the (potentially updated with localSrc) blocks to Markdown
+          // Convert blocks to Markdown
           feedItem.content = contentParserService.contentBlocksToMarkdown(feedItem.blocks);
+
+          // -------------------------------------------------------------
+          // Thumbnail synchronization – pick the very first <img>
+          // -------------------------------------------------------------
+          const firstImgBlock = Array.isArray(feedItem.blocks)
+            ? (feedItem.blocks.find(b => b.type === 'image') as { type: 'image'; src: string; localSrc?: string } | undefined)
+            : undefined;
+
+          if (firstImgBlock) {
+            if (plugin.settings.enableAssetDownload && firstImgBlock.localSrc) {
+              feedItem.image = firstImgBlock.localSrc; // Prefer local asset when available
+            } else if (!feedItem.image) {
+              feedItem.image = firstImgBlock.src;
+            }
+          }
         } catch (parseError) {
           console.error(`getFeedItems: Error parsing content for "${itemTitle}". Using raw content. Error:`, parseError);
           feedItem.content = feedItem.sourceHtml; // Fallback to raw HTML if block parsing fails

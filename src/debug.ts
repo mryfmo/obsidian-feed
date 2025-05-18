@@ -2,7 +2,7 @@
   Simple debug utility that disables or enables console.log output globally
   depending on a runtime flag.
 
-  The behaviour is:
+  The behavior is:
 
   1.  If the environment variable `OBSIDIAN_FEED_DEBUG` is set to the string
       "true" **or**

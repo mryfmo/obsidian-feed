@@ -1,4 +1,4 @@
-// Initialise debug logging behaviour **before** anything else executes
+// Initialize debug logging behavior **before** anything else executes
 import "./debug";
 
 import { Plugin, Notice, sanitizeHTMLToDom, WorkspaceLeaf, FileSystemAdapter } from "obsidian";
@@ -44,8 +44,7 @@ const DEFAULT_SETTINGS: FeedsReaderSettings = {
   mixedFeedView: false,
   nItemPerPage: 20, saveContent: false, saveSnippetNewToOld: true,
   showJot: true, showSnippet: true, showRead: true, showSave: true, showMath: true,
-  showGPT: true, showEmbed: true, showFetch: true, showLink: true, showDelete: true,
-  showThumbnails: true,
+  showGPT: true, showEmbed: true, showFetch: true, showLink: true, showDelete: true, showThumbnails: true,
   chatGPTApiKey: "", chatGPTPrompt: "Summarize the following content (max 4000 chars):\n\n{{content}}",
   chatGPTModel: "gpt-4o-mini",
   enableHtmlCache: true,
@@ -54,7 +53,8 @@ const DEFAULT_SETTINGS: FeedsReaderSettings = {
   assetDownloadPath: "feeds_assets", // Relative to plugin data directory
   latestNOnly: false,
   latestNCount: 0,
-  viewStyle: "card"
+  viewStyle: "card",
+  defaultTitleOnly: true
 };
 
 export default class FeedsReaderPlugin extends Plugin {
@@ -76,7 +76,7 @@ export default class FeedsReaderPlugin extends Plugin {
   private saveTimeout: number | null = null;
   private readonly SAVE_DEBOUNCE_MS = 2000; // Debounce save calls by 2 seconds
 
-  // --- Serialisation helpers for savePendingChanges ----------------------
+  // --- Serialization helpers for savePendingChanges ----------------------
   private isSaving: boolean = false;       // true while an async save is running
   private queuedSave: boolean = false;     // another save request arrived during save
 
@@ -192,9 +192,14 @@ export default class FeedsReaderPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    const view = this.app.workspace.getActiveViewOfType(FeedsReaderView);
-    if (view && view instanceof FeedsReaderView) {
-      (view as FeedsReaderView).refreshView();
+    // Refresh *all* Feeds Reader views so toggles like "Show thumbnails" are
+    // applied consistently across split panes / secondary windows.
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER);
+    for (const leaf of leaves) {
+      const v = leaf.view as unknown;
+      if (v && (v as FeedsReaderView).refreshView) {
+        (v as FeedsReaderView).refreshView();
+      }
     }
   }
 
@@ -295,7 +300,7 @@ export default class FeedsReaderPlugin extends Plugin {
         // Clear the flag and immediately handle the queued request
         this.queuedSave = false;
         // We use `void` to ignore the returned promise; caller can await the
-        // original call.  Serialisation guarantee is maintained.
+        // original call.  Serialization guarantee is maintained.
         void this.savePendingChanges(true);
       }
     }

@@ -12,14 +12,59 @@
   padding-right: 0.5rem;
 }
 
+/*
+  Navigation-sidebar feed entry
+  -----------------------------
+  Display the icon, feed name and unread-count badge on one straight
+  horizontal line and make sure all of them share the same vertical
+  centre so no element appears visually shifted.  We achieve this by
+  switching the container to a flex row with `align-items: center`.
+*/
 .fr-feed-item {
   cursor: pointer;
   padding: 4px 0;
+
+  /* new: ensure icon / text / badge line-up nicely */
+  display: flex;
+  align-items: center;
+  /* keep the gap consistent regardless of inline styles */
+  gap: 0.4rem;
 }
 
 .fr-feed-item:hover {
   color: var(--text-accent);
 }
+
+/* Unread count badge attached to feed navigation items
+  ----------------------------------------------------
+  `.fr-feed-badge` previously had its own left margin to push it away
+  from the feed name.  With the parent now using `gap`, that extra
+  margin is no longer necessary and would cause doubled spacing, so
+   we reset it to `0` here. */
+.fr-feed-badge {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.4em;
+  /* Rely on flex gap supplied by .fr-feed-item instead of margin */
+  margin-left: 0;
+  border-radius: 999px; /* pill shape */
+  background-color: var(--interactive-accent, var(--color-yellow, #ffb400));
+  color: var(--background-primary, #fff);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4em;
+  text-align: center;
+}
+
+/*--------------------------------------------------------------------
+  Ensure no extra margin is present on the icon span (some older
+  bundled code may still apply `style="margin-right:0.4rem"`). The new
+  flex `gap` handles spacing now.  We therefore override it here.
+--------------------------------------------------------------------*/
+.fr-feed-item-icon {
+  margin-right: 0 !important;
+}
+
 
 .fr-feed-item-selected {
   background-color: var(--text-selection-bg, rgba(100,100,255,0.2));
@@ -51,6 +96,33 @@
   opacity: 0.8;
 }
 
+/* -------------------------------------------------------------------------
+  Unified meta information row (source label + publication date)
+  ------------------------------------------------------------------------- */
+
+.fr-item-info {
+  /* Keep meta row compact below the title */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin: 0.15rem 0 0.25rem 0;
+}
+
+/* Let the date stick to the far end of the row so that "Source" stays left
+   and the publication timestamp lines up nicely on the right regardless of
+   how long the source label is. */
+.fr-item-info .fr-item-meta {
+  margin-left: auto;
+}
+
+/* When there is *no* source label present, remove the margin override so the
+   date does not appear misaligned. */
+.fr-item-info:not(:has(.fr-item-source)) .fr-item-meta {
+  margin-left: 0;
+}
+
 .fr-item-actions {
   margin: 0.5rem 0;
   display: flex;
@@ -59,6 +131,95 @@
 
 .fr-item-content {
   margin-top: 0.5rem;
+}
+
+/* -------------------------------------------------------------------------
+  Thumbnail image (card & list view)
+   --------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+  Unified thumbnail sizing  –  "fixed aspect-ratio, fixed footprint"
+  ---------------------------------------------------------------------
+  We keep a video-like 16:9 frame for thumbnails so that the item list
+  rhythm stays steady in both list and card layouts.  Instead of
+  cropping (which formerly relied on `object-fit: cover`) we now scale
+  the whole image into that frame with `object-fit: contain`, ensuring
+  the complete picture is always visible.
+
+  • Card view  : 160 × 90 px  (floats right)
+  • List view  :  96 × 54 px  (inline row)
+
+  The aspect-ratio property is fully supported in Electron ≥19 (the
+  minimum version shipped with current Obsidian), so we can rely on it
+  instead of padding-hacks.
+------------------------------------------------------------------------ */
+
+.fr-thumbnail {
+  width: 160px;           /* default/card */
+  aspect-ratio: 16 / 9;   /* enforce 16:9 frame */
+  height: auto;           /* let aspect-ratio calculate height */
+  /* Show the full image without cropping.  "contain" scales the picture
+     down to fit into the fixed 16:9 bounding box while keeping its full
+     contents visible, avoiding any unintended trimming. */
+  object-fit: contain;    /* keep full image, may letterbox */
+  object-position: center;
+
+  /* Card view: keep image on the right hand side of text */
+  /* Keep equal vertical spacing within the surrounding text block */
+  margin: 0.25rem 0 0.25rem 1rem;
+}
+
+/* List view: smaller thumb + no float (flex handles layout) */
+.fr-item-list .fr-thumbnail {
+  width: 96px;
+  margin: 0 0.75rem 0 0;  /* right gap before text */
+}
+
+/* Only card view needs the classic magazine float */
+.fr-item:not(.fr-item-list) .fr-thumbnail {
+  float: right;
+}
+
+/* List container transforms into a simple two-column flex row so that
+   thumbnail and meta sit neatly on one line. */
+/* Grid = thumbnail column + content column */
+.fr-item-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.75rem;
+
+  /* Center children vertically so thumbnail & text have equal top/bottom spacing */
+  align-items: center;
+}
+
+/* -------------------------------------------------------------------------
+  Card view – same structural grid as list view but with a wider thumbnail
+  ------------------------------------------------------------------------- */
+
+.fr-item-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1rem;           /* give card thumbnail a bit more breathing room */
+  align-items: start;         /* start-align so multi-line titles stay flush */
+}
+
+.fr-item-card > :not(img) {
+  grid-column: 2;
+}
+
+/* Card thumbnail: override the old float-right behaviour */
+.fr-item-card .fr-thumbnail {
+  float: none !important;     /* turn off float – grid handles layout */
+  margin: 0 1rem 0 0;         /* right gap before text */
+  /* Start in the very first grid row and stretch downward so the picture
+     occupies its own column next to the full text stack, independent of
+     how many rows the text needs. */
+  grid-row: 1 / span 99;
+}
+
+/* Route every non-image child into the second column so the thumb keeps
+   its own dedicated vertical strip. */
+.fr-item-list > :not(img) {
+  grid-column: 2;
 }
 
 /* Keyboard navigation - currently selected item */
@@ -79,8 +240,8 @@
 
 /* Blink animation for expanded content */
 /* -------------------------------------------------------------------------
-   Blink animation for expanded content – respects user “reduced motion”.
-   When motion is reduced, fall back to a subtle static highlight.
+  Blink animation for expanded content – respects user "reduced motion".
+  When motion is reduced, fall back to a subtle static highlight.
    --------------------------------------------------------------------- */
 
 /* Fallback: reduced-motion users see a gentle, non-animated highlight. */
@@ -108,9 +269,36 @@
 }
 
 /* Recommended item mark style */
-/* Recommended item mark – colour is theme-overridable via CSS var */
+/* Recommended item mark – color is theme-overridable via CSS var */
 .fr-recommendation {
-  --fr-recommendation-colour: orange; /* default fallback */
-  color: var(--fr-recommendation-colour);
+  --fr-recommendation-color: orange; /* default fallback */
+  color: var(--fr-recommendation-color);
   font-weight: bold;
+}
+
+/* -------------------------------------------------------------
+  Recommended item badge – yellow star in front of the title
+   ------------------------------------------------------------- */
+.fr-recommend-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-yellow, #ffb400);
+  margin-right: 0.25rem;
+}
+
+.fr-recommend-badge svg {
+  width: 0.9em;
+  height: 0.9em;
+  fill: currentColor;
+}
+
+/* Source feed label (shown in unified timeline) */
+.fr-item-source {
+  display: inline-block;
+  font-size: 0.75rem;
+  background-color: var(--background-modifier-border, #6663);
+  padding: 0 0.4em;
+  border-radius: 4px;
+  /* Rely on flex gap from .fr-item-info – no extra margin needed */
+  margin-left: 0;
 }

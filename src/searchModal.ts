@@ -26,7 +26,7 @@ export class FRSearchModal extends Modal {
     }
 
     contentEl.createEl("p", { text: `Searching in: ${this.currentFeedName}`});
-    const searchInput = contentEl.createEl("input", { type: "search", placeholder: "Enter keywords..." });
+    const searchInput = contentEl.createEl("input", { type: "search", placeholder: "Enter keywords..." } as Partial<HTMLInputElement>);
     searchInput.style.width = "100%"; searchInput.style.marginBottom = "0.5rem";
 
     const resultsDiv = contentEl.createEl("div", { cls: "fr-search-results" });

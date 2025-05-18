@@ -43,6 +43,20 @@ export class FeedReaderSettingTab extends PluginSettingTab {
           }
         });
       });
+
+    // -------------------------------------------------------------
+    // Startup layout preference – Title-only vs Full card
+    // -------------------------------------------------------------
+    new Setting(containerEl)
+      .setName("Start in title-only mode")
+      .setDesc("When enabled, items are collapsed to titles on startup. Disable to show full cards by default.")
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.defaultTitleOnly ?? true);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.defaultTitleOnly = value;
+          await this.plugin.saveSettings();
+        });
+      });
     new Setting(containerEl)
       .setName("Auto-save content (Not Implemented)") // Clarify if not implemented
       .setDesc("Automatically save new feed items content to markdown files. (This feature is not yet fully implemented).")
@@ -73,7 +87,7 @@ export class FeedReaderSettingTab extends PluginSettingTab {
     // ---------------------------------------------------------------------
 
     // We need a mutable reference because the toggle is defined *before* the
-    // numeric input; initialise with null to satisfy definite-assignment.
+    // numeric input; initialize with null to satisfy definite-assignment.
     let latestNCountSetting: Setting | null = null;
 
     new Setting(containerEl)
@@ -114,21 +128,23 @@ export class FeedReaderSettingTab extends PluginSettingTab {
             .addOption("list", "List View")
             .setValue(this.plugin.settings.viewStyle)
             .onChange(async (value) => {
-              this.plugin.settings.viewStyle = value as FeedsReaderSettings['viewStyle'];
+              // Persist the new preference and immediately refresh any open
+              // Feeds Reader panes so the layout switch becomes visible
+              // without requiring a manual reload or tab change.
+              this.plugin.settings.viewStyle = value as FeedsReaderSettings["viewStyle"];
               await this.plugin.saveSettings();
+
+              // While `saveSettings()` already triggers a refresh on **all**
+              // reader views, it does so *asynchronously* after the settings
+              // file has been written to disk.  Calling `refreshView()`
+              // right away guarantees that the active pane updates its
+              // content before the user even closes the settings tab,
+              // providing a snappier, more predictable UX.
+              this.plugin.refreshView();
             });
       });
 
-    new Setting(containerEl)
-      .setName("Show thumbnails")
-      .setDesc("Display preview images if available.")
-      .addToggle(toggle => {
-        toggle.setValue(this.plugin.settings.showThumbnails);
-        toggle.onChange(async (value) => {
-          this.plugin.settings.showThumbnails = value;
-          await this.plugin.saveSettings();
-        });
-      });
+
 
       new Setting(containerEl)
       .setName("Unified Feed View")

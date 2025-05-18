@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { PluginApi } from "../src/pluginApi";
+import { PluginApi } from "../../src/pluginApi";
 
 describe("pluginApi.fetchChatGPT", () => {
   it("throws on non-OK", async () => {

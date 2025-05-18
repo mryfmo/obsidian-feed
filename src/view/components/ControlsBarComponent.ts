@@ -4,18 +4,7 @@ import FeedsReaderPlugin from "../../main";
 import { FRAddFeedModal } from "../../addFeedModal";
 import { FRManageFeedsModal } from "../../manageFeedsModal";
 import { FRSearchModal } from "../../searchModal";
-import { getFeedItems } from "../../getFeed";
-import { generateDeterministicItemId, generateRandomUUID } from "../../utils";
-import type { RssFeedItem } from "../../types";
-
-// Utility: ensure an item has a deterministic ID and return it
-function resolveItemId(item: RssFeedItem): string {
-  if (item.id) return item.id;
-
-  const base = (item.link || item.title || "") + (item.pubDate ?? "") + (item.content || "").substring(0, 100);
-  item.id = generateDeterministicItemId(base) || generateRandomUUID();
-  return item.id;
-}
+import { FRHelpModal } from "../../helpModal";
 
 /**
  * Renders a dynamic controls bar with interactive buttons for managing RSS feeds in the FeedsReader plugin view.
@@ -43,77 +32,14 @@ export function renderControlsBar(
 
   const updateBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Update all feeds", title: "Update all feeds" } });
   setIcon(updateBtn, "refresh-ccw");
+  // Delegate the heavy lifting to controller layer to keep UI lean
   view.registerDomEvent(updateBtn, "click", async () => {
-    const initialNotice = new Notice("Fetching updates for all feeds...", 0);
-    let changesMadeOverall = false;
-    let feedsSuccessfullyUpdated = 0;
-    let feedsFailedToUpdate = 0;
+    const { updateAllFeeds } = await import("../../controller/updateAllFeeds");
 
-    for (const feedInfo of plugin.feedList) {
-      try {
-        await plugin.ensureFeedDataLoaded(feedInfo.name);
-        const newFeedContent = await getFeedItems(
-          plugin,
-          feedInfo,
-          plugin.networkService,
-          plugin.contentParserService,
-          plugin.assetService
-        );
-        const existingFeed = plugin.feedsStore[feedInfo.name];
-        let feedChanged = false;
-        if (existingFeed?.items) {
-          const existingItemIds = new Set(existingFeed.items.map(resolveItemId));
-          const freshItems: typeof newFeedContent.items = [];
-          for (const newItem of newFeedContent.items) {
-            const id = resolveItemId(newItem);
-            if (!existingItemIds.has(id)) freshItems.push(newItem);
-          }
-          if (freshItems.length) {
-            existingFeed.items.unshift(...freshItems);
-            feedChanged = true;
-          }
-          if (
-            existingFeed.title !== newFeedContent.title ||
-            existingFeed.description !== newFeedContent.description ||
-            existingFeed.image !== newFeedContent.image
-          ) {
-            existingFeed.title = newFeedContent.title;
-            existingFeed.description = newFeedContent.description;
-            existingFeed.image = newFeedContent.image;
-            feedChanged = true;
-          }
-          existingFeed.pubDate = newFeedContent.pubDate;
-          existingFeed.items.forEach(resolveItemId);
-          feedInfo.unread = existingFeed.items.filter(
-            (i) => i.read === "0" && i.deleted === "0"
-          ).length;
-        } else {
-          newFeedContent.items.forEach(resolveItemId);
-          plugin.feedsStore[feedInfo.name] = newFeedContent;
-          feedInfo.unread = newFeedContent.items.filter(
-            (i) => i.read === "0" && i.deleted === "0"
-          ).length;
-          feedChanged = true;
-        }
-        if (feedChanged) {
-          plugin.feedsStoreChangeList.add(feedInfo.name);
-          changesMadeOverall = true;
-        }
-        feedsSuccessfullyUpdated += 1;
-      } catch (error: unknown) {
-        console.error(`Update error for ${feedInfo.name}:`, error);
-        feedsFailedToUpdate += 1;
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        new Notice(
-          `Failed to update feed "${feedInfo.name}". Reason: ${errorMessage.substring(0, 150)}...`,
-          7000
-        );
-      }
-    }
-    initialNotice.hide();
-    if (changesMadeOverall) { plugin.requestSave(); }
-    new Notice(`Update finished. ${feedsSuccessfullyUpdated} updated. ${feedsFailedToUpdate > 0 ? `${feedsFailedToUpdate} failed.` : ''}`, 7000);
+    const progressNotice = new Notice("Fetching updates for all feeds…", 0);
+    await updateAllFeeds(plugin, view, (m, t) => new Notice(m, t));
+    progressNotice.hide();
+
     view.refreshView();
   });
 
@@ -138,19 +64,39 @@ export function renderControlsBar(
 
     const unreadBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Toggle unread / all", title: "Toggle unread / all" } });
     const syncUnreadIcon = () => setIcon(unreadBtn, view['showAll'] ? "filter" : "filter-x"); syncUnreadIcon();
-    view.registerDomEvent(unreadBtn, "click", () => { view['showAll'] = !view['showAll']; syncUnreadIcon(); view.renderFeedContent(); });
+    view.registerDomEvent(unreadBtn, "click", () => {
+      view.dispatchEvent({ type: "ToggleShowAll" });
+      syncUnreadIcon();
+      view.renderFeedContent();
+    });
 
     const contentBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Toggle title / content", title: "Toggle title / content" } });
     const syncContentIcon = () => setIcon(contentBtn, view['titleOnly'] ? "layout-list" : "layout-grid"); syncContentIcon();
-    view.registerDomEvent(contentBtn, "click", () => { view['titleOnly'] = !view['titleOnly']; syncContentIcon(); view.renderFeedContent(); });
+    view.registerDomEvent(contentBtn, "click", () => {
+      view.toggleTitleOnlyMode();
+      syncContentIcon();
+    });
 
     const orderBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Change sort order", title: "Change sort order" } });
     const syncOrderIcon = () => { setIcon(orderBtn, view['itemOrder'] === "New to old" ? "sort-desc" : view['itemOrder'] === "Old to new" ? "sort-asc" : "shuffle"); }; syncOrderIcon();
-    view.registerDomEvent(orderBtn, "click", () => { view['itemOrder'] = view['itemOrder'] === "New to old" ? "Old to new" : view['itemOrder'] === "Old to new" ? "Random" : "New to old"; syncOrderIcon(); view.renderFeedContent(); });
+    view.registerDomEvent(orderBtn, "click", () => {
+      view.dispatchEvent({ type: "CycleItemOrder" });
+      syncOrderIcon();
+      view.renderFeedContent();
+    });
 
     const undoBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Undo last action", title: "Undo last action" } });
     setIcon(undoBtn, "rotate-ccw");
     undoBtn.disabled = view.undoList.length === 0;
     view.registerDomEvent(undoBtn, "click", () => view.handleUndo());
   }
+
+  // ---------------------------------------------------------------------
+  // Help button (keyboard shortcut guide) – always visible on the far right
+  // ---------------------------------------------------------------------
+  const helpBtn = controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Help / Shortcuts", title: "Help / Shortcuts" } });
+  setIcon(helpBtn, "help-circle");
+  view.registerDomEvent(helpBtn, "click", () => {
+    new FRHelpModal(view.app).open();
+  });
 }

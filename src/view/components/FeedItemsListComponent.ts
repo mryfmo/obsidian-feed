@@ -1,9 +1,14 @@
 import { Notice } from "obsidian";
 import { FeedsReaderView } from "../../view";
 import FeedsReaderPlugin from "../../main";
-import { renderFeedItemCard } from "./FeedItemCardComponent";
 import { RssFeedItem } from "../../types";
 import { isVisibleItem, shuffleArray } from "../../utils";
+
+import {
+  createFeedItemBase,
+  renderItemMarkdown,
+} from "./FeedItemBase";
+
 
 export function renderFeedItemListStyle(
   item: RssFeedItem,
@@ -11,13 +16,26 @@ export function renderFeedItemListStyle(
   view: FeedsReaderView,
   plugin: FeedsReaderPlugin
 ): void {
-  // Simple text list item rendering (placeholder)
-  const itemDiv = parentEl.createEl("div", { cls: "fr-item-list" });
-  itemDiv.setText(item.title ?? "(No title)");
-  itemDiv.onclick = () => {
-    view.setSelectedItemById(item.id!);
-    view.toggleItemExpansion(item.id!);
-  };
+  // Build shared skeleton but add the list-specific root class so that
+  // CSS Grid rules apply.
+  const { contentEl, isExpanded } = createFeedItemBase(
+    item,
+    parentEl,
+    view,
+    plugin,
+    ["fr-item-list"]
+  );
+
+
+
+  // -----------------------------------------------------------------------
+  // Markdown body – only if visible
+  // -----------------------------------------------------------------------
+  if (isExpanded || !contentEl.hidden) {
+    renderItemMarkdown(item, contentEl, plugin).catch((err) =>
+      console.error("ListView: Failed to render content", err)
+    );
+  }
 }
 
 export function renderFeedItemsList(
@@ -29,15 +47,15 @@ export function renderFeedItemsList(
   contentAreaEl.empty();
   if (!items || items.length === 0) {
     const placeholder = (() => {
-      if (plugin.settings.mixedFeedView) {
-        return "No items in any feed.";
+      if (view.isMixedViewEnabled()) {
+        return "All feeds are up-to-date!";
       }
 
       if (!view.currentFeed) {
-        return "No feed selected. Please pick a feed from the sidebar.";
+        return "No feed selected – pick one from the sidebar or enable the unified timeline.";
       }
 
-      return `No items available in feed "${view.currentFeed}".`;
+      return `No items available in feed "${view.currentFeed}". Check your filters.`;
     })();
 
     contentAreaEl.setText(placeholder);
@@ -46,14 +64,14 @@ export function renderFeedItemsList(
 
   let itemsToShow = [...items];
 
-  if (!view.plugin.settings.mixedFeedView && view.currentFeed) {
+  if (!view.isMixedViewEnabled() && view.currentFeed) {
     const feedContent = plugin.feedsStore[view.currentFeed];
     if (!feedContent) {
         contentAreaEl.setText(`Data for feed "${view.currentFeed}" is not ready.`);
         return;
     }
     itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view['showAll']));
-  } else if (view.plugin.settings.mixedFeedView) {
+  } else if (view.isMixedViewEnabled()) {
     itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view['showAll']));
   }
 
@@ -72,25 +90,44 @@ export function renderFeedItemsList(
     });
   }
   else if (itemOrder === "Random") shuffleArray(itemsToShow);
-  const start = view['currentPage'] * view.itemsPerPage;
-  const end = start + view.itemsPerPage;
-  const pageItems = itemsToShow.slice(start, end);
+  /*
+   * Pagination – Mixed (unified) timeline vs single-feed
+   * ----------------------------------------------------
+   * When browsing **per-feed** we keep the traditional pagination so that very
+   * large feeds do not lock up the UI by rendering thousands of items at
+   * once.  In *mixed view*, however, users reported that newer items from
+   * the 3rd feed onwards often do not show up on the first page because the
+   * page is already filled with entries from the first couple of feeds.
+   * This leads to the false impression that only two feeds are merged.
+   *
+   * To avoid the confusion we disable pagination for the unified timeline
+   * and render the **entire** chronologically-sorted list in one go.
+   *
+   * For most users the combined number of *unread* items across all feeds is
+   * still within a reasonable range.  Should performance become a concern
+   * we can revisit this decision or add a dedicated setting.
+   */
+
+  let pageItems: typeof itemsToShow;
+  if (view.isMixedViewEnabled()) {
+    pageItems = itemsToShow;
+  } else {
+    const start = view['currentPage'] * view.itemsPerPage;
+    const end = start + view.itemsPerPage;
+    pageItems = itemsToShow.slice(start, end);
+  }
   if (pageItems.length === 0) {
-    const baseMsg = plugin.settings.mixedFeedView
-      ? "No items match the current filter."
-      : (view.currentFeed ? `No items match filter for "${view.currentFeed}".` : "No feed selected.");
+    const baseMsg = view.isMixedViewEnabled()
+      ? "All feeds are up-to-date!" // unified timeline empty after filtering
+      : (view.currentFeed ? `No items match filter for "${view.currentFeed}". Check your filters.` : "No feed selected.");
 
     contentAreaEl.setText(view['currentPage'] === 0 ? baseMsg : "No more items.");
     return;
   }
 
   pageItems.forEach(item => {
-    if (plugin.settings.viewStyle === "card") {
-      renderFeedItemCard(item, contentAreaEl, view, plugin);
-    } else {
-      renderFeedItemListStyle(item, contentAreaEl, view, plugin);
-    }
-  });  
+    renderFeedItemListStyle(item, contentAreaEl, view, plugin);
+  });
 }
 
 export async function handleContentAreaClick(event: MouseEvent, view: FeedsReaderView, plugin: FeedsReaderPlugin): Promise<void> {
@@ -135,10 +172,13 @@ export async function handleContentAreaClick(event: MouseEvent, view: FeedsReade
           break;
         }
         case "save": {
-          // Check if item.downloaded state was changed by saveItemAsMarkdown
+          // Persist note via plugin method; it may update the `downloaded`
+          // flag – verify only once afterwards to avoid redundant IO.
+          await plugin.saveItemAsMarkdown?.(view.currentFeed, itemId); // Perform save
           const itemAfterSave = await plugin.getFeedItem(view.currentFeed, itemId);
-          if (itemAfterSave && item.downloaded !== itemAfterSave.downloaded) stateChangedForRender = true;
-          const iAfter = await plugin.getFeedItem(view.currentFeed,itemId); if(iAfter && item.downloaded!==iAfter.downloaded) stateChangedForRender=true;
+          if (itemAfterSave && item.downloaded !== itemAfterSave.downloaded) {
+            stateChangedForRender = true;
+          }
           break;
         }
         case "openLink":

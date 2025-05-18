@@ -3,10 +3,17 @@ import { UndoAction } from "./globals";
 import FeedsReaderPlugin from "./main";
 import { renderControlsBar } from "./view/components/ControlsBarComponent";
 import { renderFeedNavigation } from "./view/components/FeedNavigationComponent";
-import { renderFeedItemsList, handleContentAreaClick as handleItemsListClick } from "./view/components/FeedItemsListComponent";
-import { renderSingleItemContent } from "./view/components/FeedItemCardComponent";
+import {
+  renderFeedItemsList,
+  handleContentAreaClick as handleItemsListClick,
+} from "./view/components/FeedItemsListComponent";
+
+import { renderFeedItemsCard } from "./view/components/FeedItemsCardComponent";
+import { renderItemMarkdown as renderSingleItemContent } from "./view/components/FeedItemBase";
 import { isVisibleItem } from "./utils";
 import { RssFeedItem } from "./types";
+// Centralized FSM – governs view state & side-effects
+import { reducer as viewReducer, createInitialState, Event as ViewEvent, ViewState, ViewStyle } from "./stateMachine";
 
 export const VIEW_TYPE_FEEDS_READER = "feeds-reader-view";
 
@@ -26,6 +33,9 @@ export class FeedsReaderView extends ItemView {
 
   /** Cached scroll callback so we attach it only once per view lifecycle. */
   private _scrollCb?: () => void;
+  /** Timestamp of the last "reading progress" update – used to throttle the
+   *  expensive calculations that run on every scroll event. */
+  private _lastProgressUpdate = 0;
 
   public itemsPerPage = 20;
   private navHidden = false;
@@ -39,7 +49,7 @@ export class FeedsReaderView extends ItemView {
   private getVisibleItems(): Array<RssFeedItem & { __sourceFeed?: string }> {
     let pool: Array<RssFeedItem & { __sourceFeed?: string }> = [];
 
-    if (this.plugin.settings.mixedFeedView) {
+    if (this.fsm.mixedView) {
       for (const feed of Object.values(this.plugin.feedsStore)) {
         const title = feed.title || "(unknown)";
         pool = pool.concat(
@@ -65,11 +75,26 @@ export class FeedsReaderView extends ItemView {
   // Plugin Reference
   public plugin: FeedsReaderPlugin;
 
+  /** Finite-state machine representing the UI state.  Acts as the single
+   *  source of truth; legacy class properties proxy selected fields for now
+   *  to avoid a massive refactor. */
+  private fsm: ViewState;
+
   constructor(leaf: WorkspaceLeaf, plugin: FeedsReaderPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.icon = "rss";
     this.itemsPerPage = this.plugin.settings.nItemPerPage ?? 20;
+
+    // Seed FSM with persisted settings
+    this.fsm = createInitialState({
+      viewStyle: this.plugin.settings.viewStyle,
+      titleOnly: this.plugin.settings.defaultTitleOnly ?? true,
+      mixedView: this.plugin.settings.mixedFeedView,
+    });
+
+    // Keep legacy fields in sync for incremental migration
+    this.syncLegacyFieldsFromFsm();
   }
 
   getViewType() { return VIEW_TYPE_FEEDS_READER; }
@@ -95,7 +120,9 @@ export class FeedsReaderView extends ItemView {
     this.actionIconsGroupEl = this.controlsEl.createEl("div", { cls: "fr-action-icons-group"});
     this.actionIconsGroupEl.style.cssText = "display: flex; flex-grow: 1; justify-content: flex-end;";
 
-    this.currentFeed = null; this.showAll = false; this.titleOnly = true;
+    this.currentFeed = null; this.showAll = false;
+    // Start in the persisted layout preference.
+    this.titleOnly = this.plugin.settings.defaultTitleOnly ?? true;
     this.itemOrder = "New to old"; this.currentPage = 0; this.undoList = []; this.expandedItems = new Set();
 
     this.navEl.hidden = this.navHidden;
@@ -105,10 +132,99 @@ export class FeedsReaderView extends ItemView {
     this.controlsEl.insertBefore(navBtn, this.actionIconsGroupEl);
     const syncNavIcon = () => setIcon(navBtn, this.navEl.hidden ? "panel-left-open" : "panel-left-close");
     syncNavIcon();
-    this.registerDomEvent(navBtn, "click", () => { this.navEl.hidden = !this.navEl.hidden; this.navHidden = this.navEl.hidden; syncNavIcon(); });
+    this.registerDomEvent(navBtn, "click", () => {
+      this.dispatch({ type: "ToggleNav" });
+      // navHidden mirrored into legacy field inside dispatch
+      this.navEl.hidden = this.fsm.navHidden;
+      syncNavIcon();
+    });
+
+    // -------------------------------------------------------------------
+    // Unified-view toggle (mixed ↔ per-feed)
+    // -------------------------------------------------------------------
+    const mixedBtn = this.controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Toggle unified timeline" } });
+    // Place it just before the nav button so it is the very left-most.
+    this.controlsEl.insertBefore(mixedBtn, navBtn);
+    // Reflect FSM state, not persisted settings, to avoid stale UI after
+    // programmatic changes.  The icon depicts *list* when the **unified
+      // timeline** (mixed view) is active and the classic *rss* icon when
+      // browsing a single feed.
+    const syncMixedIcon = () => setIcon(mixedBtn, this.fsm.mixedView ? "circle-chevron-down" : "circle-chevron-right");
+    syncMixedIcon();
+    this.registerDomEvent(mixedBtn, "click", async () => {
+      this.dispatch({ type: "ToggleMixedView" });
+
+      // Persist preference so the view re-opens in the same mode next time.
+      this.plugin.settings.mixedFeedView = this.fsm.mixedView;
+      await this.plugin.saveSettings();
+
+      this.navEl.hidden = this.fsm.navHidden; // may stay unchanged
+
+      // If the unified timeline has just been enabled we need to ensure all
+      // subscribed feeds are loaded before rendering, otherwise the list will
+      // appear empty until the user manually refreshes.
+      if (this.fsm.mixedView) {
+        const loadingNotice = new Notice("Loading feeds…", 0);
+        (async () => {
+          for (const feedInfo of this.plugin.feedList) {
+            try {
+              await this.plugin.ensureFeedDataLoaded(feedInfo.name);
+            } catch (err: unknown) {
+              console.error(`FeedsReaderView: Failed to load data for '${feedInfo.name}'.`, err);
+            }
+          }
+          loadingNotice.hide();
+          this.refreshView();
+          syncMixedIcon();
+        })();
+      } else {
+        // Leaving unified view – reset selection so controls update properly.
+        this.refreshView();
+        syncMixedIcon();
+      }
+    });
 
     this.createControlButtons();
-    this.contentAreaEl.setText("Select a feed from the list.");
+    // Show an initial placeholder only when browsing per-feed.  In *mixed
+    // view* the list will instead be populated asynchronously once the
+    // individual feeds are loaded so displaying the prompt would be
+    // misleading.
+    if (!this.fsm.mixedView) {
+      this.contentAreaEl.setText("Select a feed from the list.");
+    }
+
+    // ---------------------------------------------------------------
+    // "Unified timeline" start-up experience
+    // ---------------------------------------------------------------
+    // When the user has enabled *Mixed Feed View* in the settings they
+    // expect to see a global timeline straight away – not a prompt to select
+    // a single feed.  We therefore load (lazily, from disk) the stored JSON
+    // for every subscribed feed and, once ready, render the combined list.
+    // This runs **after** the initial synchronous layout so the UI paints
+    // instantly and the loading work happens asynchronously.
+    //
+    // • If there are many feeds the operation may take a little while.  A
+    //   non-blocking Notice gives feedback without freezing the interface.
+    // • Any feeds that fail to load are skipped; an error is logged but the
+    //   rest of the timeline still appears.
+    // ---------------------------------------------------------------
+
+    if (this.fsm.mixedView) {
+      const loadingNotice = new Notice("Loading feeds…", 0);
+      (async () => {
+        for (const feedInfo of this.plugin.feedList) {
+          try {
+            await this.plugin.ensureFeedDataLoaded(feedInfo.name);
+          } catch (err: unknown) {
+            console.error(`FeedsReaderView: Failed to load data for '${feedInfo.name}'.`, err);
+          }
+        }
+        loadingNotice.hide();
+        // If no items end up available fall back to a friendly placeholder
+        // inside renderFeedContent().
+        this.renderFeedContent();
+      })();
+    }
 
     this.renderFeedList();
     this.registerDomEvent(this.contentAreaEl, "click", (event) => handleItemsListClick(event, this, this.plugin));
@@ -129,8 +245,56 @@ export class FeedsReaderView extends ItemView {
     renderControlsBar(this.actionIconsGroupEl, this, this.plugin);
   }
 
+  /* ------------------------------------------------------------
+   * FSM Dispatch helper – routes events through reducer and applies
+   * resulting state & effects.
+   * ---------------------------------------------------------- */
+  private dispatch(event: ViewEvent): void {
+    const [nextState, effects] = viewReducer(this.fsm, event);
+    this.fsm = nextState;
+    this.syncLegacyFieldsFromFsm();
+
+    // Minimal effect interpreter – extend as migrations progress
+    for (const ef of effects) {
+      switch (ef.type) {
+        case "Render":
+          this.renderFeedContent();
+          break;
+        case "ResetFeedSpecificState":
+          this.resetFeedSpecificViewState();
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  // Expose a safe wrapper for external components (ControlsBar, etc.)
+  public dispatchEvent(event: ViewEvent): void {
+    this.dispatch(event);
+  }
+
+  /** Bridges old public fields ↔新 FSM.  Call after every dispatch. */
+  private syncLegacyFieldsFromFsm(): void {
+    const s = this.fsm;
+    this.currentFeed = s.currentFeed;
+    this.showAll = s.showAll;
+    this.titleOnly = s.titleOnly;
+    this.itemOrder = s.itemOrder;
+    this.currentPage = s.currentPage;
+    this.expandedItems = s.expandedItems;
+    this.navHidden = s.navHidden;
+  }
+
   private renderFeedList(): void {
     renderFeedNavigation(this.navEl, this, this.plugin);
+  }
+
+  /** Public, read-only accessor so view sub-components can reliably query
+   *  whether the unified timeline is active without poking at private
+   *  implementation details or the plugin settings object. */
+  public isMixedViewEnabled(): boolean {
+    return this.fsm.mixedView;
   }
 
   public nextPage() {
@@ -166,46 +330,126 @@ export class FeedsReaderView extends ItemView {
 
     const items = this.getVisibleItems();
 
-    if (!this.plugin.settings.mixedFeedView && !this.currentFeed) {
+    /*
+     * Ensure the currently selected page is still valid after the underlying
+     * item pool has changed (e.g. a feed was added/removed while the viewer
+     * is in *mixed* mode).  Without this guard the list could end up empty
+     * and show the misleading "No more items" placeholder although there
+     * are entries available on an earlier page.
+     */
+    if (this.itemsPerPage > 0) {
+      const totalPages = items.length === 0 ? 1 : Math.ceil(items.length / this.itemsPerPage);
+      if (this.currentPage >= totalPages) {
+        this.currentPage = Math.max(0, totalPages - 1);
+      }
+    }
+
+    if (!this.fsm.mixedView && !this.currentFeed) {
       contentEl.setText("No feed selected to display items.");
       return;
     }
 
-    if (!this.contentAreaEl ) { console.warn("Content area not ready."); return; }
+
+    if (!this.contentAreaEl) {
+      console.warn("Content area not ready.");
+      return;
+    }
+
+    // Delegate to the renderer that matches the current view style.
+    if (this.fsm.viewStyle === "card") {
+      renderFeedItemsCard(this.contentAreaEl, items, this, this.plugin);
+    } else {
       renderFeedItemsList(this.contentAreaEl, items, this, this.plugin);
+    }
 
     // reset selection to first item of page
-    this.selectedIndex = 0;
+    // Preserve selection if already valid. When called from interactions like
+    // toggling between *title* and *content* view, keeping the current
+    // selection intact provides better ergonomics because the user stays on
+    // the item they were just reading.  If the previous selectedIndex is out
+    // of range for the newly rendered list (different page length, etc.) we
+    // fall back to the first item.
+    if (this.selectedIndex < 0 || this.selectedIndex >= items.length) {
+      this.selectedIndex = 0;
+    }
     this.highlightSelected();
   }
 
+  /**
+   * Toggle between "title-only" (collapsed) mode and full-content mode.
+   *
+   * Behavior requirements (UX):
+   *   • title → content : every item should reveal its content.
+   *   • content → title : only the *currently focused* item remains expanded
+   *     so that the reader preserves context while collapsing distraction.
+   */
+  public toggleTitleOnlyMode(): void {
+    this.dispatch({ type: "ToggleTitleOnly" });
+
+    // Persist user preference asynchronously
+    if (this.plugin.settings.defaultTitleOnly !== this.titleOnly) {
+      this.plugin.settings.defaultTitleOnly = this.titleOnly;
+      void this.plugin.saveSettings().catch(err => console.error("FeedsReaderView: Failed to persist defaultTitleOnly", err));
+    }
+  }
+
+  /**
+   * Expand/collapse a given item by ID.
+   *
+   * This helper previously required a valid `currentFeed` which broke
+   * functionality in *mixed* (unified) view because that mode has no single
+   * active feed.  The guard has therefore been removed and the missing item
+   * data is now resolved on-demand by searching **all** feeds – a cheap
+   * operation as the dataset is already available in-memory.
+   */
   public toggleItemExpansion(itemId: string): void {
-    if (itemId && this.currentFeed && this.plugin.feedsStore[this.currentFeed]) {
-      if (!this.expandedItems) this.expandedItems = new Set();
-      const itemDiv = this.contentAreaEl.querySelector(`.fr-item[data-item-id="${itemId}"]`);
-      if (itemDiv) {
-        const contentEl = itemDiv.querySelector(".fr-item-content") as HTMLElement;
-        if (itemDiv.classList.contains("expanded")) {
-          itemDiv.classList.remove("expanded"); this.expandedItems.delete(itemId);
-          if (contentEl && this.titleOnly) contentEl.hidden = true; // Hide only if in titleOnly mode          
-        } else {
-          itemDiv.classList.add("expanded"); this.expandedItems.add(itemId);
-          if (contentEl) {
-            contentEl.hidden = false; // Always show if expanded
-            // If content was never rendered (e.g. initially hidden by titleOnly), render it now.
-            if (contentEl.childNodes.length === 0) {
-              const itemData = this.plugin.feedsStore[this.currentFeed!]?.items.find(i => i.id === itemId);
-              if(itemData) renderSingleItemContent(itemData, contentEl, this.plugin);
+    if (!itemId) return;
+
+    if (!this.expandedItems) this.expandedItems = new Set();
+
+    const itemDiv = this.contentAreaEl.querySelector(`.fr-item[data-item-id="${itemId}"]`);
+    if (!itemDiv) return;
+
+    const contentEl = itemDiv.querySelector(".fr-item-content") as HTMLElement | null;
+
+    const collapse = itemDiv.classList.contains("expanded");
+
+    if (collapse) {
+      itemDiv.classList.remove("expanded");
+      this.expandedItems.delete(itemId);
+      this.dispatch({ type: "CollapseItem", id: itemId });
+      if (contentEl && this.titleOnly) contentEl.hidden = true;
+    } else {
+      itemDiv.classList.add("expanded");
+      this.expandedItems.add(itemId);
+      this.dispatch({ type: "ExpandItem", id: itemId });
+
+      if (contentEl) {
+        contentEl.hidden = false;
+
+        // Lazily render Markdown if it has not been rendered before.
+        if (contentEl.childNodes.length === 0) {
+          let itemData: import("./types").RssFeedItem | undefined;
+
+          if (this.currentFeed) {
+            itemData = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+          } else {
+            // Mixed view – walk every feed once to locate the item.
+            for (const feed of Object.values(this.plugin.feedsStore)) {
+              const found = feed.items.find(i => i.id === itemId);
+              if (found) { itemData = found; break; }
             }
+          }
+
+          if (itemData) {
+            void renderSingleItemContent(itemData, contentEl, this.plugin);
           }
         }
       }
-
-      // Ensure the clicked/expanded item becomes the current selection so
-      // subsequent keyboard actions operate on the same element the user just
-      // interacted with using the mouse.
-      this.setSelectedItemById(itemId);
     }
+
+    // Sync keyboard selection with the element the user just interacted with.
+    this.setSelectedItemById(itemId);
   }
 
   public pushUndo(action: UndoAction): void {
@@ -222,10 +466,48 @@ export class FeedsReaderView extends ItemView {
   }
 
   public refreshView(): void {
-    // console.log("FeedsReaderView: Refreshing view state...");    
+    // Ensure view style follows the latest persisted setting.  When the user
+    // changes the display layout (card ↔ list) in the plugin *Settings* panel
+    // the open views need to reflect the choice immediately.  The settings
+    // tab already triggers `plugin.saveSettings()` which calls this method
+    // for every active view.  Here we reconcile the FSM with the new
+    // persisted preference.
+    // ------------------------------------------------------------------
+    // Synchronize persisted *Settings* → FSM
+    // ------------------------------------------------------------------
+    const prevStyle = this.fsm.viewStyle;
+    if (prevStyle !== this.plugin.settings.viewStyle) {
+      // The dispatch will emit a "Render" effect which re-draws the content
+      // area in the newly chosen layout. We therefore must *not* re-render
+      // once more below or the work would be duplicated (flicker & waste).
+      this.dispatch({ type: "SetViewStyle", style: this.plugin.settings.viewStyle as ViewStyle });
+    }
+
+    // --------------------------------------------------------------
+    // Always refresh side-bar navigation – its appearance does not
+    // depend on the content layout, yet the underlying subscription
+    // list might have changed while the settings tab was open.
+    // --------------------------------------------------------------
     this.renderFeedList();
-    if (this.currentFeed) { this.renderFeedContent(); }
-    else if (this.contentAreaEl) { this.contentAreaEl.setText("Select a feed from the list."); }
+
+    // Skip an extra content render when it has *already* been done by the
+    // FSM effect above.  Saves a full traversal / DOM diff pass.
+    const styleChanged = prevStyle !== this.fsm.viewStyle;
+
+    if (!styleChanged) {
+      if (this.fsm.mixedView) {
+        // Unified timeline renders regardless of currentFeed selection.
+        this.renderFeedContent();
+      } else if (this.currentFeed) {
+        this.renderFeedContent();
+      } else if (this.contentAreaEl) {
+        // Per-feed mode with nothing selected → friendly prompt.
+        this.contentAreaEl.setText("Select a feed from the list.");
+      }
+    }
+
+    // Controls (title-only toggle, etc.) can be recreated unconditionally –
+    // their construction is inexpensive compared to full content rendering.
     this.createControlButtons();
   }
 
@@ -261,7 +543,10 @@ export class FeedsReaderView extends ItemView {
     const enterOrO = key === "Enter" || key === "o";
     const markKey = key === "r";
     const delKey = key === "d";
-    const nextPageKey = key === "PageDown" || key === " "; // space
+    // Note: On some browsers / keyboard layouts the space bar reports
+    // "space bar" instead of a single space character.  Handle both to
+    // ensure cross-platform consistency.
+    const nextPageKey = key === "PageDown" || key === " " || key === "Spacebar";
     const prevPageKey = key === "PageUp";
 
     if (!(jOrDown || kOrUp || enterOrO || markKey || delKey || nextPageKey || prevPageKey)) return;
@@ -311,12 +596,18 @@ export class FeedsReaderView extends ItemView {
 
     const selectedItemEl = currentItems[this.selectedIndex];
     const itemId = selectedItemEl?.dataset.itemId;
-    if (!itemId || !this.currentFeed) return;
 
+    // "Enter" / "o" should work even in mixed view where `currentFeed` is
+    // intentionally `null`.  Other actions (mark, delete) still require an
+    // active feed context.
     if (enterOrO) {
-      this.toggleItemExpansion(itemId);
+      if (itemId) this.toggleItemExpansion(itemId);
       return;
     }
+
+    // The remaining actions operate on item metadata and therefore need a
+    // concrete feed context.  Abort gracefully when none is available.
+    if (!itemId || !this.currentFeed) return;
 
     if (markKey) {
       const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
@@ -363,7 +654,18 @@ export class FeedsReaderView extends ItemView {
 
     const selectedEl = items[this.selectedIndex];
     if (selectedEl) {
+      // Ensure the element can receive focus and move actual DOM focus so
+      // that assistive technologies pick up the change and standard
+      // keyboard navigation (e.g. pressing Space on a button inside the
+      // item) works without an extra click.
+      if (!selectedEl.hasAttribute("tabindex")) {
+        selectedEl.setAttribute("tabindex", "-1");
+      }
+      (selectedEl as HTMLElement).focus({ preventScroll: true });
       selectedEl.scrollIntoView({ block: "nearest" });
+      // Mark aria-selected for better SR support
+      items.forEach(el => el.setAttribute("aria-selected", "false"));
+      selectedEl.setAttribute("aria-selected", "true");
     }
   }
 
@@ -423,7 +725,9 @@ export class FeedsReaderView extends ItemView {
     // console.log("FeedsReaderView: Resetting to default state.");
     this.currentFeed = null; 
     this.resetFeedSpecificViewState();
-    if(this.contentAreaEl) this.contentAreaEl.setText("Select a feed from the list.");
+    if (!this.fsm.mixedView && this.contentAreaEl) {
+      this.contentAreaEl.setText("Select a feed from the list.");
+    }
     this.createControlButtons();
     this.renderFeedList();
   }
@@ -460,6 +764,25 @@ export class FeedsReaderView extends ItemView {
   }  
 
   public updateReadingProgress(): void {
+    // -------------------------------------------------------------------
+    // Performance optimization – *throttle* expensive BoundingClientRect
+    // calculations so that we run them at most every ~120 ms.  Continuous
+    // scroll events can fire rapidly (~60 Hz).  Without throttling we were
+    // doing a DOM query + rect maths for *every* event which caused heavy
+    // main-thread work and – on large item lists – made the UI feel
+    // sluggish and sometimes completely unresponsive to the mouse.  By
+    // short-circuiting calls that happen within the cool-down window we keep
+    // the progress indicator sufficiently up-to-date **while restoring
+    // smooth pointer/scroll interaction**.
+    // -------------------------------------------------------------------
+
+    const THROTTLE_MS = 120;
+    const now = performance.now();
+    if (this._lastProgressUpdate && now - this._lastProgressUpdate < THROTTLE_MS) {
+      return; // Skip – last update was recent enough.
+    }
+    this._lastProgressUpdate = now;
+
     if (!this.contentAreaEl) return;
     const container = this.contentAreaEl;
     // No need for manual scroll position math; bounding rect handles it.

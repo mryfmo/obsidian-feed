@@ -36,6 +36,14 @@ export interface FeedsReaderSettings {
   latestNOnly: boolean;
   latestNCount: number;
   viewStyle: "card" | "list";
+
+  /**
+   * Persisted UI preference: whether the reader starts in *title-only*
+   * (collapsed) mode (`true`) or shows full cards (`false`).  Updated every
+   * time the user toggles the layout so that the next session resumes the
+   * preferred view automatically.
+   */
+  defaultTitleOnly?: boolean;
 }
 
 /** Schema for individual feed item entries. */

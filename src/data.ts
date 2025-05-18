@@ -272,7 +272,6 @@ async function prepareData(ctx: FeedContext): Promise<{ meta: RssFeedMeta; items
 
 async function writeMeta(ctx: FeedContext, meta: RssFeedMeta) {
   const tmpDir = ctx.stagingDir;
-  // Ensure staging directory exists
   await ensureFolder({ ...ctx, absFolder: tmpDir });
 
   const tmp = `${tmpDir}/${FEEDS_META_FNAME}`;

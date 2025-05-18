@@ -30,7 +30,7 @@ export function absolute(base: string, relative: string): string {
  *
  * The returned value is a lower-case hexadecimal string with **no prefix** so
  * it can be safely compared against <guid> or other IDs without additional
- * normalisation.
+ * normalization.
  */
 export function generateDeterministicItemId(input: string): string {
   // Try Node.js crypto when available *synchronously*.
@@ -74,7 +74,7 @@ export function generateRandomUUID(): string {
 
 import type { RssFeedItem } from "./types";
 
-/** 既読／削除フラグに基づきアイテムが表示対象か判定する共通関数 */
+/** Determine if an item is visible based on read/deleted flags. */
 export function isVisibleItem(item: RssFeedItem, showAll: boolean): boolean {
   if (showAll) return true;
   return item.read === "0" && item.deleted === "0";
@@ -84,7 +84,7 @@ export function isVisibleItem(item: RssFeedItem, showAll: boolean): boolean {
 // Misc utilities
 // ---------------------------------------------------------------------------
 
-/** Fisher-Yates シャッフル。テスト内の determinism を重視し、Math.random() を使用 */
+/** Fisher-Yates shuffle.  Prioritizes determinism in tests by using Math.random(). */
 export function shuffleArray<T>(array: T[]): T[] {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -98,4 +98,53 @@ export function shuffleArray<T>(array: T[]): T[] {
 // ---------------------------------------------------------------------------
 
 export const generateDeterministicItemIdSync = generateDeterministicItemId;
+
+// ---------------------------------------------------------------------------
+// Image URL helpers (centralised)
+// ---------------------------------------------------------------------------
+
+/**
+ * Very small allow-list check to avoid XSS vectors such as
+ * `javascript:alert(1)` via <img src>.
+ *
+ *  • Allows http/https URLs
+ *  • Allows protocol-relative URLs (//example.com)
+ *  • Rejects everything else (data:, javascript:, ftp:, relative paths…)
+ */
+export function isSafeImageUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /^(https?:)?\/\//i.test(trimmed);
+}
+
+/** What rss-parser may give us for media:thumbnail / enclosure etc. */
+type ImageInput = string | { url?: string } | Array<string | { url?: string }> | undefined;
+
+/**
+ * Extract the first usable thumbnail URL from various RSS shapes.
+ */
+export function pickImageUrl(input: ImageInput): string | undefined {
+  if (!input) return undefined;
+
+  if (typeof input === 'string') {
+    return isSafeImageUrl(input) ? input : undefined;
+  }
+
+  if (Array.isArray(input)) {
+    // Prefer first string element
+    const str = input.find(i => typeof i === 'string' && isSafeImageUrl(i)) as string | undefined;
+    if (str) return str;
+
+    // Fallback: first object with safe url property
+    const obj = input.find(i => typeof i === 'object' && i !== null && typeof (i as { url?: string }).url === 'string' && isSafeImageUrl((i as { url: string }).url));
+    if (obj && typeof obj === 'object' && (obj as { url: string }).url) return (obj as { url: string }).url;
+    return undefined;
+  }
+
+  if (typeof input === 'object' && input !== null && typeof input.url === 'string') {
+    return isSafeImageUrl(input.url) ? input.url : undefined;
+  }
+
+  return undefined;
+}
+
 

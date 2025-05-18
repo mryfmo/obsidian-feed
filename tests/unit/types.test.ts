@@ -3,7 +3,7 @@ import {
   RssFeedItemSchema,
   RssFeedContentSchema,
   FeedListSchema,
-} from "../src/types";
+} from "../../src/types";
 
 describe("types.ts – schema validation", () => {
   it("valid feed item passes, missing field fails", () => {

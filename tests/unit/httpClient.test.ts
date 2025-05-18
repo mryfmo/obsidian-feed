@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createHttpClient } from '../src/network/httpClient';
+import { createHttpClient } from "../../src/network/httpClient";
+import type { AxiosInstance } from 'axios';
 
 // Helper response mock
 function mockResponse(body: string) {
@@ -13,7 +14,7 @@ function mockResponse(body: string) {
 
 describe('corsAdapter', () => {
   it('proxies https requests via jina with correct encoding', async () => {
-    const instance = createHttpClient();
+    const instance: AxiosInstance = createHttpClient();
     instance.defaults.adapter = vi.fn().mockRejectedValue({
       message: 'Network Error',
       config: { url: 'https://example.com' },

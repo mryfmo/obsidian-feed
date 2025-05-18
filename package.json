@@ -11,7 +11,9 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs", 
 		"build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-		"test": "vitest",
+    "test": "vitest", 
+    "test:unit": "vitest run --reporter=dot --config vitest.config.ts",
+    "test:int": "vitest run --reporter=dot --config vitest.integration.config.ts",
 		"e2e": "playwright test", 
 		"lint": "eslint . --ext .ts",
 		"clean": "rimraf dist",

@@ -2,7 +2,7 @@ import { FileSystemAdapter } from 'obsidian';
 import { FeedsReaderSettings, ContentBlock } from './types';
 import { NetworkService } from './networkService';
 import { basename, join } from 'path';
-import { safeGetPluginFeedsReaderDir, safePathJoin } from './view/utils'; // Correct import path
+import { safeGetPluginFeedsReaderDir, safePathJoin } from './pathUtils';
 import { HTML_CACHE_DIR } from './constants'; // Import HTML_CACHE_DIR
 
 /**

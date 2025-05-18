@@ -1,8 +1,8 @@
 import { FileSystemAdapter } from 'obsidian';
 import { FeedsReaderSettings } from './types';
-import { safeGetPluginFeedsReaderDir, safePathJoin } from './view/utils'; // Path joining utility
+import { safeGetPluginFeedsReaderDir, safePathJoin } from './pathUtils';
 import { HTML_CACHE_DIR } from './constants';
-import axios from 'axios'; // Using axios for more control
+import axios from 'axios';
 import { createHttpClient } from "./network/httpClient";
 
 const USER_AGENT = 
@@ -38,7 +38,7 @@ export class NetworkService {
     this.cacheBasePath = safePathJoin(pluginDataDir, HTML_CACHE_DIR);
   }
 
-  private getCacheFilePath(url: string): string {
+  public getCacheFilePath(url: string): string {
     // Simple hash for filename. Consider more robust hashing if needed.
     const hashedUrl = this.simpleHash(url);
     return safePathJoin(this.cacheBasePath, `${hashedUrl}.html`);
