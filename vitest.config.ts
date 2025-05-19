@@ -1,6 +1,6 @@
-import { defineConfig } from "vitest/config";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { defineConfig } from 'vitest/config';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -9,21 +9,15 @@ export default defineConfig({
     alias: [
       {
         find: /^obsidian$/,
-        replacement: resolve(__dirname, "tests/__mocks__/obsidian.ts"),
+        replacement: resolve(__dirname, 'tests/__mocks__/obsidian.ts'),
       },
     ],
   },
+  // Root config does not run tests, only workspace-side project definitions are used
   test: {
-    environment: "jsdom",
-    globals: true,
-    // デフォルトは「ユニット」だけ。結合テストは tests/integration で個別実行する。
-    exclude: ["e2e/**"],
-    include: [
-      'tests/unit/**/*.spec.ts',
-      'tests/unit/**/*.test.ts',
-    ],
+    include: [],
     coverage: {
-      reporter: ["text", "html"],
+      reporter: ['text', 'html'],
     },
   },
 });

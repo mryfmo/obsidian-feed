@@ -56,6 +56,15 @@ See also the in-app **? Help** command palette entry.
 
 ---
 
+## 📚 Documentation
+
+Need in-depth, always-up-to-date docs?  
+Explore the interactive DeepWiki instead ↓
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mryfmo/obsidian-feed)
+
+---
+
 ## ⚙️ Settings
 
 | Setting | Description |

@@ -23,6 +23,7 @@ data.json
 
 .*.sw*
 
+# Exclude package-lock.json and pnpm-lock.yaml
 package-lock.json
 pnpm-lock.yaml
 
@@ -30,5 +31,8 @@ pnpm-lock.yaml
 vitest.log
 vitest_output.json
 vitest_result*.json
-test_results*.json
-tmp.json
+
+# Playwright test results
+test-results
+
+# Test Vault

@@ -1,9 +1,10 @@
 {
 	"id": "contents-feeds-reader",
 	"name": "Contents Feeds Reader",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"minAppVersion": "1.8.10",
 	"description": "Read RSS/Atom, YouTube, Podcasts, and other contents within Obsidian.",
+	"main": "main.js",
 	"author": "mryfmo",
 	"authorUrl": "https://mryfmo.github.io",
 	"fundingUrl": "https://www.buymeacoffee.com/mryfmo",

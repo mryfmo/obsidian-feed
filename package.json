@@ -1,9 +1,8 @@
 {
 	"name": "obsidian-contents-feeds-reader",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "Obsidian plugin to read RSS/Atom, YouTube, Podcasts, etc.",
-	"type": "module",
-	"main": "dist/main.js",
+	"main": "main.js",
 
 	"keywords": ["obsidian-plugin", "rss", "feeds", "reader", "podcast", "youtube"],
 	"author": "mryfmo",
@@ -11,11 +10,11 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs", 
 		"build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-    "test": "vitest", 
-    "test:unit": "vitest run --reporter=dot --config vitest.config.ts",
-    "test:int": "vitest run --reporter=dot --config vitest.integration.config.ts",
+    	"test": "vitest", 
+    	"test:unit": "vitest run --reporter=dot tests/unit",
+		"test:int": "vitest run --reporter=dot tests/integration",
 		"e2e": "playwright test", 
-		"lint": "eslint . --ext .ts",
+	    "lint": "eslint .",
 		"clean": "rimraf dist",
 		"prebuild": "pnpm run clean",
 		"check-deps": "depcheck",
@@ -46,11 +45,13 @@
 		"builtin-modules": "5.0.0",
 		"depcheck": "^1.4.7",
 		"rimraf": "^6.0.1",
-		"domhandler": "^5.0.3"
+		"domhandler": "^5.0.3",
+		"electron": "34.3.0"
 	},
     "pnpm": {
-        "onlyBuiltDependencies": [
-            "esbuild"
-        ]
-    }	
+        "onlyBuiltDependencies": ["esbuild", "electron"]
+    },
+    "depcheck": {
+        "ignores": ["electron", "@eslint/js", "typescript-eslint", "rimraf"]
+    }
 }
