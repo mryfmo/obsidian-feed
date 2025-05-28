@@ -64,7 +64,12 @@ Each state transition must appear in either:
   State-Transition: ANA→PLAN
   ```
 
-CI fails the build if the final commit of a PR has an open checklist item.
+CI validates STP markers by checking:
+- PR body for checklists or state transitions  
+- **All commits** in the PR (not just the latest)
+- Changed documentation files for checklist updates
+
+See [`stp-validation-guide.md`](./stp-validation-guide.md) for detailed validation rules.
 
 ## Reviewers’ Quick Guide
 

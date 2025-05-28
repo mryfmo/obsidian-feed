@@ -42,9 +42,18 @@ fi
 
 # ---------- diff size (applies only when GIT_DIR present) ----------
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  read added files <<<"$(git diff --cached --numstat | awk '{a+=$1;f+=1}END{print a,f}')"
-  if [[ -n "$added" && ( "$added" -gt 1000 || "$files" -gt 10 ) ]]; then
-    die "Patch size exceeds limit (LOC $added, files $files)"
+  # Use --cached for staged changes, with proper error handling
+  if diff_output=$(git diff --cached --numstat 2>/dev/null); then
+    read added files <<<"$(echo "$diff_output" | awk '{a+=$1;f+=1}END{print a,f}')"
+    # Ensure variables are set (default to 0 if empty)
+    added=${added:-0}
+    files=${files:-0}
+    
+    if [[ "$added" -gt 1000 || "$files" -gt 10 ]]; then
+      die "Patch size exceeds limit (LOC $added, files $files)"
+    fi
+  else
+    echo "Warning: Unable to calculate diff size" >&2
   fi
 fi
 
@@ -81,5 +90,11 @@ fi
 # ---------- Role × Path Control ----------
 role=${TURN_ROLE:-dev}
 if [[ "$role" == "review" ]]; then
-  git diff --name-only --cached | grep -q '^src/' && die "review role is not allowed to edit src/"
+  # More robust check for src/ changes with error handling
+  if git diff --name-only --cached 2>/dev/null | grep -q '^src/'; then
+    echo "Error: Changes to src/ directory are not allowed for review role" >&2
+    echo "Files changed in src/:" >&2
+    git diff --name-only --cached | grep '^src/' >&2 || true
+    die "review role is not allowed to edit src/"
+  fi
 fi

@@ -56,14 +56,37 @@ Detailed tasks are listed in §2.
 | I-1 | Reproduce | Reproduce failure | `$ pnpm test` | fail-log | exit≠0 |
 | I-2 | Minimal test | Create Red test | `apply_patch` | spec | spec Red |
 
-### ANA ... *Same form as below, omitted*
-(28 tasks are defined, from causal tree, impact scope, RFC draft, patch design, implementation, testing, coverage, to release)
+### Complete Task Definitions
 
-The complete table is collapsed in `<details>...</details>`.
+The remaining tasks follow the same tabular format. All 28 tasks are defined across the 7 phases:
+- FETCH: 3 tasks (F-1 to F-3)
+- INV: 3 tasks (I-1 to I-3)
+- ANA: 4 tasks (A-1 to A-4)
+- PLAN: 4 tasks (P-1 to P-4)
+- BUILD: 6 tasks (B-1 to B-6)
+- VERIF: 5 tasks (V-1 to V-5)
+- REL: 3 tasks (R-1 to R-3)
+
+**For the complete task definitions, see: [`02_claude-code-complete-tasks.md`](./02_claude-code-complete-tasks.md)**
+
+<details>
+<summary>View task summary</summary>
+
+| Phase | Tasks | Key Deliverables |
+|-------|-------|------------------|
+| **ANA** | Causal tree, Impact scope, Risk assessment, Commit analysis | cause-tree.md, impact.md, risks.md |
+| **PLAN** | RFC draft, Test strategy, Patch design, Review checkpoint | rfc-draft.md, test-plan.md, patch-plan.md |
+| **BUILD** | Code modification, Unit tests, Lint & format, Type check, Integration, Documentation | src/ diff, test/ diff, docs/ diff |
+| **VERIF** | Coverage check, Manual QA, Performance, Security scan, Changelog | coverage.html, qa-results.md, CHANGELOG diff |
+| **REL** | Version bump, Release notes, Tag & publish | package.json, RELEASE.md, Git tag |
+
+</details>
 
 ---
 
 ## 3 Guard Map
+
+Guards are automated checks that enforce workflow rules and quality standards. The table below shows key examples:
 
 | Guard ID | Verification content | Corresponding task |
 |----------|----------|------------|
@@ -72,7 +95,14 @@ The complete table is collapsed in `<details>...</details>`.
 | G-SIZE | LOC ≤1 000, files ≤10 | B-1 |
 | G-EDGE | New test Green | B-2 |
 | G-COV | Changed line coverage ≥90 % | V-1 |
-| … | … | … |
+
+**For the complete guard map with all 25+ guards, see: [`02_claude-code-guard-map.md`](./02_claude-code-guard-map.md)**
+
+The guards are categorized as:
+* **Structure Guards** (G-PHASE, G-TOKEN, G-LABEL, etc.) - Enforce workflow structure
+* **Quality Guards** (G-RFC, G-TEST, G-LINT, etc.) - Ensure code quality
+* **Process Guards** (G-USER-OK, G-WBS-OK, etc.) - Validate approvals
+* **Access Control Guards** (G-ROLE, G-STATE, etc.) - Enforce permissions
 
 ---
 
@@ -95,6 +125,14 @@ Exit : LOC ≤ 1 000, files ≤ 10, G-SIZE ○, test green
 flowchart LR
 FETCH --> INV --> ANA --> PLAN --> BUILD --> VERIF --> REL
 ```
+
+**For complete phase transition validation and dependency enforcement, see: [`phase-transition-validation.md`](./phase-transition-validation.md)**
+
+Key improvements:
+* Explicit phase dependencies with completion artifacts
+* Enhanced security validation for FETCH phase
+* Flexible BUILD constraints with exception handling
+* REL phase requires VERIF completion certificate
 
 ---
 

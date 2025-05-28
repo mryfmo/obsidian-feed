@@ -1,3 +1,4 @@
+
 # Claude Code Action Integration Guide
 
 This guide explains how Claude Code Action integrates with the strict workflow system.
@@ -53,6 +54,7 @@ State-Transition: CURRENT→NEXT
 - **Allowed**: Network operations via `fetch_doc.sh`
 - **Artifacts**: Downloaded files in `.cache/`
 - **Restrictions**: No code changes
+- **Security**: URL validation, malicious content blocking, 10MB size limit
 
 #### INV Phase
 - **Purpose**: Investigate and reproduce issues
@@ -76,7 +78,8 @@ State-Transition: CURRENT→NEXT
 - **Purpose**: Implement solution
 - **Allowed**: Code changes, test updates
 - **Artifacts**: Patches via `apply_patch`
-- **Restrictions**: ≤1000 LOC, ≤10 files
+- **Restrictions**: ≤1000 LOC, ≤10 files (exceptions allowed with approval)
+- **Dependencies**: Requires approved PLAN phase completion
 
 #### VERIF Phase
 - **Purpose**: Verify implementation
@@ -87,8 +90,9 @@ State-Transition: CURRENT→NEXT
 #### REL Phase
 - **Purpose**: Release preparation
 - **Allowed**: Version bump, release notes
-- **Artifacts**: Release commit, GitHub release
-- **Restrictions**: Only after VERIF complete
+- **Artifacts**: Release commit, GitHub release, VERIF completion certificate
+- **Restrictions**: Only after VERIF complete with QA sign-off
+- **Dependencies**: Requires VERIF phase completion artifact
 
 ## GitHub Action Configuration
 

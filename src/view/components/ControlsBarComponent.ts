@@ -46,8 +46,11 @@ export function renderControlsBar(
     const { updateAllFeeds } = await import('../../controller/updateAllFeeds');
 
     const progressNotice = new Notice('Fetching updates for all feeds…', 0);
-    await updateAllFeeds(plugin, view, (m, t) => new Notice(m, t));
-    progressNotice.hide();
+    try {
+      await updateAllFeeds(plugin, view, (m, t) => new Notice(m, t));
+    } finally {
+      progressNotice.hide();
+    }
 
     view.refreshView();
   });

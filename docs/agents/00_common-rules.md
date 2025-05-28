@@ -7,19 +7,19 @@ All agents MUST comply with the rules below unless explicitly told otherwise in 
 
 ## 1. Repository Basics
 
-* Node version  : **≥ 20.9**  
-* Package manager : **pnpm**   (run `pnpm install` before anything else)  
-* Source language  : **TypeScript 5**   (uses modern `ES2024` features)  
+* Node version  : **≥ 20.9**  
+* Package manager : **pnpm**   (run `pnpm install` before anything else)  
+* Source language  : **TypeScript 5**   (uses modern `ES2024` features)  
 * Test frameworks  : **Vitest** (unit / integration) & **Playwright** (E2E)  
 * Linter / Format  : **ESLint** (Airbnb-flavoured ruleset) + **Prettier** for consistent whitespace  
-* Build script   : `pnpm build` → produces `/dist` bundle via ESBuild  
+* Build script   : `pnpm build` → produces `/dist` bundle via ESBuild  
 * Obsidian API     : v1.8.x (Electron 27, DOM = Chromium 119)
 
 ## 2. Golden Path for Any Change
 
 1. Create a new branch locally (if you are a human) OR work in-place (if you are a bot running inside a sandbox).
 2. Run `pnpm test` → tests must be green **before** you start editing so you catch pre-existing breakage.
-3. Perform the minimal code modifications that solve the problem at its root cause.  Avoid “drive-by” stylistic changes.
+3. Perform the minimal code modifications that solve the problem at its root cause.  Avoid "drive-by" stylistic changes.
 4. Update or add tests that reproduce the bug / assert the new behaviour.
 5. Execute:
    * `pnpm lint` – must be clean.
@@ -88,9 +88,133 @@ The `rel` agent will use these to generate the changelog.
 
 ## 7. Security & Privacy
 
-• No telemetry is sent.  Do not add network calls outside the `/src/network` abstraction.  
-• Secrets (e.g., Claude API key) are provided by the user via plugin settings and stored in Obsidian’s encrypted DB; never log them.  
-• Adhere to the Obsidian sandbox policy: file reads/writes must stay under the user’s vault path.
+### Core Principles
+
+• **No telemetry**: Never add analytics, tracking, or unauthorized network calls outside `/src/network` abstraction.  
+• **Secret handling**: API keys and tokens are stored in Obsidian's encrypted DB; never log, display, or include them in error messages.  
+• **Sandbox compliance**: All file operations must stay within the user's vault path - no access to system files.  
+• **Input validation**: Sanitize and validate all user inputs, especially file paths, URLs, and HTML content.  
+• **Content Security**: Use CSP headers and sanitization when rendering external content.  
+• **No code execution**: Never use `eval()`, `Function()`, or execute user-provided scripts.
+
+### Common Security Pitfalls & Examples
+
+#### ❌ BAD: Logging Sensitive Data
+```typescript
+// NEVER DO THIS
+console.log(`Fetching with API key: ${settings.apiKey}`);
+throw new Error(`Auth failed with key: ${settings.apiKey}`);
+
+// ✅ GOOD: Sanitize error messages
+console.log('Fetching with API key: [REDACTED]');
+throw new Error('Authentication failed - check your API key in settings');
+```
+
+#### ❌ BAD: Path Traversal Vulnerability
+```typescript
+// NEVER DO THIS - allows accessing files outside vault
+const path = `${vaultPath}/${userInput}`;  // userInput could be "../../etc/passwd"
+
+// ✅ GOOD: Validate and normalize paths
+import { normalize, join } from 'path';
+
+function safeJoinPath(base: string, userPath: string): string {
+  const normalized = normalize(userPath);
+  const joined = join(base, normalized);
+  
+  // Ensure the result is still within the base directory
+  if (!joined.startsWith(normalize(base))) {
+    throw new Error('Invalid path: access outside vault not allowed');
+  }
+  return joined;
+}
+```
+
+#### ❌ BAD: XSS via Unsanitized Content
+```typescript
+// NEVER DO THIS - allows script injection
+contentEl.innerHTML = feedItem.content;
+
+// ✅ GOOD: Sanitize HTML content
+import { sanitizeHTMLToDom } from 'obsidian';
+
+const sanitized = sanitizeHTMLToDom(feedItem.content);
+contentEl.appendChild(sanitized);
+
+// Or use DOMPurify for custom sanitization
+import DOMPurify from 'dompurify';
+const clean = DOMPurify.sanitize(feedItem.content, {
+  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'a'],
+  ALLOWED_ATTR: ['href', 'title']
+});
+```
+
+#### ❌ BAD: Unsafe URL Handling
+```typescript
+// NEVER DO THIS - allows javascript: and data: URLs
+window.open(userProvidedUrl);
+
+// ✅ GOOD: Validate URL protocols
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+if (isValidUrl(userProvidedUrl)) {
+  window.open(userProvidedUrl);
+}
+```
+
+#### ❌ BAD: Command Injection
+```typescript
+// NEVER DO THIS - allows command injection
+exec(`curl ${userUrl}`);  // userUrl could be "example.com; rm -rf /"
+
+// ✅ GOOD: Use safe APIs or proper escaping
+import { requestUrl } from 'obsidian';
+
+const response = await requestUrl({
+  url: userUrl,
+  method: 'GET',
+  headers: { 'User-Agent': 'Obsidian-Feed-Reader' }
+});
+```
+
+#### ❌ BAD: Storing Secrets in Code
+```typescript
+// NEVER DO THIS
+const DEFAULT_API_KEY = 'sk-1234567890abcdef';
+const CORS_PROXY = 'https://api.example.com/proxy?key=secret';
+
+// ✅ GOOD: Require user configuration
+interface Settings {
+  apiKey: string;  // User must provide
+  corsProxy?: string;  // Optional, no defaults
+}
+
+// Validate before use
+if (!settings.apiKey) {
+  new Notice('Please configure your API key in settings');
+  return;
+}
+```
+
+### Security Checklist for Code Review
+
+- [ ] No secrets, tokens, or API keys in code or logs
+- [ ] All user inputs are validated and sanitized
+- [ ] File paths are normalized and confined to vault
+- [ ] External content is sanitized before rendering
+- [ ] URLs are validated for safe protocols
+- [ ] No use of eval() or dynamic code execution
+- [ ] Error messages don't leak sensitive information
+- [ ] Network requests use proper abstractions
+- [ ] CORS proxy usage is documented and optional
+- [ ] Content Security Policy is enforced where applicable
 
 ## 8. Performance Targets
 

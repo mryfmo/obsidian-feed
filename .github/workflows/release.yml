@@ -13,9 +13,35 @@ jobs:
           cyclonedx-bom -o sbom.xml
       - name: bundle strict workflow patch
         run: |
-          git diff $(git rev-list --max-parents=0 HEAD)..HEAD > strict_workflow.patch
-          last=$(git describe --abbrev=0 --tags || echo $(git rev-list --max-parents=0 HEAD))
-          git diff $last..HEAD > strict_workflow.patch
+          set -euo pipefail
+          
+          # Get the root commit (first commit in repo)
+          ROOT_COMMIT=$(git rev-list --max-parents=0 HEAD)
+          echo "Root commit: $ROOT_COMMIT"
+          
+          # Get the last tag, or use root commit if no tags exist
+          if git describe --abbrev=0 --tags HEAD 2>/dev/null; then
+            LAST_TAG=$(git describe --abbrev=0 --tags HEAD)
+            echo "Last tag found: $LAST_TAG"
+          else
+            LAST_TAG="$ROOT_COMMIT"
+            echo "No tags found, using root commit"
+          fi
+          
+          # Create patch file with proper error handling
+          if ! git diff "${LAST_TAG}..HEAD" > strict_workflow.patch; then
+            echo "Warning: Failed to create patch from $LAST_TAG to HEAD"
+            # Fallback: create empty patch file
+            touch strict_workflow.patch
+          fi
+          
+          # Show patch statistics
+          if [[ -s strict_workflow.patch ]]; then
+            echo "Patch created successfully:"
+            git diff --stat "${LAST_TAG}..HEAD" || true
+          else
+            echo "Warning: Empty patch file created"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: strict_workflow_patch

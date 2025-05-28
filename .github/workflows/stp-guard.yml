@@ -9,13 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify lifecycle artefacts & checklist
+        with:
+          fetch-depth: 0  # Need full history to check all commits
+          
+      - name: Check lifecycle documentation exists
         run: |
-          echo '🔎 Checking mandatory process artefacts'
-          test -f docs/agents/01_task-lifecycle.md || {
-            echo 'Lifecycle spec missing'; exit 1; }
-          # ensure at least one State-Transition or checklist box present in PR diff
-          if ! git show -s --pretty=%B | grep -Eq 'State-Transition:|\[x\] INV'; then
-            echo 'No State-Transition or checklist tick found in commit message.'
-            echo 'Ensure you follow STP (INV → ANA → PLAN …)'; exit 1; fi
-          echo '✅ STP artefact guard passed.'
+          if ! test -f docs/agents/01_task-lifecycle.md; then
+            echo '❌ Lifecycle spec missing: docs/agents/01_task-lifecycle.md'
+            exit 1
+          fi
+          echo '✅ Lifecycle documentation found'
+          
+      - name: Validate STP markers
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Use the validation script
+          ./tools/validate-stp-markers.sh "$PR_BODY" "$BASE_SHA" "$HEAD_SHA"

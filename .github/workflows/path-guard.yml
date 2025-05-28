@@ -5,10 +5,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: {fetch-depth: 2}
+        with: 
+          fetch-depth: 0  # Fetch full history for reliable diff
+          
       - name: path guard
         run: |
+          set -euo pipefail
+          
+          # Extract role from PR labels
           ROLE="${{ github.event.pull_request.labels.*.name || '' }}"
+          echo "Detected role: $ROLE"
+          
+          # Check for review role
           if [[ "$ROLE" == *"review"* ]]; then
-            git diff --name-only -r $(git merge-base HEAD^ HEAD) | grep -q '^src/' && exit 1
+            echo "Review role detected - checking for src/ modifications..."
+            
+            # Get base and head commits
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            
+            # More robust git diff that handles various edge cases
+            if git diff --name-only "${BASE_SHA}...${HEAD_SHA}" 2>/dev/null | grep -q '^src/'; then
+              echo "Error: Changes to src/ directory are not allowed in review-labeled PRs"
+              echo "Files changed in src/:"
+              git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | grep '^src/' || true
+              exit 1
+            fi
+            
+            echo "✓ No src/ changes detected - review role check passed"
+          else
+            echo "Non-review role - no path restrictions applied"
           fi
