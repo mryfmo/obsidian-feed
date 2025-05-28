@@ -1,40 +1,44 @@
-import { Notice } from "obsidian";
-import { FRAddFeedModal } from "./addFeedModal";
-import { FRManageFeedsModal } from "./manageFeedsModal";
-import { FRSearchModal } from "./searchModal";
-import FeedsReaderPlugin from "./main";
-import { FeedsReaderView } from "./view";
+import { Notice } from 'obsidian';
+import { FRAddFeedModal } from './addFeedModal';
+import { FRManageFeedsModal } from './manageFeedsModal';
+import { FRSearchModal } from './searchModal';
+import FeedsReaderPlugin from './main';
+import { FeedsReaderView } from './view';
 
 export function registerCommands(plugin: FeedsReaderPlugin) {
   plugin.addCommand({
-    id: "open-feeds-reader", name: "Open Feeds Reader",
+    id: 'open-feeds-reader',
+    name: 'Open Feeds Reader',
     callback: async () => {
       // Ensure activateView exists and call it
       if (typeof plugin.activateView === 'function') {
         await plugin.activateView();
       } else {
-        console.error("activateView method not found on plugin instance.");
-        new Notice("Could not open Feeds Reader view.");
+        console.error('activateView method not found on plugin instance.');
+        new Notice('Could not open Feeds Reader view.');
       }
-    }
+    },
   });
 
   plugin.addCommand({
-    id: "add-new-feed", name: "Add New Feed…",
+    id: 'add-new-feed',
+    name: 'Add New Feed…',
     callback: () => {
       new FRAddFeedModal(plugin.app, plugin).open();
-    }
+    },
   });
 
   plugin.addCommand({
-    id: "manage-feeds", name: "Manage Subscriptions…",
+    id: 'manage-feeds',
+    name: 'Manage Subscriptions…',
     callback: () => {
       new FRManageFeedsModal(plugin.app, plugin).open();
-    }
+    },
   });
 
   plugin.addCommand({
-    id: "search-current-feed", name: "Search In Current Feed…",
+    id: 'search-current-feed',
+    name: 'Search In Current Feed…',
     checkCallback: (checking: boolean) => {
       const view = plugin.app.workspace.getActiveViewOfType(FeedsReaderView);
       const currentFeedName = view?.currentFeed;
@@ -46,32 +50,40 @@ export function registerCommands(plugin: FeedsReaderPlugin) {
       if (canSearch) {
         new FRSearchModal(plugin.app, currentFeedName, plugin).open();
       } else {
-        new Notice("Please select a feed with loaded items first to search within it.");
+        new Notice('Please select a feed with loaded items first to search within it.');
       }
       return canSearch; // Return true only if action was taken (or could be taken)
-    }
+    },
   });
 
   plugin.addCommand({
-    id: "next-page", name: "Next Page", hotkeys: [{ modifiers: [], key: "j" }],
+    id: 'next-page',
+    name: 'Next Page',
+    hotkeys: [{ modifiers: [], key: 'j' }],
     checkCallback: (checking: boolean): boolean => {
       const view = plugin.app.workspace.getActiveViewOfType(FeedsReaderView);
       // Enable only if view exists and a feed is selected
       const canPage = !!view?.currentFeed;
       if (checking) return canPage;
-      if (view) { view.nextPage(); } // Call method if view exists
+      if (view) {
+        view.nextPage();
+      } // Call method if view exists
       return true; // Command executed (or attempted)
-    }
+    },
   });
 
   plugin.addCommand({
-    id: "prev-page", name: "Previous Page", hotkeys: [{ modifiers: [], key: "k" }],
+    id: 'prev-page',
+    name: 'Previous Page',
+    hotkeys: [{ modifiers: [], key: 'k' }],
     checkCallback: (checking: boolean): boolean => {
       const view = plugin.app.workspace.getActiveViewOfType(FeedsReaderView);
       const canPage = !!view?.currentFeed;
       if (checking) return canPage;
-      if (view) { view.prevPage(); }
+      if (view) {
+        view.prevPage();
+      }
       return true;
-    }
+    },
   });
 }

@@ -1,6 +1,6 @@
-import { test as base, expect, type ElectronApplication, type Page } from "@playwright/test";
-import { _electron as electron } from "playwright";
-import * as path from "node:path";
+import { test as base, expect, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron as electron } from 'playwright';
+import * as path from 'node:path';
 
 // This fixture boots the plugin inside a bare Electron process with the
 // obsidian module mocked by tests/__mocks__/obsidian.ts. This is for "light" E2E.
@@ -9,17 +9,17 @@ export const test = base.extend<{
   electronApp: ElectronApplication;
   win: Page;
 }>({
-  electronApp: async ({}, use) => {
-    const appPath = path.resolve("./e2e/runtime/bootstrap.js"); // custom bootstrap
-    const vaultPath = path.resolve("./e2e-vault");
+  electronApp: async (_, use) => {
+    const appPath = path.resolve('./e2e/runtime/bootstrap.js'); // custom bootstrap
+    const vaultPath = path.resolve('./e2e-vault');
 
     // Preload stub that overrides `require('obsidian')` before plugin loads.
     const electronApp = await electron.launch({
       args: [appPath, vaultPath],
       env: {
         ...process.env,
-        OBSIDIAN_FEED_DEBUG: "true", // Enable verbose debug logs inside plugin
-        NODE_ENV: "test",
+        OBSIDIAN_FEED_DEBUG: 'true', // Enable verbose debug logs inside plugin
+        NODE_ENV: 'test',
       },
     });
 
@@ -32,7 +32,7 @@ export const test = base.extend<{
 
     // Pipe console messages from the renderer to the test runner output so we
     // can view the exact sequence later in the test results.
-    win.on('console', (msg) => {
+    win.on('console', msg => {
       // We prefix with [renderer] and include the message type for clarity.
       console.log(`[renderer:${msg.type()}] ${msg.text()}`);
     });

@@ -1,14 +1,14 @@
 import { FileSystemAdapter } from 'obsidian';
+import { basename, join } from 'path';
 import { FeedsReaderSettings, ContentBlock } from './types';
 import { NetworkService } from './networkService';
-import { basename, join } from 'path';
 import { safeGetPluginFeedsReaderDir, safePathJoin } from './pathUtils';
 import { HTML_CACHE_DIR } from './constants'; // Import HTML_CACHE_DIR
 
 /**
-  * This service will be responsible for downloading assets (images, videos)
-  * from feed item content and replacing their URLs with local paths.
-  */
+ * This service will be responsible for downloading assets (images, videos)
+ * from feed item content and replacing their URLs with local paths.
+ */
 export class AssetService {
   private cacheBasePath: string; // Declare cacheBasePath property
 
@@ -24,7 +24,7 @@ export class AssetService {
 
   private getAssetBasePath(): string {
     const pluginDataDir = safeGetPluginFeedsReaderDir(this.pluginId, this.adapter.getBasePath());
-    return join(pluginDataDir, this.settings.assetDownloadPath || "feeds_assets");
+    return join(pluginDataDir, this.settings.assetDownloadPath || 'feeds_assets');
   }
 
   async downloadAsset(assetUrl: string, baseArticleUrl: string): Promise<string | null> {
@@ -34,12 +34,14 @@ export class AssetService {
     try {
       absoluteAssetUrl = new URL(assetUrl, baseArticleUrl).href;
     } catch {
-      console.warn(`AssetService: Invalid asset URL "${assetUrl}" relative to "${baseArticleUrl}". Skipping download.`);
+      console.warn(
+        `AssetService: Invalid asset URL "${assetUrl}" relative to "${baseArticleUrl}". Skipping download.`
+      );
       return null;
     }
 
     const assetsDir = this.getAssetBasePath();
-    if (!await this.adapter.exists(assetsDir)) {
+    if (!(await this.adapter.exists(assetsDir))) {
       await this.adapter.mkdir(assetsDir);
     }
 
@@ -47,7 +49,10 @@ export class AssetService {
       const fileName = basename(new URL(absoluteAssetUrl).pathname) || `asset_${Date.now()}`;
       // Sanitize filename further if needed
       const safeFileName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_').substring(0, 100);
-      const localPathRelative = join(this.settings.assetDownloadPath || "feeds_assets", safeFileName); // Path relative to plugin data dir
+      const localPathRelative = join(
+        this.settings.assetDownloadPath || 'feeds_assets',
+        safeFileName
+      ); // Path relative to plugin data dir
       const localPathAbsolute = join(assetsDir, safeFileName);
 
       if (await this.adapter.exists(localPathAbsolute)) {
@@ -57,7 +62,9 @@ export class AssetService {
 
       const assetData = await this.networkService.fetchBinary(absoluteAssetUrl);
       if (!assetData) {
-        console.warn(`AssetService: Failed to fetch binary data for asset "${absoluteAssetUrl}". Skipping download.`);
+        console.warn(
+          `AssetService: Failed to fetch binary data for asset "${absoluteAssetUrl}". Skipping download.`
+        );
         return null;
       }
       await this.adapter.writeBinary(localPathAbsolute, assetData);
@@ -69,11 +76,18 @@ export class AssetService {
     }
   }
 
-  async downloadAssetsForBlocks(blocks: ContentBlock[], baseArticleUrl: string): Promise<ContentBlock[]> {
+  async downloadAssetsForBlocks(
+    blocks: ContentBlock[],
+    baseArticleUrl: string
+  ): Promise<ContentBlock[]> {
     if (!this.settings.enableAssetDownload) return blocks;
 
     for (const block of blocks) {
-      if ((block.type === "image" || block.type === "video") && block.src && !block.src.startsWith('data:')) {
+      if (
+        (block.type === 'image' || block.type === 'video') &&
+        block.src &&
+        !block.src.startsWith('data:')
+      ) {
         const localSrc = await this.downloadAsset(block.src, baseArticleUrl);
         if (localSrc) block.localSrc = localSrc;
       }

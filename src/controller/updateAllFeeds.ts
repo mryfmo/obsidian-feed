@@ -22,22 +22,19 @@
  * unit-test.
  */
 
-import type FeedsReaderPlugin from "../main";
-import type { FeedsReaderView } from "../view";
-import { getFeedItems } from "../getFeed";
+import type FeedsReaderPlugin from '../main';
+import type { FeedsReaderView } from '../view';
+import { getFeedItems } from '../getFeed';
 
 /** Callback signature for UI notifications */
-export type NotifyFn = (
-  message: string,
-  timeoutMs?: number,
-) => void;
+export type NotifyFn = (message: string, timeoutMs?: number) => void;
 
 export async function updateAllFeeds(
   plugin: FeedsReaderPlugin,
   view: FeedsReaderView,
-  notify: NotifyFn = () => {},
+  notify: NotifyFn = () => {}
 ): Promise<void> {
-  notify("Fetching updates for all feeds…", 0);
+  notify('Fetching updates for all feeds…', 0);
 
   let changesMadeOverall = false;
   let feedsSuccessfullyUpdated = 0;
@@ -52,14 +49,14 @@ export async function updateAllFeeds(
         feedInfo,
         plugin.networkService,
         plugin.contentParserService,
-        plugin.assetService,
+        plugin.assetService
       );
 
       const existingFeed = plugin.feedsStore[feedInfo.name];
       let feedChanged = false;
 
       if (existingFeed?.items) {
-        const existingItemIds = new Set(existingFeed.items.map(i => i.id ?? ""));
+        const existingItemIds = new Set(existingFeed.items.map(i => i.id ?? ''));
 
         const freshItems = newFeedContent.items.filter(i => {
           // Defensive: ensure id present.
@@ -88,12 +85,12 @@ export async function updateAllFeeds(
 
         // refresh unread counter
         feedInfo.unread = existingFeed.items.filter(
-          i => i.read === "0" && i.deleted === "0",
+          i => i.read === '0' && i.deleted === '0'
         ).length;
       } else {
         plugin.feedsStore[feedInfo.name] = newFeedContent;
         feedInfo.unread = newFeedContent.items.filter(
-          i => i.read === "0" && i.deleted === "0",
+          i => i.read === '0' && i.deleted === '0'
         ).length;
         feedChanged = true;
       }
@@ -109,7 +106,7 @@ export async function updateAllFeeds(
       feedsFailedToUpdate += 1;
       notify(
         `Failed to update "${feedInfo.name}". ${(err instanceof Error ? err.message : String(err)).substring(0, 120)}`,
-        7000,
+        7000
       );
     }
   }
@@ -119,7 +116,7 @@ export async function updateAllFeeds(
   }
 
   notify(
-    `Update finished. ${feedsSuccessfullyUpdated} updated.${feedsFailedToUpdate ? ` ${feedsFailedToUpdate} failed.` : ""}`,
-    6000,
+    `Update finished. ${feedsSuccessfullyUpdated} updated.${feedsFailedToUpdate ? ` ${feedsFailedToUpdate} failed.` : ''}`,
+    6000
   );
 }

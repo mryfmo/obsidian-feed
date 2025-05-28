@@ -13,8 +13,8 @@
  * UI session state if desired.
  * ------------------------------------------------------------- */
 
-export type ViewStyle = "card" | "list";
-export type ItemOrder = "New to old" | "Old to new" | "Random";
+export type ViewStyle = 'card' | 'list';
+export type ItemOrder = 'New to old' | 'Old to new' | 'Random';
 
 /* --------------------------------------------------------------------
  * State definition
@@ -37,10 +37,10 @@ export const createInitialState = (defaults?: Partial<ViewState>): ViewState => 
   currentFeed: null,
   mixedView: false,
   navHidden: false,
-  viewStyle: "card",
+  viewStyle: 'card',
   titleOnly: true,
   showAll: false,
-  itemOrder: "New to old",
+  itemOrder: 'New to old',
   currentPage: 0,
   expandedItems: new Set<string>(),
   selectedIndex: 0,
@@ -52,28 +52,28 @@ export const createInitialState = (defaults?: Partial<ViewState>): ViewState => 
  * Events – discrete, high-level user or system interactions
  * ------------------------------------------------------------------ */
 export type Event =
-  | { type: "ToggleNav" }
-  | { type: "ToggleMixedView" }
-  | { type: "ToggleTitleOnly" }
-  | { type: "SetViewStyle"; style: ViewStyle }
-  | { type: "SelectFeed"; feed: string | null }
-  | { type: "ToggleShowAll" }
-  | { type: "CycleItemOrder" }
-  | { type: "NextPage"; hasMore: boolean }
-  | { type: "PrevPage" }
-  | { type: "ExpandItem"; id: string }
-  | { type: "CollapseItem"; id: string };
+  | { type: 'ToggleNav' }
+  | { type: 'ToggleMixedView' }
+  | { type: 'ToggleTitleOnly' }
+  | { type: 'SetViewStyle'; style: ViewStyle }
+  | { type: 'SelectFeed'; feed: string | null }
+  | { type: 'ToggleShowAll' }
+  | { type: 'CycleItemOrder' }
+  | { type: 'NextPage'; hasMore: boolean }
+  | { type: 'PrevPage' }
+  | { type: 'ExpandItem'; id: string }
+  | { type: 'CollapseItem'; id: string };
 
 /* --------------------------------------------------------------------
  * Effects – side-effects the host environment must execute *after*
  *   the state transition has been accepted.
  * ------------------------------------------------------------------ */
 export type Effect =
-  | { type: "Render" }
-  | { type: "ResetFeedSpecificState" }
-  | { type: "OpenModal"; modal: "Add" | "Manage" | "Search" | "Help" }
-  | { type: "FetchFeeds" }
-  | { type: "SaveFeeds" };
+  | { type: 'Render' }
+  | { type: 'ResetFeedSpecificState' }
+  | { type: 'OpenModal'; modal: 'Add' | 'Manage' | 'Search' | 'Help' }
+  | { type: 'FetchFeeds' }
+  | { type: 'SaveFeeds' };
 
 /* --------------------------------------------------------------------
  * Reducer – pure function (state, event) → [newState, effects[]]
@@ -84,24 +84,24 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
   const effects: Effect[] = [];
 
   const render = () => {
-    if (!effects.find(e => e.type === "Render")) effects.push({ type: "Render" });
+    if (!effects.find(e => e.type === 'Render')) effects.push({ type: 'Render' });
   };
 
   switch (event.type) {
-    case "ToggleNav": {
+    case 'ToggleNav': {
       state.navHidden = !state.navHidden;
       render();
       break;
     }
-    case "ToggleMixedView": {
+    case 'ToggleMixedView': {
       state.mixedView = !state.mixedView;
       state.currentFeed = null;
       state.currentPage = 0;
-      effects.push({ type: "ResetFeedSpecificState" });
+      effects.push({ type: 'ResetFeedSpecificState' });
       render();
       break;
     }
-    case "ToggleTitleOnly": {
+    case 'ToggleTitleOnly': {
       state.titleOnly = !state.titleOnly;
       if (state.titleOnly) {
         // Keep only currently selected item (by index) expanded – assumed to
@@ -111,35 +111,40 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
       render();
       break;
     }
-    case "SetViewStyle": {
+    case 'SetViewStyle': {
       if (state.viewStyle !== event.style) {
         state.viewStyle = event.style;
         render();
       }
       break;
     }
-    case "ToggleShowAll": {
+    case 'ToggleShowAll': {
       state.showAll = !state.showAll;
       render();
       break;
     }
-    case "SelectFeed": {
+    case 'SelectFeed': {
       if (state.currentFeed !== event.feed) {
         state.currentFeed = event.feed;
         state.currentPage = 0;
         state.expandedItems.clear();
         state.selectedIndex = 0;
-        effects.push({ type: "ResetFeedSpecificState" });
+        effects.push({ type: 'ResetFeedSpecificState' });
         render();
       }
       break;
     }
-    case "CycleItemOrder": {
-      state.itemOrder = state.itemOrder === "New to old" ? "Old to new" : state.itemOrder === "Old to new" ? "Random" : "New to old";
+    case 'CycleItemOrder': {
+      state.itemOrder =
+        state.itemOrder === 'New to old'
+          ? 'Old to new'
+          : state.itemOrder === 'Old to new'
+            ? 'Random'
+            : 'New to old';
       render();
       break;
     }
-    case "NextPage": {
+    case 'NextPage': {
       if (event.hasMore) {
         state.currentPage += 1;
         state.selectedIndex = 0;
@@ -147,7 +152,7 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
       }
       break;
     }
-    case "PrevPage": {
+    case 'PrevPage': {
       if (state.currentPage > 0) {
         state.currentPage -= 1;
         state.selectedIndex = 0;
@@ -155,12 +160,12 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
       }
       break;
     }
-    case "ExpandItem": {
+    case 'ExpandItem': {
       state.expandedItems.add(event.id);
       render();
       break;
     }
-    case "CollapseItem": {
+    case 'CollapseItem': {
       state.expandedItems.delete(event.id);
       render();
       break;

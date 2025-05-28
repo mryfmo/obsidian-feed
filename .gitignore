@@ -1,38 +1,115 @@
-# vscode
-.vscode 
-
-# Intellij
+# IDE and Editor files
+.vscode/
+.idea/
 *.iml
-.idea
+*.swp
+*.swo
+*.swn
+.vim/
+.history/
 
-# npm
-node_modules
+# Dependencies
+node_modules/
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
+# Build outputs
 main.js
+dist/
+build/
+*.js.map
 
-# Exclude sourcemaps
-*.map
+# Coverage reports
+coverage/
+.nyc_output/
+*.lcov
 
-# obsidian
+# Obsidian plugin data
 data.json
+.obsidian/plugins/contents-feeds-reader/data/
 
-# Exclude macOS Finder (System Explorer) View States
+# OS-specific files
 .DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
 
-.*.sw*
+# Environment files
+.env
+.env.local
+.env.*.local
 
-# Exclude package-lock.json and pnpm-lock.yaml
+# Lock files (we use pnpm)
 package-lock.json
-pnpm-lock.yaml
+yarn.lock
+# Note: pnpm-lock.yaml should be committed
+# pnpm-lock.yaml
 
-# Vitest test log and result files
+# Test artifacts
 vitest.log
 vitest_output.json
 vitest_result*.json
+test-results/
+playwright-report/
+e2e-results/
+*.test-results/
 
-# Playwright test results
-test-results
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+~*
 
-# Test Vault
+# Cache directories
+.cache/
+.parcel-cache/
+.turbo/
+
+# Log files
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Claude-specific files
+codex-instruction-*.md
+claude-code-instruction-*.md
+claude-context-*.md
+claude-output.md
+.claude-instructions
+analysis-results.md
+
+# Development notes with potential sensitive info
+docs/qa/*-investigation.md
+docs/qa/*-analysis.md
+# Keep templates
+!docs/qa/_template.md
+!docs/rfcs/_template.md
+
+# Temporary development files
+docs/dev-notes/tmp-*
+docs/dev-notes/draft-*
+
+# Work-in-progress documentation
+docs/claude-integration.md
+
+# Internal workflow details (optional - uncomment if needed)
+# docs/agents/
+# !docs/agents/developer.md
+# !docs/agents/reviewer.md
+# !docs/agents/tester.md
+
+# Debug files
+*.stackdump
+core.*
+
+# Security - never commit secrets
+*.pem
+*.key
+*.cert
+*.crt
+.secrets/
+secrets.json

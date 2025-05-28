@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /** Metadata for a subscribed feed (stored in subscription list). */
 export interface FeedInfo {
@@ -35,7 +35,7 @@ export interface FeedsReaderSettings {
   assetDownloadPath?: string;
   latestNOnly: boolean;
   latestNCount: number;
-  viewStyle: "card" | "list";
+  viewStyle: 'card' | 'list';
 
   /**
    * Persisted UI preference: whether the reader starts in *title-only*
@@ -57,7 +57,7 @@ export const RssFeedItemSchema = z.object({
     .union([
       z.string(),
       z.object({ url: z.string() }).passthrough(),
-      z.array(z.object({ url: z.string() }).passthrough())
+      z.array(z.object({ url: z.string() }).passthrough()),
     ])
     .optional(),
   creator: z.string(),
@@ -65,7 +65,7 @@ export const RssFeedItemSchema = z.object({
   read: z.string(),
   deleted: z.string(),
   downloaded: z.string(),
-  __sourceFeed: z.string().optional() // Source feed name
+  __sourceFeed: z.string().optional(), // Source feed name
 });
 export type RssFeedItem = z.infer<typeof RssFeedItemSchema>;
 
@@ -79,13 +79,13 @@ export const RssFeedContentSchema = z.object({
     .union([
       z.string(),
       z.object({ url: z.string() }).passthrough(),
-      z.array(z.object({ url: z.string() }).passthrough())
+      z.array(z.object({ url: z.string() }).passthrough()),
     ])
-    .optional(),  
+    .optional(),
   folder: z.string(),
   description: z.string().optional(),
   pubDate: z.string().optional(),
-  items: z.array(RssFeedItemSchema)
+  items: z.array(RssFeedItemSchema),
 });
 export type RssFeedContent = z.infer<typeof RssFeedContentSchema>;
 
@@ -95,7 +95,7 @@ export const FeedInfoSchema = z.object({
   feedUrl: z.string().url(),
   unread: z.number(),
   updated: z.number(),
-  folder: z.string()
+  folder: z.string(),
 });
 export const FeedListSchema = z.array(FeedInfoSchema);
 
@@ -110,13 +110,13 @@ export const RssFeedContentFromPartsSchema = RssFeedMetaSchema.extend({
 */
 
 export type ContentBlock =
-  | { type: "heading"; level: number; text: string }
-  | { type: "text"; content: string } // Markdown or plain text content
-  | { type: "link"; href: string; text: string } // Explicit link block if not part of text
-  | { type: "image"; src: string; alt?: string; width?: number; height?: number; localSrc?: string }
-  | { type: "video"; src: string; poster?: string; localSrc?: string }
-  | { type: "list"; ordered: boolean; items: string[] } // Items are simple strings for now
-  | { type: "embed"; html: string }; // For iframes or complex embeds
+  | { type: 'heading'; level: number; text: string }
+  | { type: 'text'; content: string } // Markdown or plain text content
+  | { type: 'link'; href: string; text: string } // Explicit link block if not part of text
+  | { type: 'image'; src: string; alt?: string; width?: number; height?: number; localSrc?: string }
+  | { type: 'video'; src: string; poster?: string; localSrc?: string }
+  | { type: 'list'; ordered: boolean; items: string[] } // Items are simple strings for now
+  | { type: 'embed'; html: string }; // For iframes or complex embeds
 
 /** Extended RssFeedItem to potentially hold structured content */
 export interface RssFeedItemWithBlocks extends RssFeedItem {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createHttpClient } from "../../src/network/httpClient";
 import type { AxiosInstance } from 'axios';
+import { createHttpClient } from '../../src/network/httpClient';
 
 // Helper response mock
 function mockResponse(body: string) {
@@ -25,9 +25,8 @@ describe('corsAdapter', () => {
 
     const resp = await instance.get('https://example.com');
     expect(resp.data).toBe('ok');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://r.jina.ai/https%3A%2F%2Fexample.com',
-      { method: 'GET' },
-    );
+    expect(fetchMock).toHaveBeenCalledWith('https://r.jina.ai/https%3A%2F%2Fexample.com', {
+      method: 'GET',
+    });
   });
 });

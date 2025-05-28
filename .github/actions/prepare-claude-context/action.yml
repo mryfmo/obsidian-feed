@@ -1,0 +1,91 @@
+name: 'Prepare Claude Context'
+description: 'Prepares documentation context for Claude Code Action'
+inputs:
+  phase:
+    description: 'Current workflow phase'
+    required: true
+    default: 'INV'
+outputs:
+  context_file:
+    description: 'Path to generated context file'
+    value: ${{ steps.generate.outputs.context_file }}
+  context_size:
+    description: 'Size of context in bytes'
+    value: ${{ steps.generate.outputs.context_size }}
+  system_prompt:
+    description: 'Generated system prompt'
+    value: ${{ steps.generate.outputs.system_prompt }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate Context
+      id: generate
+      shell: bash
+      run: |
+        # Create context file
+        CONTEXT_FILE="claude-context-${{ github.run_id }}.md"
+        
+        echo "# Context for Claude Code Action" > $CONTEXT_FILE
+        echo "Generated at: $(date)" >> $CONTEXT_FILE
+        echo "Phase: ${{ inputs.phase }}" >> $CONTEXT_FILE
+        echo "" >> $CONTEXT_FILE
+        
+        # Add CLAUDE.md
+        if [ -f "CLAUDE.md" ]; then
+          echo "## CLAUDE.md" >> $CONTEXT_FILE
+          echo '```markdown' >> $CONTEXT_FILE
+          cat CLAUDE.md >> $CONTEXT_FILE
+          echo '```' >> $CONTEXT_FILE
+          echo "" >> $CONTEXT_FILE
+        fi
+        
+        # Add workflow documentation
+        if [ -f "docs/agents/02_claude-code.md" ]; then
+          echo "## Workflow Documentation" >> $CONTEXT_FILE
+          echo '```markdown' >> $CONTEXT_FILE
+          head -100 docs/agents/02_claude-code.md >> $CONTEXT_FILE
+          echo '```' >> $CONTEXT_FILE
+          echo "" >> $CONTEXT_FILE
+        fi
+        
+        # Add phase-specific documentation
+        case "${{ inputs.phase }}" in
+          FETCH)
+            echo "## FETCH Phase Guidelines" >> $CONTEXT_FILE
+            echo "- Use tools/fetch_doc.sh for downloads" >> $CONTEXT_FILE
+            echo "- Network access is allowed in this phase only" >> $CONTEXT_FILE
+            ;;
+          BUILD)
+            echo "## BUILD Phase Guidelines" >> $CONTEXT_FILE
+            echo "- Maximum 1000 lines of code" >> $CONTEXT_FILE
+            echo "- Maximum 10 files per patch" >> $CONTEXT_FILE
+            ;;
+          PLAN)
+            echo "## PLAN Phase Guidelines" >> $CONTEXT_FILE
+            echo "- Create RFC in docs/rfcs/" >> $CONTEXT_FILE
+            echo "- Requires approval before proceeding" >> $CONTEXT_FILE
+            ;;
+        esac
+        echo "" >> $CONTEXT_FILE
+        
+        # Add available tools
+        echo "## Available Tools" >> $CONTEXT_FILE
+        for tool in tools/*.sh; do
+          if [ -f "$tool" ]; then
+            echo "- $tool" >> $CONTEXT_FILE
+          fi
+        done
+        echo "" >> $CONTEXT_FILE
+        
+        # Output results
+        echo "context_file=$CONTEXT_FILE" >> $GITHUB_OUTPUT
+        echo "context_size=$(wc -c < $CONTEXT_FILE)" >> $GITHUB_OUTPUT
+        
+        # Generate system prompt
+        PROMPT="You are Claude Code Action in phase ${{ inputs.phase }}. "
+        PROMPT+="You must follow the workflow documentation and use the required response format: "
+        PROMPT+="<think>, <act>, <verify>, <next> tags. "
+        PROMPT+="Current phase: ${{ inputs.phase }}. "
+        
+        echo "system_prompt=$PROMPT" >> $GITHUB_OUTPUT

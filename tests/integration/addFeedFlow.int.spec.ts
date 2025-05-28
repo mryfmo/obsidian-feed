@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// --- Imports (after mocks) ----------------------------------------------
+
+import type {
+  PluginManifest,
+  App,
+  FileSystemAdapter,
+  Vault,
+  Workspace,
+  WorkspaceLeaf,
+} from 'obsidian';
+import FeedsReaderPlugin from '../../src/main';
+
 // --- Mock lower-level helpers that perform network / disk I/O ------------
 
 // Use vi.hoisted to ensure mockFeedContent is initialized before vi.mock is evaluated.
@@ -11,7 +23,7 @@ const { mockFeedContent } = vi.hoisted(() => {
       link: 'https://example.com',
       folder: 'feeds-store/blog',
       items: [],
-    }
+    },
   };
 });
 
@@ -21,8 +33,8 @@ vi.mock('../../src/getFeed', () => ({
 
 // Pass-through mock that calls saveFeedsData in savePendingChanges.
 // In the success path, resolve is enough.
-vi.mock('../../src/data', async (importOriginal) => {
-  const original = await importOriginal() as Record<string, unknown>;
+vi.mock('../../src/data', async importOriginal => {
+  const original = (await importOriginal()) as Record<string, unknown>;
   return {
     ...original,
     saveFeedsData: vi.fn().mockResolvedValue(new Set(['blog'])),
@@ -41,26 +53,28 @@ vi.mock('obsidian', () => ({
   ItemView: class {},
   Plugin: class {
     app: App;
+
     manifest: PluginManifest;
+
     constructor(app: App, manifest: PluginManifest) {
       this.app = app;
       this.manifest = manifest;
     }
+
     // Add other methods/properties if FeedsReaderPlugin calls them on `super`
     registerView = vi.fn();
+
     addRibbonIcon = vi.fn().mockReturnValue({ addClass: vi.fn() }); // addRibbonIcon returns an element with addClass
+
     addCommand = vi.fn(); // Likely to be called
+
     addSettingTab = vi.fn(); // Likely to be called
+
     register = vi.fn(); // Added register method
   },
   PluginSettingTab: class {},
   // Other properties that the plugin doesn't access are omitted
 }));
-
-// --- Imports (after mocks) ----------------------------------------------
-
-import FeedsReaderPlugin from '../../src/main';
-import type { PluginManifest, App, FileSystemAdapter, Vault, Workspace, WorkspaceLeaf } from 'obsidian';
 
 // Define an interface for the mocked data module
 interface MockDataModule {
@@ -87,10 +101,14 @@ function createMockApp(): App {
   };
 
   return {
-    vault: { adapter, configDir: '/vault/.obsidian', createFolder: adapter.createFolder } as Partial<Vault>,
+    vault: {
+      adapter,
+      configDir: '/vault/.obsidian',
+      createFolder: adapter.createFolder,
+    } as Partial<Vault>,
     workspace: {
       getLeavesOfType: vi.fn(() => []),
-      getLeaf: vi.fn(() => ({} as WorkspaceLeaf)),
+      getLeaf: vi.fn(() => ({}) as WorkspaceLeaf),
       revealLeaf: vi.fn(),
       detachLeavesOfType: vi.fn(),
       getActiveViewOfType: vi.fn(() => null),
@@ -127,30 +145,36 @@ describe('integration – addNewFeed flow', () => {
     // feedList is updated
     expect(plugin.feedList.find(f => f.name === 'blog')).toBeDefined();
     // feedsStore is updated
-    expect(plugin.feedsStore['blog']).toEqual(mockFeedContent);
+    expect(plugin.feedsStore.blog).toEqual(mockFeedContent);
 
     // saveFeedsData was called (data mock)
-    const data = await import('../../src/data') as unknown as MockDataModule;
+    const data = (await import('../../src/data')) as unknown as MockDataModule;
     expect(data.saveFeedsData).toHaveBeenCalled();
   });
 
   it('throws when feed name already exists', async () => {
     // First insert a feed with the same name into feedList
-    plugin.feedList.push({ name: 'dup', feedUrl: 'https://x.com/rss', unread: 0, updated: 0, folder: 'feeds-store/dup' });
+    plugin.feedList.push({
+      name: 'dup',
+      feedUrl: 'https://x.com/rss',
+      unread: 0,
+      updated: 0,
+      folder: 'feeds-store/dup',
+    });
 
-    await expect(plugin.addNewFeed('dup', 'https://example.com/rss'))
-      .rejects
-      .toMatchObject({ name: 'FeedValidationError' });
+    await expect(plugin.addNewFeed('dup', 'https://example.com/rss')).rejects.toMatchObject({
+      name: 'FeedValidationError',
+    });
 
     // feedList size is unchanged
     expect(plugin.feedList.filter(f => f.name === 'dup').length).toBe(1);
-    expect(plugin.feedsStore['dup']).toBeUndefined();
+    expect(plugin.feedsStore.dup).toBeUndefined();
   });
 
   it('throws when URL is invalid', async () => {
-    await expect(plugin.addNewFeed('bad', 'notaurl'))
-      .rejects
-      .toMatchObject({ name: 'FeedValidationError' });
+    await expect(plugin.addNewFeed('bad', 'notaurl')).rejects.toMatchObject({
+      name: 'FeedValidationError',
+    });
     expect(plugin.feedList.find(f => f.name === 'bad')).toBeUndefined();
   });
 
@@ -161,11 +185,11 @@ describe('integration – addNewFeed flow', () => {
     // Mock getFeedItems to throw FeedFetchError
     vi.mocked(getFeedItems).mockRejectedValueOnce(new FeedFetchError('network-fail'));
 
-    await expect(plugin.addNewFeed('news', 'https://x.com/rss'))
-      .rejects
-      .toBeInstanceOf(FeedFetchError);
+    await expect(plugin.addNewFeed('news', 'https://x.com/rss')).rejects.toBeInstanceOf(
+      FeedFetchError
+    );
 
     expect(plugin.feedList.find(f => f.name === 'news')).toBeUndefined();
-    expect(plugin.feedsStore['news']).toBeUndefined();
+    expect(plugin.feedsStore.news).toBeUndefined();
   });
 });

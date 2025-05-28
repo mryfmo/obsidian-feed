@@ -5,11 +5,13 @@ import axios, {
   AxiosInstance,
   AxiosHeaders,
   InternalAxiosRequestConfig,
-  AxiosRequestHeaders
-} from "axios";
-import { requestUrl, RequestUrlParam } from "obsidian";
+  AxiosRequestHeaders,
+} from 'axios';
+import { requestUrl, RequestUrlParam } from 'obsidian';
 
-const obsidianAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promise<AxiosResponse<string>> => {
+const obsidianAdapter: AxiosAdapter = async (
+  config: AxiosRequestConfig
+): Promise<AxiosResponse<string>> => {
   const response = await requestUrl({
     url: config.url!,
     method: config.method?.toUpperCase(),
@@ -33,15 +35,17 @@ const obsidianAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promis
   };
 };
 
-const corsAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promise<AxiosResponse<string>> => {
-  let target = config.url ?? "";
+const corsAdapter: AxiosAdapter = async (
+  config: AxiosRequestConfig
+): Promise<AxiosResponse<string>> => {
+  let target = config.url ?? '';
   if (!/^https?:\/\//i.test(target)) {
     target = `http://${target}`;
   }
   const proxied = `https://r.jina.ai/${encodeURIComponent(target)}`;
-  const resp = await fetch(proxied, { method: "GET" });
+  const resp = await fetch(proxied, { method: 'GET' });
   const text = await resp.text();
-  
+
   const responseHeaders: Record<string, string> = {};
   resp.headers.forEach((value, key) => {
     responseHeaders[key] = value;
@@ -63,17 +67,14 @@ const corsAdapter: AxiosAdapter = async (config: AxiosRequestConfig): Promise<Ax
 };
 
 export function createHttpClient(): AxiosInstance {
-  const hasRequestUrl = typeof window.require === "function" &&
-    typeof requestUrl === "function";
+  const hasRequestUrl = typeof window.require === 'function' && typeof requestUrl === 'function';
 
   const instance = axios.create({
-    adapter: hasRequestUrl
-      ? obsidianAdapter
-      : undefined,
+    adapter: hasRequestUrl ? obsidianAdapter : undefined,
   });
 
-  instance.interceptors.response.use(undefined, async (error) => {
-    if (error.message?.includes("Network Error")) {
+  instance.interceptors.response.use(undefined, async error => {
+    if (error.message?.includes('Network Error')) {
       return corsAdapter(error.config);
     }
     throw error;

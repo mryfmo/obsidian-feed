@@ -18,10 +18,7 @@ export default defineWorkspace([
       name: 'unit',
       environment: 'jsdom',
       globals: true,
-      include: [
-        'tests/unit/**/*.spec.ts',
-        'tests/unit/**/*.test.ts',
-      ],
+      include: ['tests/unit/**/*.spec.ts', 'tests/unit/**/*.test.ts'],
       exclude: ['**/node_modules/**', 'e2e/**'],
     },
   },

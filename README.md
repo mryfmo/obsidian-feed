@@ -90,4 +90,4 @@ Planned work is tracked in [TODO.md](./TODO.md); major milestones:
 
 ## 📝 License
 
-GNU GENERAL PUBLIC LICENSE Version 3 – see [`license`](./license).
+GNU GENERAL PUBLIC LICENSE Version 3 – see [`LICENSE`](./LICENSE).

@@ -1,0 +1,21 @@
+name: STP-Guard
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify lifecycle artefacts & checklist
+        run: |
+          echo '🔎 Checking mandatory process artefacts'
+          test -f docs/agents/01_task-lifecycle.md || {
+            echo 'Lifecycle spec missing'; exit 1; }
+          # ensure at least one State-Transition or checklist box present in PR diff
+          if ! git show -s --pretty=%B | grep -Eq 'State-Transition:|\[x\] INV'; then
+            echo 'No State-Transition or checklist tick found in commit message.'
+            echo 'Ensure you follow STP (INV → ANA → PLAN …)'; exit 1; fi
+          echo '✅ STP artefact guard passed.'

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+// Types from the plugin
+import type { FeedInfo } from '../../src/types';
+import type FeedsReaderPlugin from '../../src/main';
+import type { NetworkService } from '../../src/networkService';
+import type { ContentParserService } from '../../src/contentParserService';
+import type { AssetService } from '../../src/assetService';
+
 /* -------------------------------------------------------------------------- */
 /* Mock the Obsidian module BEFORE we import the implementation under test.   */
 /* The `vi.mock` call is hoisted by Vitest so it effectively runs first.      */
@@ -19,13 +26,6 @@ vi.mock('obsidian', () => ({
 // mock above is in place.  Doing so avoids the situation where the real module
 // resolution runs before the mock is registered.
 let getFeedItems: typeof import('../../src/getFeed').getFeedItems;
-
-// Types from the plugin
-import type { FeedInfo } from '../../src/types';
-import type FeedsReaderPlugin from '../../src/main';
-import type { NetworkService } from '../../src/networkService';
-import type { ContentParserService } from '../../src/contentParserService';
-import type { AssetService } from '../../src/assetService';
 
 // We will retrieve the mocked `obsidian.request` function lazily because the
 // ESM import needs to happen *after* the Vitest module graph is up and the
@@ -54,20 +54,23 @@ function createPlugin(): FeedsReaderPlugin {
   } as unknown as FeedsReaderPlugin;
 }
 
-const createNetworkMock = (): NetworkService => ({
-  fetchHtml: vi.fn().mockResolvedValue(null),
-  fetchText: vi.fn().mockResolvedValue(''),
-  fetchBinary: vi.fn().mockResolvedValue(null),
-} as unknown as NetworkService);
+const createNetworkMock = (): NetworkService =>
+  ({
+    fetchHtml: vi.fn().mockResolvedValue(null),
+    fetchText: vi.fn().mockResolvedValue(''),
+    fetchBinary: vi.fn().mockResolvedValue(null),
+  }) as unknown as NetworkService;
 
-const createParserMock = (): ContentParserService => ({
-  htmlToContentBlocks: vi.fn().mockResolvedValue([]),
-  contentBlocksToMarkdown: vi.fn().mockReturnValue(''),
-} as unknown as ContentParserService);
+const createParserMock = (): ContentParserService =>
+  ({
+    htmlToContentBlocks: vi.fn().mockResolvedValue([]),
+    contentBlocksToMarkdown: vi.fn().mockReturnValue(''),
+  }) as unknown as ContentParserService;
 
-const createAssetMock = (): AssetService => ({
-  downloadAssetsForBlocks: vi.fn(async blocks => blocks),
-} as unknown as AssetService);
+const createAssetMock = (): AssetService =>
+  ({
+    downloadAssetsForBlocks: vi.fn(async blocks => blocks),
+  }) as unknown as AssetService;
 
 /* -------------------------------------------------------------------------- */
 /* Utility to wire the mocked HTTP response based on the requested URL        */
@@ -77,12 +80,15 @@ function mockHttpResponse(url: string, xml: string) {
   // The mocked "request" created above is a Vitest spy instance (vi.fn()). We
   // therefore cast to the generic spy interface that exposes
   // `mockImplementationOnce`.
-  (request as unknown as { mockImplementationOnce: (fn: (opts: unknown) => Promise<string>) => void })
-    .mockImplementationOnce(async (opts: unknown) => {
-      const u = typeof opts === 'string' ? opts : (opts as { url: string }).url;
-      if (u === url) return xml;
-      throw new Error('Unexpected URL in mock: ' + u);
-    });
+  (
+    request as unknown as {
+      mockImplementationOnce: (fn: (opts: unknown) => Promise<string>) => void;
+    }
+  ).mockImplementationOnce(async (opts: unknown) => {
+    const u = typeof opts === 'string' ? opts : (opts as { url: string }).url;
+    if (u === url) return xml;
+    throw new Error(`Unexpected URL in mock: ${u}`);
+  });
 }
 
 /* -------------------------------------------------------------------------- */

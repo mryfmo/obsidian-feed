@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { RssFeedContent } from '../../src/types';
 
+import { renderControlsBar } from '../../src/view/components/ControlsBarComponent';
+
 // -------------------- Mock Obsidian helpers --------------------
 vi.mock('obsidian', () => ({
   setIcon: vi.fn(),
-  Notice : vi.fn(),
+  Notice: vi.fn(),
   ItemView: class {},
   PluginSettingTab: class {},
   Modal: class {},
@@ -13,12 +15,18 @@ vi.mock('obsidian', () => ({
 
 // Mock modal classes so that `new Modal().open()` can be asserted without
 // touching real DOM APIs.
-vi.mock('../src/addFeedModal', () => ({ FRAddFeedModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })) }));
-vi.mock('../src/manageFeedsModal', () => ({ FRManageFeedsModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })) }));
-vi.mock('../src/searchModal', () => ({ FRSearchModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })) }));
-vi.mock('../src/helpModal', () => ({ FRHelpModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })) }));
-
-import { renderControlsBar } from '../../src/view/components/ControlsBarComponent';
+vi.mock('../src/addFeedModal', () => ({
+  FRAddFeedModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })),
+}));
+vi.mock('../src/manageFeedsModal', () => ({
+  FRManageFeedsModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })),
+}));
+vi.mock('../src/searchModal', () => ({
+  FRSearchModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })),
+}));
+vi.mock('../src/helpModal', () => ({
+  FRHelpModal: vi.fn().mockImplementation(() => ({ open: vi.fn() })),
+}));
 
 // --- Augment HTMLElement for Obsidian's methods in JSDOM ---
 interface TestDomElementInfo {
@@ -33,8 +41,16 @@ interface TestDomElementInfo {
 declare global {
   interface HTMLElement {
     empty(): void;
-    createEl<K extends keyof HTMLElementTagNameMap>(tag: K, o?: TestDomElementInfo | string, cb?: (el: HTMLElementTagNameMap[K]) => void): HTMLElementTagNameMap[K];
-    createEl(tag: string, o?: TestDomElementInfo | string, cb?: (el: HTMLElement) => void): HTMLElement;
+    createEl<K extends keyof HTMLElementTagNameMap>(
+      tag: K,
+      o?: TestDomElementInfo | string,
+      cb?: (el: HTMLElementTagNameMap[K]) => void
+    ): HTMLElementTagNameMap[K];
+    createEl(
+      tag: string,
+      o?: TestDomElementInfo | string,
+      cb?: (el: HTMLElement) => void
+    ): HTMLElement;
   }
 }
 // --- End Augmentation ---
@@ -48,7 +64,7 @@ function createView() {
     undoList: [] as unknown[],
     dispatchEvent: vi.fn(),
     renderFeedContent: vi.fn(),
-    toggleTitleOnlyMode: function () {
+    toggleTitleOnlyMode() {
       // 'this' will be the view object
       // @ts-ignore
       this.titleOnly = !this.titleOnly;
@@ -81,7 +97,7 @@ describe('ControlsBarComponent', () => {
       HTMLElement.prototype.createEl = function <K extends keyof HTMLElementTagNameMap>(
         this: HTMLElement,
         tag: K | string,
-        options?: TestDomElementInfo | string,
+        options?: TestDomElementInfo | string
       ): HTMLElementTagNameMap[K] | HTMLElement {
         const el = document.createElement(tag as K) as HTMLElementTagNameMap[K] | HTMLElement;
 
@@ -132,18 +148,18 @@ describe('ControlsBarComponent', () => {
         'Update all feeds',
         'Save feed data',
         'Help / Shortcuts',
-      ]),
+      ])
     );
   });
 
   it('renders feed-specific controls when a feed is selected', () => {
     view.currentFeed = 'blog';
-    plugin.feedsStore['blog'] = {
+    plugin.feedsStore.blog = {
       title: 'Blog Feed Title',
       link: 'https://example.com/blog',
       name: 'blog',
       folder: 'feeds/blog',
-      items: []
+      items: [],
     } as RssFeedContent;
 
     renderControlsBar(container, view, plugin);
@@ -156,16 +172,18 @@ describe('ControlsBarComponent', () => {
 
   it('dispatches ToggleShowAll when unread button clicked', () => {
     view.currentFeed = 'tech';
-    plugin.feedsStore['tech'] = {
+    plugin.feedsStore.tech = {
       title: 'Tech Feed Title',
       link: 'https://example.com/tech',
       name: 'tech',
       folder: 'feeds/tech',
-      items: []
+      items: [],
     } as RssFeedContent;
 
     renderControlsBar(container, view, plugin);
-    const unreadBtn = container.querySelector('button[aria-label="Toggle unread / all"]')! as HTMLButtonElement;
+    const unreadBtn = container.querySelector(
+      'button[aria-label="Toggle unread / all"]'
+    )! as HTMLButtonElement;
 
     unreadBtn.click();
     expect(view.dispatchEvent).toHaveBeenCalledWith({ type: 'ToggleShowAll' });

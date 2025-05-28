@@ -1,6 +1,6 @@
-import { setIcon } from "obsidian";
-import { FeedsReaderSettings, RssFeedItem } from "../../types";
-import { generateDeterministicItemId, generateRandomUUID } from "../../utils";
+import { setIcon } from 'obsidian';
+import { FeedsReaderSettings, RssFeedItem } from '../../types';
+import { generateDeterministicItemId, generateRandomUUID } from '../../utils';
 
 /*
  * Centralized creation of per-item action buttons.
@@ -21,63 +21,63 @@ interface ActionDef {
 
 const ACTIONS: ActionDef[] = [
   {
-    key: "markRead",
-    defaultIcon: "book-open",
-    activeIcon: "book-marked",
-    settingKey: "showRead",
-    defaultLabel: "Mark as Read",
-    activeLabel: "Mark as Unread",
-    isActive: (i) => i.read !== "0",
+    key: 'markRead',
+    defaultIcon: 'book-open',
+    activeIcon: 'book-marked',
+    settingKey: 'showRead',
+    defaultLabel: 'Mark as Read',
+    activeLabel: 'Mark as Unread',
+    isActive: i => i.read !== '0',
   },
   {
-    key: "delete",
-    defaultIcon: "trash-2",
-    activeIcon: "history",
-    settingKey: "showDelete",
-    defaultLabel: "Delete Item",
-    activeLabel: "Restore Item",
-    isActive: (i) => i.deleted !== "0",
+    key: 'delete',
+    defaultIcon: 'trash-2',
+    activeIcon: 'history',
+    settingKey: 'showDelete',
+    defaultLabel: 'Delete Item',
+    activeLabel: 'Restore Item',
+    isActive: i => i.deleted !== '0',
   },
   {
-    key: "save",
-    defaultIcon: "save",
-    settingKey: "showSave",
-    defaultLabel: "Save Note",
+    key: 'save',
+    defaultIcon: 'save',
+    settingKey: 'showSave',
+    defaultLabel: 'Save Note',
     isActive: () => false,
   },
   {
-    key: "openLink",
-    defaultIcon: "external-link",
-    settingKey: "showLink",
-    defaultLabel: "Open Link",
+    key: 'openLink',
+    defaultIcon: 'external-link',
+    settingKey: 'showLink',
+    defaultLabel: 'Open Link',
     isActive: () => false,
   },
   {
-    key: "jot",
-    defaultIcon: "edit-3",
-    settingKey: "showJot",
-    defaultLabel: "Jot Note",
+    key: 'jot',
+    defaultIcon: 'edit-3',
+    settingKey: 'showJot',
+    defaultLabel: 'Jot Note',
     isActive: () => false,
   },
   {
-    key: "snippet",
-    defaultIcon: "scissors",
-    settingKey: "showSnippet",
-    defaultLabel: "Save Snippet",
+    key: 'snippet',
+    defaultIcon: 'scissors',
+    settingKey: 'showSnippet',
+    defaultLabel: 'Save Snippet',
     isActive: () => false,
   },
   {
-    key: "fetch",
-    defaultIcon: "download-cloud",
-    settingKey: "showFetch",
-    defaultLabel: "Fetch Full Content",
+    key: 'fetch',
+    defaultIcon: 'download-cloud',
+    settingKey: 'showFetch',
+    defaultLabel: 'Fetch Full Content',
     isActive: () => false,
   },
   {
-    key: "GPT",
-    defaultIcon: "brain",
-    settingKey: "showGPT",
-    defaultLabel: "Ask GPT",
+    key: 'GPT',
+    defaultIcon: 'brain',
+    settingKey: 'showGPT',
+    defaultLabel: 'Ask GPT',
     isActive: () => false,
   },
 ];
@@ -89,7 +89,7 @@ const ACTIONS: ActionDef[] = [
 export function createItemActionButtons(
   actionsEl: HTMLElement,
   item: RssFeedItem,
-  settings: FeedsReaderSettings | undefined,
+  settings: FeedsReaderSettings | undefined
 ): void {
   if (!settings) return;
 
@@ -97,16 +97,16 @@ export function createItemActionButtons(
     item.id = item.link ? generateDeterministicItemId(item.link) : generateRandomUUID();
   }
 
-  ACTIONS.forEach((def) => {
-    if (typeof settings[def.settingKey] === "boolean" && settings[def.settingKey] === false) return;
+  ACTIONS.forEach(def => {
+    if (typeof settings[def.settingKey] === 'boolean' && settings[def.settingKey] === false) return;
 
     const active = def.isActive(item);
-    const currentIcon = active ? def.activeIcon ?? def.defaultIcon : def.defaultIcon;
+    const currentIcon = active ? (def.activeIcon ?? def.defaultIcon) : def.defaultIcon;
     const currentLabel = active && def.activeLabel ? def.activeLabel : def.defaultLabel;
 
-    const btn = actionsEl.createEl("button", {
-      cls: "clickable-icon",
-      attr: { "aria-label": currentLabel, title: currentLabel },
+    const btn = actionsEl.createEl('button', {
+      cls: 'clickable-icon',
+      attr: { 'aria-label': currentLabel, title: currentLabel },
     });
 
     setIcon(btn, currentIcon);

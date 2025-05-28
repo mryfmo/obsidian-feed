@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  createInitialState,
-  reducer,
-  selectors,
-  ViewState,
-} from '../../src/stateMachine';
+import { createInitialState, reducer, selectors, ViewState } from '../../src/stateMachine';
 
 function apply(state: ViewState, evt: Parameters<typeof reducer>[1]) {
   const [next, eff] = reducer(state, evt);
@@ -27,7 +22,9 @@ describe('stateMachine.reducer', () => {
     expect(next.currentFeed).toBe('news');
     expect(next.currentPage).toBe(0);
     expect(next.expandedItems.size).toBe(0);
-    expect(eff).toEqual(expect.arrayContaining([{ type: 'ResetFeedSpecificState' }, { type: 'Render' }]));
+    expect(eff).toEqual(
+      expect.arrayContaining([{ type: 'ResetFeedSpecificState' }, { type: 'Render' }])
+    );
   });
 
   it('cycles item order', () => {

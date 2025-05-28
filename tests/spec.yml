@@ -1,0 +1,18 @@
+# tests/spec.yml — Guard & Workflow Test Matrix
+#
+# This file is a template for QA to add test cases in a table format.
+#
+# columns: id, phase, scenario, fixture, expected_exit
+#
+# id: NET-001
+# phase: INV
+# scenario: Access the network without FETCH
+# fixture: tests/fixtures/network_non_fetch.md
+# expected_exit: fail
+id,phase,fixture,expect
+PHASE-001,INV,tests/fixtures/invalid_phase.md,fail
+TOKEN-001,INV,tests/fixtures/token_short.md,fail
+TOKEN-002,INV,tests/fixtures/token_long.md,fail
+NET-001,INV,tests/fixtures/network_non_fetch.md,fail
+SIZE-001,BUILD,tests/fixtures/loc_over.md,fail
+DUP-001,FETCH,tests/fixtures/dup_sha.md,fail

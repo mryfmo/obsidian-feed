@@ -13,7 +13,7 @@ describe('utils.ts', () => {
   describe('absolute()', () => {
     it('resolves a relative path against a base', () => {
       const base = 'https://example.com/post/';
-      const rel  = '../img/pic.png';
+      const rel = '../img/pic.png';
       expect(absolute(base, rel)).toBe('https://example.com/img/pic.png');
     });
 
@@ -40,7 +40,9 @@ describe('utils.ts', () => {
     it('generates RFC-4122 v4 like UUID', () => {
       const uuid = generateRandomUUID();
       // Basic pattern check: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (y = 8..b)
-      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(uuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
     });
   });
 

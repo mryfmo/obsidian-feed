@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, Mocked } from 'vitest';
+import { FileSystemAdapter, Stat } from 'obsidian';
 import { NetworkService } from '../../src/networkService';
 import { HTML_CACHE_DIR } from '../../src/constants';
 import { FeedsReaderSettings } from '../../src/types';
-import { FileSystemAdapter, Stat } from 'obsidian';
 
 // Mock the HTTP client's `get` method used by NetworkService.
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
@@ -38,20 +38,21 @@ const settings: FeedsReaderSettings = {
   assetDownloadPath: '',
   latestNOnly: false,
   latestNCount: 0,
-  viewStyle: "card",
+  viewStyle: 'card',
 };
 
-const createAdapter = (): Mocked<FileSystemAdapter> => ({
-  exists: vi.fn(),
-  mkdir: vi.fn(),
-  read: vi.fn(),
-  write: vi.fn(),
-  stat: vi.fn(),
-  remove: vi.fn(),
-  rename: vi.fn(),
-  copy: vi.fn(),
-  getBasePath: vi.fn().mockReturnValue('/vault'),
-} as unknown as Mocked<FileSystemAdapter>);
+const createAdapter = (): Mocked<FileSystemAdapter> =>
+  ({
+    exists: vi.fn(),
+    mkdir: vi.fn(),
+    read: vi.fn(),
+    write: vi.fn(),
+    stat: vi.fn(),
+    remove: vi.fn(),
+    rename: vi.fn(),
+    copy: vi.fn(),
+    getBasePath: vi.fn().mockReturnValue('/vault'),
+  }) as unknown as Mocked<FileSystemAdapter>;
 
 const url = 'http://example.com/page';
 
@@ -71,13 +72,18 @@ describe('NetworkService.fetchHtml', () => {
     adapter = createAdapter();
     // NetworkService now creates its own httpClient using the mocked createHttpClient
     service = new NetworkService(adapter, settings, 'test-plugin');
-    cacheBase = '/vault/.obsidian/plugins/test-plugin/' + HTML_CACHE_DIR;
+    cacheBase = `/vault/.obsidian/plugins/test-plugin/${HTML_CACHE_DIR}`;
     cachePath = getCachePath(service, url);
   });
 
   it('reads from fresh cache without network call', async () => {
     adapter.exists.mockImplementation(async (p: string) => p === cacheBase || p === cachePath);
-    adapter.stat.mockResolvedValue({ mtime: Date.now(), ctime: Date.now(), size: 100, type: 'file' } as Stat);
+    adapter.stat.mockResolvedValue({
+      mtime: Date.now(),
+      ctime: Date.now(),
+      size: 100,
+      type: 'file',
+    } as Stat);
     adapter.read.mockResolvedValue('cached');
 
     const html = await service.fetchHtml(url);
@@ -90,7 +96,12 @@ describe('NetworkService.fetchHtml', () => {
 
   it('fetches and caches when stale', async () => {
     adapter.exists.mockImplementation(async (p: string) => p === cacheBase || p === cachePath);
-    adapter.stat.mockResolvedValue({ mtime: Date.now() - 61 * 60 * 1000, ctime: Date.now(), size: 100, type: 'file' } as Stat);
+    adapter.stat.mockResolvedValue({
+      mtime: Date.now() - 61 * 60 * 1000,
+      ctime: Date.now(),
+      size: 100,
+      type: 'file',
+    } as Stat);
     mockGet.mockResolvedValue({ data: 'fresh' });
 
     const html = await service.fetchHtml(url);
@@ -101,7 +112,7 @@ describe('NetworkService.fetchHtml', () => {
   });
 
   it('fetches and caches when file missing', async () => {
-    adapter.exists.mockImplementation(async (p: string) => p === cacheBase ? true : false);
+    adapter.exists.mockImplementation(async (p: string) => p === cacheBase);
     mockGet.mockResolvedValue({ data: 'fresh' });
 
     const html = await service.fetchHtml(url);

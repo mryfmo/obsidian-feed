@@ -1,4 +1,10 @@
-import { URL } from "url";
+import { URL } from 'url';
+
+// ---------------------------------------------------------------------------
+// Feed-item helpers
+// ---------------------------------------------------------------------------
+
+import type { RssFeedItem } from './types';
 
 // ---------------------------------------------------------------------------
 // URL utilities
@@ -38,9 +44,9 @@ export function generateDeterministicItemId(input: string): string {
   /* c8 ignore start */
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const crypto = require("node:crypto");
-    if (typeof crypto?.createHash === "function") {
-      return crypto.createHash("sha1").update(input).digest("hex");
+    const crypto = require('node:crypto');
+    if (typeof crypto?.createHash === 'function') {
+      return crypto.createHash('sha1').update(input).digest('hex');
     }
   } catch {
     // noop – will fall through to FNV-1a
@@ -53,7 +59,7 @@ export function generateDeterministicItemId(input: string): string {
     hash ^= input.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0");
+  return hash.toString(16).padStart(8, '0');
 }
 
 /**
@@ -61,23 +67,17 @@ export function generateDeterministicItemId(input: string): string {
  * as a last-ditch fallback when the deterministic hash fails or collides.
  */
 export function generateRandomUUID(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }
 
-// ---------------------------------------------------------------------------
-// Feed-item helpers
-// ---------------------------------------------------------------------------
-
-import type { RssFeedItem } from "./types";
-
 /** Determine if an item is visible based on read/deleted flags. */
 export function isVisibleItem(item: RssFeedItem, showAll: boolean): boolean {
   if (showAll) return true;
-  return item.read === "0" && item.deleted === "0";
+  return item.read === '0' && item.deleted === '0';
 }
 
 // ---------------------------------------------------------------------------
@@ -135,8 +135,15 @@ export function pickImageUrl(input: ImageInput): string | undefined {
     if (str) return str;
 
     // Fallback: first object with safe url property
-    const obj = input.find(i => typeof i === 'object' && i !== null && typeof (i as { url?: string }).url === 'string' && isSafeImageUrl((i as { url: string }).url));
-    if (obj && typeof obj === 'object' && (obj as { url: string }).url) return (obj as { url: string }).url;
+    const obj = input.find(
+      i =>
+        typeof i === 'object' &&
+        i !== null &&
+        typeof (i as { url?: string }).url === 'string' &&
+        isSafeImageUrl((i as { url: string }).url)
+    );
+    if (obj && typeof obj === 'object' && (obj as { url: string }).url)
+      return (obj as { url: string }).url;
     return undefined;
   }
 
@@ -146,5 +153,3 @@ export function pickImageUrl(input: ImageInput): string | undefined {
 
   return undefined;
 }
-
-

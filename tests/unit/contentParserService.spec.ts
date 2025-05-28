@@ -72,11 +72,6 @@ describe('ContentParserService', () => {
     ];
 
     const md = svc.contentBlocksToMarkdown(blocks);
-    expect(md).toBe([
-      '## Sub',
-      'Plain',
-      '1. A\n1. B',
-      '![alt](https://x.com/y.png)',
-    ].join('\n\n'));
+    expect(md).toBe(['## Sub', 'Plain', '1. A\n1. B', '![alt](https://x.com/y.png)'].join('\n\n'));
   });
 });

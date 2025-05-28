@@ -1,0 +1,120 @@
+# Claude Code Action Configuration
+
+# Essential documentation that must be loaded
+required_context:
+  - path: CLAUDE.md
+    description: Main guidance file for Claude Code
+  - path: docs/agents/02_claude-code.md
+    description: Workflow phases and guardrails
+    max_lines: 100  # Limit to first 100 lines to save tokens
+  - path: docs/agents/01_task-lifecycle.md
+    description: Standard Task Protocol
+    max_lines: 50
+  - path: docs/agents/00_common-rules.md
+    description: Coding conventions
+    max_lines: 50
+
+# Tools that should be available
+available_tools:
+  - path: tools/turn_guard.sh
+    description: Validates Claude output format
+    executable: true
+  - path: tools/fetch_doc.sh
+    description: Downloads external documents (FETCH phase only)
+    executable: true
+  - path: tools/list_guards.sh
+    description: Lists available guard checks
+    executable: true
+  - path: tools/gen_wbs.py
+    description: Generates work breakdown structure
+    executable: true
+
+# Phase-specific configuration
+phases:
+  FETCH:
+    allowed_operations:
+      - network_access
+      - file_download
+    required_tools:
+      - tools/fetch_doc.sh
+    constraints:
+      - "Use fetch_doc.sh for all downloads"
+      - "Cache downloads to avoid duplicates"
+  
+  INV:
+    allowed_operations:
+      - run_tests
+      - create_tests
+      - read_files
+    required_artifacts:
+      - "Failing test case"
+      - "docs/qa/*-investigation.md"
+    constraints:
+      - "Must reproduce issue before proceeding"
+  
+  ANA:
+    allowed_operations:
+      - read_files
+      - analyze_code
+    required_artifacts:
+      - "docs/qa/*-analysis.md"
+    constraints:
+      - "No implementation, analysis only"
+  
+  PLAN:
+    allowed_operations:
+      - create_documentation
+    required_artifacts:
+      - "docs/rfcs/*.md"
+    constraints:
+      - "Requires review approval to proceed"
+  
+  BUILD:
+    allowed_operations:
+      - modify_code
+      - create_tests
+    constraints:
+      - "Maximum 1000 lines of code"
+      - "Maximum 10 files per patch"
+      - "Must pass linting"
+  
+  VERIF:
+    allowed_operations:
+      - run_tests
+      - check_coverage
+    required_artifacts:
+      - "Test results"
+      - "CHANGELOG.md update"
+    constraints:
+      - "All tests must pass"
+      - "Coverage must meet threshold"
+  
+  REL:
+    allowed_operations:
+      - version_bump
+      - create_release
+    required_artifacts:
+      - "Version update"
+      - "Release notes"
+    constraints:
+      - "Only after VERIF complete"
+
+# Response format validation
+response_format:
+  required_tags:
+    - think
+    - act  
+    - verify
+    - next
+  think_constraints:
+    min_words: 20
+    max_words: 700
+  phase_label_required: true
+  state_transition_required: true
+
+# Integration settings
+integration:
+  validate_output: true
+  update_labels: true
+  post_summary: true
+  enforce_guards: true

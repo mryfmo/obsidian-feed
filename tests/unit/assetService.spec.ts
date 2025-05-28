@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, Mocked } from 'vitest';
 
+import type { FileSystemAdapter } from 'obsidian';
 import { AssetService } from '../../src/assetService';
 import type { NetworkService } from '../../src/networkService';
-import type { FileSystemAdapter } from 'obsidian';
 import type { FeedsReaderSettings, ContentBlock } from '../../src/types';
 
 // Define an extended ContentBlock type that might include localSrc
@@ -15,12 +15,13 @@ type ProcessedContentBlock = ContentBlock & { localSrc?: string };
 /* Shared mocks                                                               */
 /* -------------------------------------------------------------------------- */
 
-const createAdapter = (): Mocked<FileSystemAdapter> => ({
-  exists: vi.fn(),
-  mkdir: vi.fn(),
-  writeBinary: vi.fn(),
-  getBasePath: vi.fn().mockReturnValue('/vault'),
-} as unknown as Mocked<FileSystemAdapter>);
+const createAdapter = (): Mocked<FileSystemAdapter> =>
+  ({
+    exists: vi.fn(),
+    mkdir: vi.fn(),
+    writeBinary: vi.fn(),
+    getBasePath: vi.fn().mockReturnValue('/vault'),
+  }) as unknown as Mocked<FileSystemAdapter>;
 
 // NetworkService only uses fetchBinary, so a minimal mock is enough.
 // Explicitly type the mock to match NetworkService or a compatible subset.
@@ -81,7 +82,12 @@ describe('AssetService', () => {
   });
 
   it('returns immediately when asset download is disabled', async () => {
-    svc = new AssetService(adapter, { ...baseSettings, enableAssetDownload: false }, 'test-plugin', net as unknown as NetworkService);
+    svc = new AssetService(
+      adapter,
+      { ...baseSettings, enableAssetDownload: false },
+      'test-plugin',
+      net as unknown as NetworkService
+    );
     const blocks = [imgBlock('https://x.com/a.png')];
     const res = await svc.downloadAssetsForBlocks(blocks, 'https://x.com');
     expect(res[0]).not.toHaveProperty('localSrc');
@@ -93,7 +99,10 @@ describe('AssetService', () => {
     net.fetchBinary.mockResolvedValue(new ArrayBuffer(10));
 
     const blocks = [imgBlock('/img/pic.png')];
-    const res = await svc.downloadAssetsForBlocks(blocks, 'https://example.com/post/') as ProcessedContentBlock[];
+    const res = (await svc.downloadAssetsForBlocks(
+      blocks,
+      'https://example.com/post/'
+    )) as ProcessedContentBlock[];
 
     expect(net.fetchBinary).toHaveBeenCalledWith('https://example.com/img/pic.png');
     expect(adapter.mkdir).toHaveBeenCalled();

@@ -4,7 +4,7 @@
 
 **v0.0.4 (Post-Refactoring & Core Enhancements)**
 - [ ] Finalize and stabilize core parsing, fetching, and data handling logic from v0.0.3.
-- [ ] Support for summarization and translation functions using large language models (LLMs) (beyond existing ChatGPT).
+- [ ] Support for summarization and translation functions using large language models (LLMs) (beyond existing Claude API).
 - [ ] Google Gemini Support for summarization/translation.
 - [ ] Further refine "Fetch Full Content" using advanced article extraction heuristics.
 - [ ] Comprehensive unit and E2E testing for refactored components.

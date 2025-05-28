@@ -1,0 +1,26 @@
+name: guard-unit
+on: [push, pull_request]
+
+jobs:
+  test-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with: {version: 8}
+      - run: pnpm install
+      - run: pnpm test
+      - name: add check-failed label
+        if: failure()
+        run: gh pr edit ${{ github.event.pull_request.number }} --add-label "check-failed"      
+      - name: label on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: ['check-failed']
+            });

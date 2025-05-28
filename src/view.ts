@@ -1,43 +1,61 @@
-import { ItemView, WorkspaceLeaf, Notice, setIcon } from "obsidian";
-import { UndoAction } from "./globals";
-import FeedsReaderPlugin from "./main";
-import { renderControlsBar } from "./view/components/ControlsBarComponent";
-import { renderFeedNavigation } from "./view/components/FeedNavigationComponent";
+import { ItemView, WorkspaceLeaf, Notice, setIcon } from 'obsidian';
+import { UndoAction } from './globals';
+import FeedsReaderPlugin from './main';
+import { renderControlsBar } from './view/components/ControlsBarComponent';
+import { renderFeedNavigation } from './view/components/FeedNavigationComponent';
 import {
   renderFeedItemsList,
   handleContentAreaClick as handleItemsListClick,
-} from "./view/components/FeedItemsListComponent";
+} from './view/components/FeedItemsListComponent';
 
-import { renderFeedItemsCard } from "./view/components/FeedItemsCardComponent";
-import { renderItemMarkdown as renderSingleItemContent } from "./view/components/FeedItemBase";
-import { isVisibleItem } from "./utils";
-import { RssFeedItem } from "./types";
+import { renderFeedItemsCard } from './view/components/FeedItemsCardComponent';
+import { renderItemMarkdown as renderSingleItemContent } from './view/components/FeedItemBase';
+import { isVisibleItem } from './utils';
+import { RssFeedItem } from './types';
 // Centralized FSM – governs view state & side-effects
-import { reducer as viewReducer, createInitialState, Event as ViewEvent, ViewState, ViewStyle } from "./stateMachine";
+import {
+  reducer as viewReducer,
+  createInitialState,
+  Event as ViewEvent,
+  ViewState,
+  ViewStyle,
+} from './stateMachine';
 
-export const VIEW_TYPE_FEEDS_READER = "feeds-reader-view";
+export const VIEW_TYPE_FEEDS_READER = 'feeds-reader-view';
 
 export class FeedsReaderView extends ItemView {
   // View-Specific State
   public currentFeed: string | null = null;
+
   private showAll: boolean = false;
+
   private titleOnly: boolean = true;
-  private itemOrder: "New to old" | "Old to new" | "Random" = "New to old";
+
+  private itemOrder: 'New to old' | 'Old to new' | 'Random' = 'New to old';
+
   private currentPage: number = 0;
+
   public undoList: UndoAction[] = [];
+
   public expandedItems: Set<string> = new Set();
+
   private selectedIndex: number = -1; // index within currently rendered page
+
   private focusArea: 'content' | 'nav' = 'content';
+
   private navSelectedIndex: number = 0;
+
   private readonly MAX_UNDO_STEPS = 20;
 
   /** Cached scroll callback so we attach it only once per view lifecycle. */
   private _scrollCb?: () => void;
+
   /** Timestamp of the last "reading progress" update – used to throttle the
    *  expensive calculations that run on every scroll event. */
   private _lastProgressUpdate = 0;
 
   public itemsPerPage = 20;
+
   private navHidden = false;
 
   /**
@@ -51,10 +69,8 @@ export class FeedsReaderView extends ItemView {
 
     if (this.fsm.mixedView) {
       for (const feed of Object.values(this.plugin.feedsStore)) {
-        const title = feed.title || "(unknown)";
-        pool = pool.concat(
-          feed.items.map(item => ({ ...item, __sourceFeed: title }))
-        );
+        const title = feed.title || '(unknown)';
+        pool = pool.concat(feed.items.map(item => ({ ...item, __sourceFeed: title })));
       }
     } else {
       if (!this.currentFeed) return [];
@@ -68,8 +84,11 @@ export class FeedsReaderView extends ItemView {
 
   // UI References
   private controlsEl!: HTMLElement;
+
   private navEl!: HTMLElement;
+
   public contentAreaEl!: HTMLElement;
+
   public actionIconsGroupEl!: HTMLElement; // Made public for components
 
   // Plugin Reference
@@ -83,7 +102,7 @@ export class FeedsReaderView extends ItemView {
   constructor(leaf: WorkspaceLeaf, plugin: FeedsReaderPlugin) {
     super(leaf);
     this.plugin = plugin;
-    this.icon = "rss";
+    this.icon = 'rss';
     this.itemsPerPage = this.plugin.settings.nItemPerPage ?? 20;
 
     // Seed FSM with persisted settings
@@ -97,43 +116,63 @@ export class FeedsReaderView extends ItemView {
     this.syncLegacyFieldsFromFsm();
   }
 
-  getViewType() { return VIEW_TYPE_FEEDS_READER; }
+  getViewType() {
+    return VIEW_TYPE_FEEDS_READER;
+  }
 
   getDisplayText() {
     this.itemsPerPage = this.plugin.settings.nItemPerPage ?? 20;
-    return "Feeds Reader";
+    return 'Feeds Reader';
   }
 
   async onOpen(): Promise<void> {
     const container = this.containerEl.children[1] as HTMLElement;
     container.empty();
-    container.addClass("fr-view-container");
-    container.style.display = "flex"; container.style.flexDirection = "column"; container.style.height = "100%";
+    container.addClass('fr-view-container');
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.height = '100%';
 
-    this.controlsEl = container.createEl("div", { cls: "fr-controls-bar" });
-    const mainArea = container.createEl("div", {cls: "fr-main-area"});
-    mainArea.style.display = "flex"; mainArea.style.flexGrow = "1"; mainArea.style.overflow = "hidden";
+    this.controlsEl = container.createEl('div', { cls: 'fr-controls-bar' });
+    const mainArea = container.createEl('div', { cls: 'fr-main-area' });
+    mainArea.style.display = 'flex';
+    mainArea.style.flexGrow = '1';
+    mainArea.style.overflow = 'hidden';
 
-    this.navEl = mainArea.createEl("div", { cls: "fr-nav", attr: { id: "fr-nav" } });
-    this.contentAreaEl = mainArea.createEl("div", { cls: "fr-content-area", attr: { id: "fr-content" } });
-    this.contentAreaEl.style.flexGrow = "1"; this.contentAreaEl.style.overflowY = "auto"; this.navEl.style.overflowY = "auto";
-    this.actionIconsGroupEl = this.controlsEl.createEl("div", { cls: "fr-action-icons-group"});
-    this.actionIconsGroupEl.style.cssText = "display: flex; flex-grow: 1; justify-content: flex-end;";
+    this.navEl = mainArea.createEl('div', { cls: 'fr-nav', attr: { id: 'fr-nav' } });
+    this.contentAreaEl = mainArea.createEl('div', {
+      cls: 'fr-content-area',
+      attr: { id: 'fr-content' },
+    });
+    this.contentAreaEl.style.flexGrow = '1';
+    this.contentAreaEl.style.overflowY = 'auto';
+    this.navEl.style.overflowY = 'auto';
+    this.actionIconsGroupEl = this.controlsEl.createEl('div', { cls: 'fr-action-icons-group' });
+    this.actionIconsGroupEl.style.cssText =
+      'display: flex; flex-grow: 1; justify-content: flex-end;';
 
-    this.currentFeed = null; this.showAll = false;
+    this.currentFeed = null;
+    this.showAll = false;
     // Start in the persisted layout preference.
     this.titleOnly = this.plugin.settings.defaultTitleOnly ?? true;
-    this.itemOrder = "New to old"; this.currentPage = 0; this.undoList = []; this.expandedItems = new Set();
+    this.itemOrder = 'New to old';
+    this.currentPage = 0;
+    this.undoList = [];
+    this.expandedItems = new Set();
 
     this.navEl.hidden = this.navHidden;
 
     // Nav toggle button - should be part of controlsEl, not actionIconsGroupEl if it's at the far left
-    const navBtn = this.controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Toggle Feed List Sidebar" } });
+    const navBtn = this.controlsEl.createEl('button', {
+      cls: 'clickable-icon',
+      attr: { 'aria-label': 'Toggle Feed List Sidebar' },
+    });
     this.controlsEl.insertBefore(navBtn, this.actionIconsGroupEl);
-    const syncNavIcon = () => setIcon(navBtn, this.navEl.hidden ? "panel-left-open" : "panel-left-close");
+    const syncNavIcon = () =>
+      setIcon(navBtn, this.navEl.hidden ? 'panel-left-open' : 'panel-left-close');
     syncNavIcon();
-    this.registerDomEvent(navBtn, "click", () => {
-      this.dispatch({ type: "ToggleNav" });
+    this.registerDomEvent(navBtn, 'click', () => {
+      this.dispatch({ type: 'ToggleNav' });
       // navHidden mirrored into legacy field inside dispatch
       this.navEl.hidden = this.fsm.navHidden;
       syncNavIcon();
@@ -142,17 +181,21 @@ export class FeedsReaderView extends ItemView {
     // -------------------------------------------------------------------
     // Unified-view toggle (mixed ↔ per-feed)
     // -------------------------------------------------------------------
-    const mixedBtn = this.controlsEl.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Toggle unified timeline" } });
+    const mixedBtn = this.controlsEl.createEl('button', {
+      cls: 'clickable-icon',
+      attr: { 'aria-label': 'Toggle unified timeline' },
+    });
     // Place it just before the nav button so it is the very left-most.
     this.controlsEl.insertBefore(mixedBtn, navBtn);
     // Reflect FSM state, not persisted settings, to avoid stale UI after
     // programmatic changes.  The icon depicts *list* when the **unified
-      // timeline** (mixed view) is active and the classic *rss* icon when
-      // browsing a single feed.
-    const syncMixedIcon = () => setIcon(mixedBtn, this.fsm.mixedView ? "circle-chevron-down" : "circle-chevron-right");
+    // timeline** (mixed view) is active and the classic *rss* icon when
+    // browsing a single feed.
+    const syncMixedIcon = () =>
+      setIcon(mixedBtn, this.fsm.mixedView ? 'circle-chevron-down' : 'circle-chevron-right');
     syncMixedIcon();
-    this.registerDomEvent(mixedBtn, "click", async () => {
-      this.dispatch({ type: "ToggleMixedView" });
+    this.registerDomEvent(mixedBtn, 'click', async () => {
+      this.dispatch({ type: 'ToggleMixedView' });
 
       // Persist preference so the view re-opens in the same mode next time.
       this.plugin.settings.mixedFeedView = this.fsm.mixedView;
@@ -164,7 +207,7 @@ export class FeedsReaderView extends ItemView {
       // subscribed feeds are loaded before rendering, otherwise the list will
       // appear empty until the user manually refreshes.
       if (this.fsm.mixedView) {
-        const loadingNotice = new Notice("Loading feeds…", 0);
+        const loadingNotice = new Notice('Loading feeds…', 0);
         (async () => {
           for (const feedInfo of this.plugin.feedList) {
             try {
@@ -190,7 +233,7 @@ export class FeedsReaderView extends ItemView {
     // individual feeds are loaded so displaying the prompt would be
     // misleading.
     if (!this.fsm.mixedView) {
-      this.contentAreaEl.setText("Select a feed from the list.");
+      this.contentAreaEl.setText('Select a feed from the list.');
     }
 
     // ---------------------------------------------------------------
@@ -210,7 +253,7 @@ export class FeedsReaderView extends ItemView {
     // ---------------------------------------------------------------
 
     if (this.fsm.mixedView) {
-      const loadingNotice = new Notice("Loading feeds…", 0);
+      const loadingNotice = new Notice('Loading feeds…', 0);
       (async () => {
         for (const feedInfo of this.plugin.feedList) {
           try {
@@ -227,18 +270,22 @@ export class FeedsReaderView extends ItemView {
     }
 
     this.renderFeedList();
-    this.registerDomEvent(this.contentAreaEl, "click", (event) => handleItemsListClick(event, this, this.plugin));
+    this.registerDomEvent(this.contentAreaEl, 'click', event =>
+      handleItemsListClick(event, this, this.plugin)
+    );
 
     // Register a single scroll listener for reading-progress updates. Guard to
     // ensure we don't attach multiple listeners if onOpen somehow executes
     // more than once (shouldn't happen, but defensive).
     if (!this._scrollCb) {
       this._scrollCb = () => this.updateReadingProgress();
-      this.registerDomEvent(this.contentAreaEl, "scroll", this._scrollCb);
+      this.registerDomEvent(this.contentAreaEl, 'scroll', this._scrollCb);
     }
 
     // Keyboard navigation
-    this.registerDomEvent(this.containerEl.ownerDocument, "keydown", (e: KeyboardEvent) => this.handleKeyDown(e));
+    this.registerDomEvent(this.containerEl.ownerDocument, 'keydown', (e: KeyboardEvent) =>
+      this.handleKeyDown(e)
+    );
   }
 
   public createControlButtons(): void {
@@ -257,10 +304,10 @@ export class FeedsReaderView extends ItemView {
     // Minimal effect interpreter – extend as migrations progress
     for (const ef of effects) {
       switch (ef.type) {
-        case "Render":
+        case 'Render':
           this.renderFeedContent();
           break;
-        case "ResetFeedSpecificState":
+        case 'ResetFeedSpecificState':
           this.resetFeedSpecificViewState();
           break;
         default:
@@ -300,7 +347,7 @@ export class FeedsReaderView extends ItemView {
   public nextPage() {
     const items = this.getVisibleItems();
     if (items.length === 0) {
-      new Notice("No items to paginate.");
+      new Notice('No items to paginate.');
       return;
     }
 
@@ -309,9 +356,10 @@ export class FeedsReaderView extends ItemView {
       this.currentPage++;
       this.renderFeedContent();
     } else {
-      new Notice("You are on the last page.");
+      new Notice('You are on the last page.');
     }
   }
+
   public prevPage() {
     if (this.currentPage > 0) {
       this.currentPage--;
@@ -319,7 +367,7 @@ export class FeedsReaderView extends ItemView {
     } else {
       // Only notify if there is at least one page worth of items
       if (this.getVisibleItems().length > 0) {
-        new Notice("You are on the first page.");
+        new Notice('You are on the first page.');
       }
     }
   }
@@ -345,18 +393,17 @@ export class FeedsReaderView extends ItemView {
     }
 
     if (!this.fsm.mixedView && !this.currentFeed) {
-      contentEl.setText("No feed selected to display items.");
+      contentEl.setText('No feed selected to display items.');
       return;
     }
 
-
     if (!this.contentAreaEl) {
-      console.warn("Content area not ready.");
+      console.warn('Content area not ready.');
       return;
     }
 
     // Delegate to the renderer that matches the current view style.
-    if (this.fsm.viewStyle === "card") {
+    if (this.fsm.viewStyle === 'card') {
       renderFeedItemsCard(this.contentAreaEl, items, this, this.plugin);
     } else {
       renderFeedItemsList(this.contentAreaEl, items, this, this.plugin);
@@ -384,12 +431,14 @@ export class FeedsReaderView extends ItemView {
    *     so that the reader preserves context while collapsing distraction.
    */
   public toggleTitleOnlyMode(): void {
-    this.dispatch({ type: "ToggleTitleOnly" });
+    this.dispatch({ type: 'ToggleTitleOnly' });
 
     // Persist user preference asynchronously
     if (this.plugin.settings.defaultTitleOnly !== this.titleOnly) {
       this.plugin.settings.defaultTitleOnly = this.titleOnly;
-      void this.plugin.saveSettings().catch(err => console.error("FeedsReaderView: Failed to persist defaultTitleOnly", err));
+      void this.plugin
+        .saveSettings()
+        .catch(err => console.error('FeedsReaderView: Failed to persist defaultTitleOnly', err));
     }
   }
 
@@ -410,26 +459,26 @@ export class FeedsReaderView extends ItemView {
     const itemDiv = this.contentAreaEl.querySelector(`.fr-item[data-item-id="${itemId}"]`);
     if (!itemDiv) return;
 
-    const contentEl = itemDiv.querySelector(".fr-item-content") as HTMLElement | null;
+    const contentEl = itemDiv.querySelector('.fr-item-content') as HTMLElement | null;
 
-    const collapse = itemDiv.classList.contains("expanded");
+    const collapse = itemDiv.classList.contains('expanded');
 
     if (collapse) {
-      itemDiv.classList.remove("expanded");
+      itemDiv.classList.remove('expanded');
       this.expandedItems.delete(itemId);
-      this.dispatch({ type: "CollapseItem", id: itemId });
+      this.dispatch({ type: 'CollapseItem', id: itemId });
       if (contentEl && this.titleOnly) contentEl.hidden = true;
     } else {
-      itemDiv.classList.add("expanded");
+      itemDiv.classList.add('expanded');
       this.expandedItems.add(itemId);
-      this.dispatch({ type: "ExpandItem", id: itemId });
+      this.dispatch({ type: 'ExpandItem', id: itemId });
 
       if (contentEl) {
         contentEl.hidden = false;
 
         // Lazily render Markdown if it has not been rendered before.
         if (contentEl.childNodes.length === 0) {
-          let itemData: import("./types").RssFeedItem | undefined;
+          let itemData: import('./types').RssFeedItem | undefined;
 
           if (this.currentFeed) {
             itemData = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
@@ -437,7 +486,10 @@ export class FeedsReaderView extends ItemView {
             // Mixed view – walk every feed once to locate the item.
             for (const feed of Object.values(this.plugin.feedsStore)) {
               const found = feed.items.find(i => i.id === itemId);
-              if (found) { itemData = found; break; }
+              if (found) {
+                itemData = found;
+                break;
+              }
             }
           }
 
@@ -460,9 +512,11 @@ export class FeedsReaderView extends ItemView {
     this.updateUndoButtonState();
   }
 
-  public updateUndoButtonState(): void {    
-    const undoBtn = this.actionIconsGroupEl.querySelector('button[aria-label="Undo last action"]') as HTMLButtonElement | null;
-    if(undoBtn) undoBtn.disabled = this.undoList.length === 0;
+  public updateUndoButtonState(): void {
+    const undoBtn = this.actionIconsGroupEl.querySelector(
+      'button[aria-label="Undo last action"]'
+    ) as HTMLButtonElement | null;
+    if (undoBtn) undoBtn.disabled = this.undoList.length === 0;
   }
 
   public refreshView(): void {
@@ -480,7 +534,7 @@ export class FeedsReaderView extends ItemView {
       // The dispatch will emit a "Render" effect which re-draws the content
       // area in the newly chosen layout. We therefore must *not* re-render
       // once more below or the work would be duplicated (flicker & waste).
-      this.dispatch({ type: "SetViewStyle", style: this.plugin.settings.viewStyle as ViewStyle });
+      this.dispatch({ type: 'SetViewStyle', style: this.plugin.settings.viewStyle as ViewStyle });
     }
 
     // --------------------------------------------------------------
@@ -502,7 +556,7 @@ export class FeedsReaderView extends ItemView {
         this.renderFeedContent();
       } else if (this.contentAreaEl) {
         // Per-feed mode with nothing selected → friendly prompt.
-        this.contentAreaEl.setText("Select a feed from the list.");
+        this.contentAreaEl.setText('Select a feed from the list.');
       }
     }
 
@@ -514,7 +568,7 @@ export class FeedsReaderView extends ItemView {
   public resetFeedSpecificViewState(): void {
     this.showAll = false;
     this.titleOnly = true;
-    this.itemOrder = "New to old";
+    this.itemOrder = 'New to old';
     this.currentPage = 0;
     this.undoList = []; // Clear undo for the new feed
     this.expandedItems = new Set(); // Clear expanded items
@@ -528,26 +582,32 @@ export class FeedsReaderView extends ItemView {
 
     // Ignore if input/textarea is focused
     const active = document.activeElement;
-    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || (active as HTMLElement).isContentEditable)) return;
+    if (
+      active &&
+      (active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        (active as HTMLElement).isContentEditable)
+    )
+      return;
 
-    const key = e.key;
+    const { key } = e;
     // Allow tab to toggle focus between nav and content
-    if (key === "Tab") {
+    if (key === 'Tab') {
       e.preventDefault();
       this.toggleFocusArea();
       return;
     }
 
-    const jOrDown = key === "j" || key === "ArrowDown";
-    const kOrUp = key === "k" || key === "ArrowUp";
-    const enterOrO = key === "Enter" || key === "o";
-    const markKey = key === "r";
-    const delKey = key === "d";
+    const jOrDown = key === 'j' || key === 'ArrowDown';
+    const kOrUp = key === 'k' || key === 'ArrowUp';
+    const enterOrO = key === 'Enter' || key === 'o';
+    const markKey = key === 'r';
+    const delKey = key === 'd';
     // Note: On some browsers / keyboard layouts the space bar reports
     // "space bar" instead of a single space character.  Handle both to
     // ensure cross-platform consistency.
-    const nextPageKey = key === "PageDown" || key === " " || key === "Spacebar";
-    const prevPageKey = key === "PageUp";
+    const nextPageKey = key === 'PageDown' || key === ' ' || key === 'Spacebar';
+    const prevPageKey = key === 'PageUp';
 
     if (!(jOrDown || kOrUp || enterOrO || markKey || delKey || nextPageKey || prevPageKey)) return;
     if (this.focusArea === 'nav') {
@@ -558,10 +618,20 @@ export class FeedsReaderView extends ItemView {
     // Prevent default to keep page from scrolling etc.
     e.preventDefault();
 
-    if (nextPageKey) { this.nextPage(); this.selectedIndex = 0; this.highlightSelected(); return; }
-    if (prevPageKey) { this.prevPage(); this.selectedIndex = 0; this.highlightSelected(); return; }
+    if (nextPageKey) {
+      this.nextPage();
+      this.selectedIndex = 0;
+      this.highlightSelected();
+      return;
+    }
+    if (prevPageKey) {
+      this.prevPage();
+      this.selectedIndex = 0;
+      this.highlightSelected();
+      return;
+    }
 
-    const currentItems = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    const currentItems = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>('.fr-item'));
     if (currentItems.length === 0) return;
 
     if (this.selectedIndex < 0 || this.selectedIndex >= currentItems.length) {
@@ -572,21 +642,27 @@ export class FeedsReaderView extends ItemView {
       if (this.selectedIndex < currentItems.length - 1) {
         this.selectedIndex++;
         this.highlightSelected();
-      } else { // end of list, advance page
+      } else {
+        // end of list, advance page
         this.nextPage();
-        this.selectedIndex = 0; this.highlightSelected();
+        this.selectedIndex = 0;
+        this.highlightSelected();
       }
       return;
     }
 
     if (kOrUp) {
       if (this.selectedIndex > 0) {
-        this.selectedIndex--; this.highlightSelected();
-      } else { // top of list, previous page
+        this.selectedIndex--;
+        this.highlightSelected();
+      } else {
+        // top of list, previous page
         const prevPage = this.currentPage;
         this.prevPage();
         if (this.currentPage !== prevPage) {
-          const itemsAfter = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+          const itemsAfter = Array.from(
+            this.contentAreaEl.querySelectorAll<HTMLElement>('.fr-item')
+          );
           this.selectedIndex = itemsAfter.length - 1;
           this.highlightSelected();
         }
@@ -612,7 +688,7 @@ export class FeedsReaderView extends ItemView {
     if (markKey) {
       const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
       if (item) {
-        this.plugin.markItemReadState(this.currentFeed, itemId, item.read === "0");
+        this.plugin.markItemReadState(this.currentFeed, itemId, item.read === '0');
         this.renderFeedContent();
         this.highlightSelected();
       }
@@ -622,7 +698,7 @@ export class FeedsReaderView extends ItemView {
     if (delKey) {
       const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
       if (item) {
-        this.plugin.markItemDeletedState(this.currentFeed, itemId, item.deleted === "0");
+        this.plugin.markItemDeletedState(this.currentFeed, itemId, item.deleted === '0');
         this.renderFeedContent();
         this.highlightSelected();
       }
@@ -637,7 +713,7 @@ export class FeedsReaderView extends ItemView {
    */
   public setSelectedItemById(itemId: string): void {
     if (!this.contentAreaEl) return;
-    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>('.fr-item'));
     const idx = items.findIndex(el => el.dataset.itemId === itemId);
     if (idx !== -1) {
       this.selectedIndex = idx;
@@ -646,10 +722,10 @@ export class FeedsReaderView extends ItemView {
   }
 
   private highlightSelected(): void {
-    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>(".fr-item"));
+    const items = Array.from(this.contentAreaEl.querySelectorAll<HTMLElement>('.fr-item'));
     items.forEach((el, idx) => {
-      if (idx === this.selectedIndex) el.classList.add("fr-item-selected");
-      else el.classList.remove("fr-item-selected");
+      if (idx === this.selectedIndex) el.classList.add('fr-item-selected');
+      else el.classList.remove('fr-item-selected');
     });
 
     const selectedEl = items[this.selectedIndex];
@@ -658,14 +734,14 @@ export class FeedsReaderView extends ItemView {
       // that assistive technologies pick up the change and standard
       // keyboard navigation (e.g. pressing Space on a button inside the
       // item) works without an extra click.
-      if (!selectedEl.hasAttribute("tabindex")) {
-        selectedEl.setAttribute("tabindex", "-1");
+      if (!selectedEl.hasAttribute('tabindex')) {
+        selectedEl.setAttribute('tabindex', '-1');
       }
       (selectedEl as HTMLElement).focus({ preventScroll: true });
-      selectedEl.scrollIntoView({ block: "nearest" });
+      selectedEl.scrollIntoView({ block: 'nearest' });
       // Mark aria-selected for better SR support
-      items.forEach(el => el.setAttribute("aria-selected", "false"));
-      selectedEl.setAttribute("aria-selected", "true");
+      items.forEach(el => el.setAttribute('aria-selected', 'false'));
+      selectedEl.setAttribute('aria-selected', 'true');
     }
   }
 
@@ -684,16 +760,18 @@ export class FeedsReaderView extends ItemView {
   }
 
   private handleNavKey(down: boolean, up: boolean, enter: boolean): void {
-    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item"));
+    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>('.fr-feed-item'));
     if (feeds.length === 0) return;
 
     if (down) {
       this.navSelectedIndex = (this.navSelectedIndex + 1) % feeds.length;
-      this.highlightNav(); return;
+      this.highlightNav();
+      return;
     }
     if (up) {
       this.navSelectedIndex = (this.navSelectedIndex - 1 + feeds.length) % feeds.length;
-      this.highlightNav(); return;
+      this.highlightNav();
+      return;
     }
     if (enter) {
       const el = feeds[this.navSelectedIndex];
@@ -705,63 +783,91 @@ export class FeedsReaderView extends ItemView {
   }
 
   private highlightNav(): void {
-    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item"));
+    const feeds = Array.from(this.navEl.querySelectorAll<HTMLElement>('.fr-feed-item'));
     if (feeds.length === 0) return;
     if (this.navSelectedIndex >= feeds.length) this.navSelectedIndex = feeds.length - 1;
     if (this.navSelectedIndex < 0) this.navSelectedIndex = 0;
 
     feeds.forEach((el, idx) => {
-      if (idx === this.navSelectedIndex) el.classList.add("fr-feed-item-selected");
-      else el.classList.remove("fr-feed-item-selected");
+      if (idx === this.navSelectedIndex) el.classList.add('fr-feed-item-selected');
+      else el.classList.remove('fr-feed-item-selected');
     });
     feeds[this.navSelectedIndex].scrollIntoView({ block: 'nearest' });
   }
 
   private clearNavHighlight(): void {
-    this.navEl.querySelectorAll<HTMLElement>(".fr-feed-item-selected").forEach(el => el.classList.remove("fr-feed-item-selected"));
+    this.navEl
+      .querySelectorAll<HTMLElement>('.fr-feed-item-selected')
+      .forEach(el => el.classList.remove('fr-feed-item-selected'));
   }
 
   public resetToDefaultState(): void {
     // console.log("FeedsReaderView: Resetting to default state.");
-    this.currentFeed = null; 
+    this.currentFeed = null;
     this.resetFeedSpecificViewState();
     if (!this.fsm.mixedView && this.contentAreaEl) {
-      this.contentAreaEl.setText("Select a feed from the list.");
+      this.contentAreaEl.setText('Select a feed from the list.');
     }
     this.createControlButtons();
     this.renderFeedList();
   }
 
   public handleUndo(): void {
-    if (this.undoList.length === 0) { new Notice("Nothing to undo."); return; }
+    if (this.undoList.length === 0) {
+      new Notice('Nothing to undo.');
+      return;
+    }
     const lastAction = this.undoList.pop();
     this.updateUndoButtonState();
-    if (!lastAction || !this.currentFeed || (this.currentFeed !== lastAction.feedName)) {
-      if(lastAction) this.pushUndo(lastAction); // Put it back if context is wrong
-      new Notice("Cannot undo: Action is for a different feed or context is invalid.");
+    if (!lastAction || !this.currentFeed || this.currentFeed !== lastAction.feedName) {
+      if (lastAction) this.pushUndo(lastAction); // Put it back if context is wrong
+      new Notice('Cannot undo: Action is for a different feed or context is invalid.');
       return;
     }
 
     let actionUndone = false;
-    let noticeMessage = "";
+    let noticeMessage = '';
 
-    if (lastAction.action === "markAllRead" && lastAction.previousStates) {
+    if (lastAction.action === 'markAllRead' && lastAction.previousStates) {
       lastAction.previousStates.forEach(prevState => {
-        const itemToUndo = this.plugin.feedsStore[this.currentFeed!]?.items.find(i => i.id === prevState.itemId);
-        if (itemToUndo) { itemToUndo.read = prevState.readState; actionUndone = true; }
+        const itemToUndo = this.plugin.feedsStore[this.currentFeed!]?.items.find(
+          i => i.id === prevState.itemId
+        );
+        if (itemToUndo) {
+          itemToUndo.read = prevState.readState;
+          actionUndone = true;
+        }
       });
-      if(actionUndone) { noticeMessage = `Reverted "mark all read" for ${lastAction.previousStates.length} items.`; this.plugin.flagChangeAndSave(this.currentFeed); }
-    } else if (lastAction.itemId) { // Single item undo
-      const itemToUndo = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === lastAction.itemId);
+      if (actionUndone) {
+        noticeMessage = `Reverted "mark all read" for ${lastAction.previousStates.length} items.`;
+        this.plugin.flagChangeAndSave(this.currentFeed);
+      }
+    } else if (lastAction.itemId) {
+      // Single item undo
+      const itemToUndo = this.plugin.feedsStore[this.currentFeed]?.items.find(
+        i => i.id === lastAction.itemId
+      );
       if (itemToUndo && lastAction.previousState !== undefined) {
-        if (lastAction.action === "read" || lastAction.action === "unread") { itemToUndo.read = lastAction.previousState; noticeMessage = `Item "${itemToUndo.title?.substring(0,20)}..." read state reverted.`; actionUndone = true; }
-        else if (lastAction.action === "deleted" || lastAction.action === "undeleted") { itemToUndo.deleted = lastAction.previousState; noticeMessage = `Item "${itemToUndo.title?.substring(0,20)}..." delete state reverted.`; actionUndone = true; }
-        if(actionUndone) this.plugin.flagChangeAndSave(this.currentFeed);
+        if (lastAction.action === 'read' || lastAction.action === 'unread') {
+          itemToUndo.read = lastAction.previousState;
+          noticeMessage = `Item "${itemToUndo.title?.substring(0, 20)}..." read state reverted.`;
+          actionUndone = true;
+        } else if (lastAction.action === 'deleted' || lastAction.action === 'undeleted') {
+          itemToUndo.deleted = lastAction.previousState;
+          noticeMessage = `Item "${itemToUndo.title?.substring(0, 20)}..." delete state reverted.`;
+          actionUndone = true;
+        }
+        if (actionUndone) this.plugin.flagChangeAndSave(this.currentFeed);
       }
     }
-    if (actionUndone) { this.refreshView(); new Notice(noticeMessage || "Action undone."); }
-    else { if(lastAction) this.pushUndo(lastAction); new Notice("Could not undo: Item state or context issue."); }
-  }  
+    if (actionUndone) {
+      this.refreshView();
+      new Notice(noticeMessage || 'Action undone.');
+    } else {
+      if (lastAction) this.pushUndo(lastAction);
+      new Notice('Could not undo: Item state or context issue.');
+    }
+  }
 
   public updateReadingProgress(): void {
     // -------------------------------------------------------------------
@@ -813,12 +919,12 @@ export class FeedsReaderView extends ItemView {
           const intersectHeight = Math.max(
             0,
             Math.min(containerRect.bottom, contentRect.bottom) -
-              Math.max(containerRect.top, contentRect.top),
+              Math.max(containerRect.top, contentRect.top)
           );
 
           percent = contentRect.height === 0 ? 0 : (intersectHeight / contentRect.height) * 100;
         }
-        progressEl.textContent = Math.floor(percent) + '%';
+        progressEl.textContent = `${Math.floor(percent)}%`;
       }
     });
   }

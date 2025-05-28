@@ -1,4 +1,4 @@
-name: Claude Code
+name: Claude Code with Full Context
 
 on:
   issue_comment:
@@ -9,6 +9,13 @@ on:
     types: [opened, assigned]
   pull_request_review:
     types: [submitted]
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   claude:
@@ -16,25 +23,279 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
+      (github.event_name == 'pull_request')
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Run Claude Code
-        id: claude
+      - name: Prepare Documentation Context
+        id: context
+        run: |
+          # Create a context file with all essential documentation
+          cat > claude-context.md << 'EOF'
+          # Context for Claude Code Action
+          
+          ## Available Documentation
+          EOF
+          
+          # Add CLAUDE.md content
+          echo "### CLAUDE.md" >> claude-context.md
+          echo '```markdown' >> claude-context.md
+          cat CLAUDE.md >> claude-context.md
+          echo '```' >> claude-context.md
+          echo "" >> claude-context.md
+          
+          # Add key workflow documentation
+          if [ -f "docs/agents/02_claude-code.md" ]; then
+            echo "### Workflow Documentation (02_claude-code.md)" >> claude-context.md
+            echo '```markdown' >> claude-context.md
+            head -100 docs/agents/02_claude-code.md >> claude-context.md
+            echo '```' >> claude-context.md
+            echo "" >> claude-context.md
+          fi
+          
+          # Add phase lifecycle
+          if [ -f "docs/agents/01_task-lifecycle.md" ]; then
+            echo "### Task Lifecycle (01_task-lifecycle.md)" >> claude-context.md
+            echo '```markdown' >> claude-context.md
+            head -50 docs/agents/01_task-lifecycle.md >> claude-context.md
+            echo '```' >> claude-context.md
+            echo "" >> claude-context.md
+          fi
+          
+          # List available tools
+          echo "### Available Tools" >> claude-context.md
+          echo '```' >> claude-context.md
+          ls -la tools/ >> claude-context.md
+          echo '```' >> claude-context.md
+          echo "" >> claude-context.md
+          
+          # Add guard script usage
+          if [ -f "tools/turn_guard.sh" ]; then
+            echo "### Turn Guard Rules (first 50 lines)" >> claude-context.md
+            echo '```bash' >> claude-context.md
+            head -50 tools/turn_guard.sh >> claude-context.md
+            echo '```' >> claude-context.md
+          fi
+          
+          # Save context size
+          CONTEXT_SIZE=$(wc -c < claude-context.md)
+          echo "context_size=$CONTEXT_SIZE" >> $GITHUB_OUTPUT
+          echo "Context file size: $CONTEXT_SIZE bytes"
+
+      - name: Detect Current Phase
+        id: phase
+        run: |
+          # Get title from PR or Issue
+          if [[ "${{ github.event_name }}" == "pull_request"* ]]; then
+            TITLE="${{ github.event.pull_request.title }}"
+          else
+            TITLE="${{ github.event.issue.title || '' }}"
+          fi
+          
+          # Extract phase label from title
+          PHASE=$(echo "$TITLE" | grep -oE '^(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL):' | sed 's/://' || echo "")
+          
+          # Default to INV if no phase found
+          PHASE=${PHASE:-INV}
+          echo "phase=$PHASE" >> $GITHUB_OUTPUT
+          echo "Current phase: $PHASE"
+          
+          # Determine next phase
+          case $PHASE in
+            FETCH) NEXT="INV" ;;
+            INV) NEXT="ANA" ;;
+            ANA) NEXT="PLAN" ;;
+            PLAN) NEXT="BUILD" ;;
+            BUILD) NEXT="VERIF" ;;
+            VERIF) NEXT="REL" ;;
+            REL) NEXT="COMPLETE" ;;
+            *) NEXT="INV" ;;
+          esac
+          echo "next_phase=$NEXT" >> $GITHUB_OUTPUT
+          
+          # Get phase-specific constraints
+          case $PHASE in
+            FETCH)
+              echo "phase_constraints=Network access allowed via tools/fetch_doc.sh" >> $GITHUB_OUTPUT
+              ;;
+            BUILD)
+              echo "phase_constraints=Max 1000 LOC, 10 files per patch" >> $GITHUB_OUTPUT
+              ;;
+            PLAN)
+              echo "phase_constraints=Create RFC in docs/rfcs/, requires approval" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "phase_constraints=Follow standard phase requirements" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Create System Prompt
+        id: prompt
+        run: |
+          # Create a comprehensive system prompt
+          cat > system-prompt.txt << 'EOF'
+          You are Claude Code Action operating in a strict phase-based workflow system.
+          
+          CRITICAL REQUIREMENTS:
+          1. Current Phase: ${{ steps.phase.outputs.phase }}
+          2. Next Phase: ${{ steps.phase.outputs.next_phase }}
+          3. Phase Constraints: ${{ steps.phase.outputs.phase_constraints }}
+          
+          RESPONSE FORMAT (MANDATORY):
+          <think>
+          [Analysis of the request and current context, 20-700 words]
+          </think>
+          
+          <act>
+          ${{ steps.phase.outputs.phase }}: [Specific task description]
+          [Actual work, commands, or analysis]
+          </act>
+          
+          <verify>
+          [Verification steps and results]
+          </verify>
+          
+          <next>
+          [Next steps or completion status]
+          State-Transition: ${{ steps.phase.outputs.phase }}→${{ steps.phase.outputs.next_phase }}
+          </next>
+          
+          AVAILABLE TOOLS:
+          - tools/turn_guard.sh - Validates output format
+          - tools/fetch_doc.sh - Downloads documents (FETCH phase only)
+          - tools/list_guards.sh - Lists guard checks
+          - tools/gen_wbs.py - Generates work breakdown
+          
+          PHASE-SPECIFIC RULES:
+          - FETCH: Network operations allowed
+          - INV: Reproduce issues, create failing tests
+          - ANA: Root cause analysis only
+          - PLAN: Create RFC documents
+          - BUILD: Implementation with size limits
+          - VERIF: Testing and validation
+          - REL: Release preparation
+          
+          Refer to the documentation context provided for detailed requirements.
+          EOF
+          
+          # Output the prompt for the action to use
+          echo "system_prompt<<EOF" >> $GITHUB_OUTPUT
+          cat system-prompt.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code Action
         uses: mryfmo/claude-code-action@main
         with:
-          use_oauth: 'true'
-          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          context_file: claude-context.md
+          system_prompt: ${{ steps.prompt.outputs.system_prompt }}
+        env:
+          CLAUDE_ACCESS_TOKEN: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          CLAUDE_REFRESH_TOKEN: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          CLAUDE_EXPIRES_AT: ${{ secrets.CLAUDE_EXPIRES_AT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_PHASE: ${{ steps.phase.outputs.phase }}
+          NEXT_PHASE: ${{ steps.phase.outputs.next_phase }}
 
+      - name: Validate Claude Output
+        if: success()
+        run: |
+          # Check if Claude's output follows the required format
+          # This would need to be implemented based on how claude-code-action returns output
+          
+          echo "⚠️ Note: Output validation requires claude-code-action output format specification"
+          
+          # If we had the output, we would validate it:
+          # if [ -f "claude-output.md" ]; then
+          #   chmod +x tools/turn_guard.sh
+          #   tools/turn_guard.sh claude-output.md || {
+          #     echo "::error::Claude output failed validation"
+          #     exit 1
+          #   }
+          # fi
+
+      - name: Update Phase Labels
+        if: github.event_name == 'pull_request' || contains(github.event_name, 'pull_request_')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const phase = '${{ steps.phase.outputs.phase }}';
+            const validPhases = ['FETCH', 'INV', 'ANA', 'PLAN', 'BUILD', 'VERIF', 'REL'];
+            
+            if (!validPhases.includes(phase)) {
+              console.log('Invalid phase detected, skipping label update');
+              return;
+            }
+            
+            const issue_number = context.issue.number;
+            
+            try {
+              // Get current labels
+              const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number
+              });
+              
+              const currentLabelNames = currentLabels.map(l => l.name);
+              
+              // Remove old phase labels
+              for (const oldPhase of validPhases) {
+                if (oldPhase !== phase && currentLabelNames.includes(oldPhase)) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issue_number,
+                      name: oldPhase
+                    });
+                  } catch (e) {
+                    console.log(`Could not remove label ${oldPhase}`);
+                  }
+                }
+              }
+              
+              // Add current phase label if not present
+              if (!currentLabelNames.includes(phase)) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number,
+                  labels: [phase]
+                });
+                console.log(`Added phase label: ${phase}`);
+              }
+            } catch (error) {
+              console.error('Error updating labels:', error.message);
+            }
+
+      - name: Post Context Summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const contextSize = '${{ steps.context.outputs.context_size }}';
+            const phase = '${{ steps.phase.outputs.phase }}';
+            
+            const comment = `## Claude Code Action Context
+            
+            - **Current Phase**: ${phase}
+            - **Context Size**: ${contextSize} bytes
+            - **Documentation Loaded**: CLAUDE.md, workflow docs, task lifecycle
+            - **Tools Available**: turn_guard.sh, fetch_doc.sh, list_guards.sh, gen_wbs.py
+            
+            Claude has been provided with full workflow documentation and constraints.`;
+            
+            // Only post if this is a PR/Issue event
+            if (context.issue && context.issue.number) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }

@@ -1,0 +1,25 @@
+name: label-sync
+
+on:
+  pull_request_target:
+    types: [opened, edited, labeled, unlabeled, synchronize]
+
+jobs:
+  enforce-phase-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: validate label & title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const phases = ['FETCH','INV','ANA','PLAN','BUILD','VERIF','REL'];
+            const pr    = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name.toUpperCase());
+            const titlePhase = phases.find(p => pr.title.toUpperCase().startsWith(`${p}:`));
+            if (!titlePhase) {
+              core.setFailed('PR title must start with one of: ' + phases.join(', '));
+              return;
+            }
+            if (!labels.includes(titlePhase)) {
+              core.setFailed(`PR title phase "${titlePhase}" is not among PR labels.`);
+            }

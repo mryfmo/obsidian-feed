@@ -1,9 +1,9 @@
-import { FeedsReaderView } from "../../view";
-import FeedsReaderPlugin from "../../main";
-import { RssFeedItem } from "../../types";
+import { FeedsReaderView } from '../../view';
+import FeedsReaderPlugin from '../../main';
+import { RssFeedItem } from '../../types';
 
-import { renderFeedItemCard } from "./FeedItemCardComponent";
-import { isVisibleItem, shuffleArray } from "../../utils";
+import { renderFeedItemCard } from './FeedItemCardComponent';
+import { isVisibleItem, shuffleArray } from '../../utils';
 
 /**
  * Renders a list of items in *card* layout.  All business logic that is
@@ -22,10 +22,10 @@ export function renderFeedItemsCard(
   if (!items || items.length === 0) {
     const placeholder = (() => {
       if (view.isMixedViewEnabled()) {
-        return "All feeds are up-to-date!";
+        return 'All feeds are up-to-date!';
       }
       if (!view.currentFeed) {
-        return "No feed selected – pick one from the sidebar or enable the unified timeline.";
+        return 'No feed selected – pick one from the sidebar or enable the unified timeline.';
       }
       return `No items available in feed "${view.currentFeed}". Check your filters.`;
     })();
@@ -43,26 +43,26 @@ export function renderFeedItemsCard(
       contentAreaEl.setText(`Data for feed "${view.currentFeed}" is not ready.`);
       return;
     }
-    itemsToShow = itemsToShow.filter((i) => isVisibleItem(i, view["showAll"]));
+    itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view.showAll));
   } else if (view.isMixedViewEnabled()) {
-    itemsToShow = itemsToShow.filter((i) => isVisibleItem(i, view["showAll"]));
+    itemsToShow = itemsToShow.filter(i => isVisibleItem(i, view.showAll));
   }
 
   // Ordering
-  const itemOrder = view["itemOrder"];
-  if (itemOrder === "New to old") {
+  const { itemOrder } = view;
+  if (itemOrder === 'New to old') {
     itemsToShow.sort((a, b) => {
       const dA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
       const dB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
       return dB - dA;
     });
-  } else if (itemOrder === "Old to new") {
+  } else if (itemOrder === 'Old to new') {
     itemsToShow.sort((a, b) => {
       const dA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
       const dB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
       return dA - dB;
     });
-  } else if (itemOrder === "Random") {
+  } else if (itemOrder === 'Random') {
     shuffleArray(itemsToShow);
   }
 
@@ -71,21 +71,21 @@ export function renderFeedItemsCard(
   if (view.isMixedViewEnabled()) {
     pageItems = itemsToShow;
   } else {
-    const start = view["currentPage"] * view.itemsPerPage;
+    const start = view.currentPage * view.itemsPerPage;
     const end = start + view.itemsPerPage;
     pageItems = itemsToShow.slice(start, end);
   }
 
   if (pageItems.length === 0) {
     const baseMsg = view.isMixedViewEnabled()
-      ? "All feeds are up-to-date!"
+      ? 'All feeds are up-to-date!'
       : view.currentFeed
-      ? `No items match filter for "${view.currentFeed}". Check your filters.`
-      : "No feed selected.";
+        ? `No items match filter for "${view.currentFeed}". Check your filters.`
+        : 'No feed selected.';
 
-    contentAreaEl.setText(view["currentPage"] === 0 ? baseMsg : "No more items.");
+    contentAreaEl.setText(view.currentPage === 0 ? baseMsg : 'No more items.');
     return;
   }
 
-  pageItems.forEach((item) => renderFeedItemCard(item, contentAreaEl, view, plugin));
+  pageItems.forEach(item => renderFeedItemCard(item, contentAreaEl, view, plugin));
 }

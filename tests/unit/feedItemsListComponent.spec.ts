@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { RssFeedItem, RssFeedContent } from '../../src/types';
 
+import { renderFeedItemsList } from '../../src/view/components/FeedItemsListComponent';
+
 // Mock the heavy FeedItemBase rendering so we can simply count appended items.
 vi.mock('../../src/view/components/FeedItemBase', () => ({
   createFeedItemBase: (item: RssFeedItem, parent: HTMLElement) => {
@@ -11,8 +13,6 @@ vi.mock('../../src/view/components/FeedItemBase', () => ({
   },
   renderItemMarkdown: vi.fn().mockResolvedValue(undefined),
 }));
-
-import { renderFeedItemsList } from '../../src/view/components/FeedItemsListComponent';
 
 // --- Augment HTMLElement for Obsidian's methods in JSDOM ---
 interface TestDomElementInfo {
@@ -27,8 +27,16 @@ declare global {
   interface HTMLElement {
     empty(): void;
     setText(text: string): void;
-    createEl<K extends keyof HTMLElementTagNameMap>(tag: K, o?: TestDomElementInfo | string, cb?: (el: HTMLElementTagNameMap[K]) => void): HTMLElementTagNameMap[K];
-    createEl(tag: string, o?: TestDomElementInfo | string, cb?: (el: HTMLElement) => void): HTMLElement;
+    createEl<K extends keyof HTMLElementTagNameMap>(
+      tag: K,
+      o?: TestDomElementInfo | string,
+      cb?: (el: HTMLElementTagNameMap[K]) => void
+    ): HTMLElementTagNameMap[K];
+    createEl(
+      tag: string,
+      o?: TestDomElementInfo | string,
+      cb?: (el: HTMLElement) => void
+    ): HTMLElement;
   }
 }
 // --- End Augmentation ---
@@ -59,14 +67,24 @@ function createView() {
     mixedView: false,
     itemsPerPage: 10,
     expandedItems: new Set<string>(),
-    isMixedViewEnabled() { return this.mixedView; },
+    isMixedViewEnabled() {
+      return this.mixedView;
+    },
     registerDomEvent: (el: Element, ev: string, cb: EventListener) => el.addEventListener(ev, cb),
   } as unknown as import('../../src/view').FeedsReaderView;
 }
 
 function createPlugin(items: RssFeedItem[]) {
   return {
-    feedsStore: { blog: { items, title: 'blog', link: 'http://example.com', name: 'blog', folder:'feeds/blog' } as RssFeedContent },
+    feedsStore: {
+      blog: {
+        items,
+        title: 'blog',
+        link: 'http://example.com',
+        name: 'blog',
+        folder: 'feeds/blog',
+      } as RssFeedContent,
+    },
   } as unknown as import('../../src/main').default;
 }
 
@@ -88,7 +106,7 @@ describe('FeedItemsListComponent', () => {
       HTMLElement.prototype.createEl = function <K extends keyof HTMLElementTagNameMap>(
         this: HTMLElement,
         tag: K | string,
-        options?: TestDomElementInfo | string,
+        options?: TestDomElementInfo | string
       ): HTMLElementTagNameMap[K] | HTMLElement {
         const el = document.createElement(tag as K) as HTMLElementTagNameMap[K] | HTMLElement;
 

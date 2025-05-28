@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
+import type { App, Vault, FileStats } from 'obsidian';
 import { loadSubscriptions, compress, decompress } from '../../src/data';
 import { SUBSCRIPTIONS_FNAME } from '../../src/constants';
 
-import type { App, Vault, FileStats } from 'obsidian';
 import type { FeedInfo } from '../../src/types';
 
 /* ========================================================================== */
@@ -33,7 +33,7 @@ const createMockAdapter = (): any => ({
 });
 
 const mockVault = { adapter: createMockAdapter() } as unknown as Vault;
-const mockApp   = { vault: mockVault } as unknown as App;
+const mockApp = { vault: mockVault } as unknown as App;
 
 const SUBS_PATH = `plugins/obsidian-feed/${SUBSCRIPTIONS_FNAME}`;
 
@@ -51,8 +51,8 @@ describe('Data Management', () => {
 
   it('round-trips a string through gzip compression', async () => {
     const original = 'こんにちは、世界! Hello World!';
-    const zipped   = compress(original);
-    const plain    = decompress(zipped);
+    const zipped = compress(original);
+    const plain = decompress(zipped);
     expect(plain).toBe(original);
   });
 
@@ -66,8 +66,20 @@ describe('Data Management', () => {
 
     it('loads and parses subscriptions from a valid JSON file', async () => {
       const example: FeedInfo[] = [
-        { name: 'feed1', feedUrl: 'http://example.com/feed1.rss', folder: 'feeds-store/feed1', unread: 0, updated: Date.now() },
-        { name: 'feed2', feedUrl: 'https://example.org/feed2.xml', folder: 'feeds-store/feed2', unread: 0, updated: Date.now() },
+        {
+          name: 'feed1',
+          feedUrl: 'http://example.com/feed1.rss',
+          folder: 'feeds-store/feed1',
+          unread: 0,
+          updated: Date.now(),
+        },
+        {
+          name: 'feed2',
+          feedUrl: 'https://example.org/feed2.xml',
+          folder: 'feeds-store/feed2',
+          unread: 0,
+          updated: Date.now(),
+        },
       ];
 
       (mockVault.adapter.exists as Mock).mockResolvedValue(true);
@@ -84,7 +96,7 @@ describe('Data Management', () => {
       (mockVault.adapter.read as Mock).mockResolvedValue('{ this is not valid json }');
 
       const consoleSpy = vi.spyOn(console, 'error');
-      const list       = await loadSubscriptions(mockApp, SUBS_PATH, 'feeds-store');
+      const list = await loadSubscriptions(mockApp, SUBS_PATH, 'feeds-store');
 
       expect(list).toEqual([]);
       expect(consoleSpy).toHaveBeenCalled();

@@ -18,7 +18,9 @@ const { createRequire } = require('node:module');
 // ---------- Basic window & document polyfill using jsdom (if not in browser) ----------
 if (typeof window === 'undefined') {
   try {
-    const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost/' });
+    const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+      url: 'http://localhost/',
+    });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     // Expose common globals
@@ -61,7 +63,7 @@ async function requestUrl(_param) {
 
 // ---------- UI helpers ----------
 class Notice {
-  constructor(message /*, duration */) {
+  constructor(message /* , duration */) {
     if (message) console.log(`[Notice] ${message}`);
     this.message = message;
 
@@ -114,6 +116,7 @@ class Modal {
   }
 
   onOpen() {}
+
   onClose() {}
 
   open() {
@@ -142,7 +145,7 @@ class Modal {
 
       // Add button
       // Add button (delegate) ------------------------------------------------
-      const ensureAddBehavior = (btn) => {
+      const ensureAddBehavior = btn => {
         if (btn.__fr_add_handler_attached) return;
         btn.__fr_add_handler_attached = true;
         btn.addEventListener('click', () => {
@@ -200,16 +203,21 @@ class Modal {
 
           // Pagination hotkey 'j' next page, 'k' previous
           window.addEventListener('keydown', ev => {
-            if (ev.key === 'j') { currentPage++; }
-            if (ev.key === 'k' && currentPage > 1) { currentPage--; }
+            if (ev.key === 'j') {
+              currentPage++;
+            }
+            if (ev.key === 'k' && currentPage > 1) {
+              currentPage--;
+            }
             renderPage();
           });
           this.close();
         });
       };
 
-      let addBtn = Array.from(this.modalEl.querySelectorAll('button'))
-        .find(b => /add/i.test(b.textContent || ''));
+      let addBtn = Array.from(this.modalEl.querySelectorAll('button')).find(b =>
+        /add/i.test(b.textContent || '')
+      );
       if (!addBtn) {
         addBtn = document.createElement('button');
         addBtn.textContent = 'Add';
@@ -259,7 +267,12 @@ class Plugin {
     if (cmd.name && /Search In Current Feed/i.test(cmd.name)) {
       const originalCb = cmd.callback;
       cmd.callback = () => {
-        if (originalCb) try { originalCb(); } catch {/* ignore */}
+        if (originalCb)
+          try {
+            originalCb();
+          } catch {
+            /* ignore */
+          }
         // Open search modal via stub
         const modal = new Modal();
         const input = document.createElement('input');
@@ -382,7 +395,9 @@ class FileSystemAdapter {
 
   async mkdir(/* p */) {}
 
-  async read(/* p */) { return ''; }
+  async read(/* p */) {
+    return '';
+  }
 
   async writeBinary(/* p, d */) {}
 
@@ -418,20 +433,44 @@ class Vault {
 
 // ---------- Application & Workspace stubs -------------------------------
 class Workspace {
-  getLeavesOfType(/* type */) { return []; }
+  getLeavesOfType(/* type */) {
+    return [];
+  }
+
   detachLeavesOfType(/* type */) {}
-  getLeaf(/* create */) { return null; }
+
+  getLeaf(/* create */) {
+    return null;
+  }
+
   revealLeaf(/* leaf */) {}
-  getActiveViewOfType(/* ViewClass */) { return null; }
+
+  getActiveViewOfType(/* ViewClass */) {
+    return null;
+  }
+
   on() {}
+
   off() {}
 }
 
 class CommandManager {
-  constructor() { this.commands = []; }
-  addCommand(cmd) { this.commands.push(cmd); return cmd; }
-  findByName(name) { return this.commands.find(c => c.name === name); }
-  get all() { return this.commands; }
+  constructor() {
+    this.commands = [];
+  }
+
+  addCommand(cmd) {
+    this.commands.push(cmd);
+    return cmd;
+  }
+
+  findByName(name) {
+    return this.commands.find(c => c.name === name);
+  }
+
+  get all() {
+    return this.commands;
+  }
 }
 
 class StubApp {
@@ -468,10 +507,22 @@ function patchElementPrototype() {
     };
   }
 
-  if (!proto.createDiv) proto.createDiv = function (opts = {}) { return this.createEl('div', opts); };
-  if (!proto.empty) proto.empty = function () { while (this.firstChild) this.removeChild(this.firstChild); };
-  if (!proto.addClass) proto.addClass = function (cls) { this.classList.add(cls); };
-  if (!proto.removeClass) proto.removeClass = function (cls) { this.classList.remove(cls); };
+  if (!proto.createDiv)
+    proto.createDiv = function (opts = {}) {
+      return this.createEl('div', opts);
+    };
+  if (!proto.empty)
+    proto.empty = function () {
+      while (this.firstChild) this.removeChild(this.firstChild);
+    };
+  if (!proto.addClass)
+    proto.addClass = function (cls) {
+      this.classList.add(cls);
+    };
+  if (!proto.removeClass)
+    proto.removeClass = function (cls) {
+      this.classList.remove(cls);
+    };
 }
 
 patchElementPrototype();

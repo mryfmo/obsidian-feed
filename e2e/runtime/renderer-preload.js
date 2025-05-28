@@ -48,7 +48,6 @@ try {
 const app = obsidianStub.App; // provided by stub
 const manifest = { id: 'feeds-reader', dir: process.cwd() };
 
-
 async function initializePluginOnceDomReady() {
   try {
     console.log('[preload] DOM ready → initialize plugin');
@@ -65,11 +64,9 @@ async function initializePluginOnceDomReady() {
     if (window.__pluginInstance.networkService) {
       window.__pluginInstance.networkService.fetchHtml = async function () {
         return (
-          '<?xml version="1.0" encoding="UTF-8"?>' +
-          '<rss><channel><title>Mock</title><item><title>Mock Item</title>' +
-          '<link>https://example.com</link><pubDate>' +
-          new Date().toUTCString() +
-          '</pubDate></item></channel></rss>'
+          `<?xml version="1.0" encoding="UTF-8"?>` +
+          `<rss><channel><title>Mock</title><item><title>Mock Item</title>` +
+          `<link>https://example.com</link><pubDate>${new Date().toUTCString()}</pubDate></item></channel></rss>`
         );
       };
       console.log('[preload] networkService.fetchHtml mocked');
@@ -112,7 +109,9 @@ async function initializePluginOnceDomReady() {
         item.appendChild(title);
         const btn = document.createElement('button');
         btn.textContent = 'Mark Read';
-        btn.addEventListener('click', () => { btn.textContent = 'Read'; });
+        btn.addEventListener('click', () => {
+          btn.textContent = 'Read';
+        });
         item.appendChild(btn);
         item.dataset.page = Math.ceil(i / itemsPerPage).toString();
         list.appendChild(item);
@@ -127,11 +126,19 @@ async function initializePluginOnceDomReady() {
       renderPage();
 
       window.addEventListener('keydown', ev => {
-        if (ev.key === 'j') { currentPage = Math.min(currentPage + 1,  Math.ceil(8 / itemsPerPage)); renderPage(); }
-        if (ev.key === 'k') { currentPage = Math.max(1, currentPage - 1); renderPage(); }
+        if (ev.key === 'j') {
+          currentPage = Math.min(currentPage + 1, Math.ceil(8 / itemsPerPage));
+          renderPage();
+        }
+        if (ev.key === 'k') {
+          currentPage = Math.max(1, currentPage - 1);
+          renderPage();
+        }
       });
 
-      link.addEventListener('click', () => { list.style.display = ''; });
+      link.addEventListener('click', () => {
+        list.style.display = '';
+      });
     }
   } catch (err) {
     console.error('[preload] Error during plugin initialization', err);
