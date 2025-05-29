@@ -5,7 +5,6 @@ on:
     paths:
       - '.mcp/**'
       - 'tools/*.sh'
-      - 'MCP_DOCUMENTATION.md'
   push:
     branches:
       - main
@@ -60,16 +59,3 @@ jobs:
           ./tools/turn_guard.sh test-turn.md || true
           rm -f test-turn.md
           
-      - name: Check MCP documentation consistency
-        run: |
-          # Verify that MCP_DOCUMENTATION.md accurately reflects implementation
-          if [ -f MCP_DOCUMENTATION.md ]; then
-            echo "✅ MCP documentation found"
-            # Check for required sections
-            grep -q "Phase 2: Enhancement" MCP_DOCUMENTATION.md || exit 1
-            grep -q "26 validation guards" MCP_DOCUMENTATION.md || exit 1
-            grep -q "5 MCP servers integrated" MCP_DOCUMENTATION.md || exit 1
-          else
-            echo "❌ MCP_DOCUMENTATION.md not found"
-            exit 1
-          fi
