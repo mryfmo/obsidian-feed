@@ -8,7 +8,7 @@ import axios from 'axios';
 vi.mock('fs');
 vi.mock('child_process');
 vi.mock('axios');
-vi.mock('@modelcontextprotocol/sdk', () => ({
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: vi.fn().mockImplementation(() => ({
     connect: vi.fn().mockResolvedValue(undefined),
     callTool: vi.fn()

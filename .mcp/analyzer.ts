@@ -1,4 +1,4 @@
-import { MCPClient } from '@modelcontextprotocol/sdk';
+// MCPClient type is just 'any' for now since we use generic client
 
 export interface AnalysisResult {
   success: boolean;
@@ -9,7 +9,7 @@ export interface AnalysisResult {
 }
 
 export interface MCPClients {
-  sequentialThinking?: MCPClient;
+  sequentialThinking?: any; // Generic MCP client
 }
 
 export class Analyzer {

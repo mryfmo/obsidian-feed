@@ -24,8 +24,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': '/src',
-      '@modelcontextprotocol/sdk': '@modelcontextprotocol/sdk/dist/index.js'
+      '@': '/src'
     },
     conditions: ['node', 'import', 'require']
   }

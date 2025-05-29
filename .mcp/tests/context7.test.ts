@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { Context7Client } from '../context7';
-import { Client } from '@modelcontextprotocol/sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 // Mock the MCP SDK
-vi.mock('@modelcontextprotocol/sdk', () => ({
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: vi.fn().mockImplementation(() => ({
     connect: vi.fn(),
     callTool: vi.fn()

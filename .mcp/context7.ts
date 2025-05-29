@@ -2,7 +2,7 @@
  * Context7 Client - Simplified version for library documentation
  */
 
-import { Client } from '@modelcontextprotocol/sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 export interface LibraryDoc {
   content: string;
@@ -53,7 +53,7 @@ export class Context7Client {
         const resolveResult = await this.client.callTool({
           name: 'resolve-library-id',
           arguments: { libraryName: libraryName }
-        });
+        }) as any;
 
         if (!resolveResult.library_id) {
           throw new Error('Failed to resolve library ID');
@@ -70,7 +70,7 @@ export class Context7Client {
           library_id: libraryId,
           minimum_tokens: options?.minimumTokens || 10000
         }
-      });
+      }) as any;
 
       return {
         content: docsResult.content || '',
