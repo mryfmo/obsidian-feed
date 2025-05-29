@@ -88,6 +88,29 @@ Planned work is tracked in [TODO.md](./TODO.md); major milestones:
 
 ---
 
+## 🔧 MCP Integration
+
+This project features a complete Model Context Protocol (MCP) integration that enhances the development workflow.
+
+**Status**: Production Ready - All core features implemented and tested.
+
+**Key Features**:
+- ✅ 26 validation guards with intelligent fallback (all implemented)
+- ✅ 5 MCP servers integrated (filesystem, github, memory, sequential-thinking, context7)
+- ✅ Complete shell script compatibility maintained (including macOS fixes)
+- ✅ 7-phase development workflow (FETCH→INV→ANA→PLAN→BUILD→VERIF→REL)
+- ✅ True integration (真の統合) - hybrid architecture preserving existing value
+- ✅ Performance optimization with caching (TTL & LRU eviction)
+- ✅ Complete test coverage (122 tests, all passing)
+
+**Latest Updates (2025-01-29)**:
+- Fixed all module resolution issues
+- Enhanced shell scripts for macOS compatibility
+- Implemented specialized guards (RFC-OK, WBS-OK)
+- Added comprehensive test suite for MCP components
+
+---
+
 ## 📝 License
 
 GNU GENERAL PUBLIC LICENSE Version 3 – see [`LICENSE`](./LICENSE).

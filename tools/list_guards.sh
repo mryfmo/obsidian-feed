@@ -3,6 +3,15 @@
 
 set -euo pipefail
 
+# Check for MCP bridge availability
+if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+    # Try to use MCP bridge for enhanced guard listing
+    if npx tsx .mcp/bridge.ts list_guards "$@" 2>/dev/null; then
+        exit $?
+    fi
+    # Fall back to shell implementation if MCP fails
+fi
+
 echo "Guard System Overview"
 echo "===================="
 echo
@@ -10,7 +19,7 @@ echo
 # Extract guards from turn_guard.sh comments
 echo "Guards implemented in turn_guard.sh:"
 echo "-----------------------------------"
-grep -oP '^# ---------- \K[^(]+' tools/turn_guard.sh | tr ' ' '-' | sed 's/-$//' | grep -v '^$'
+grep -o '^# ---------- [^(]*' tools/turn_guard.sh | sed 's/^# ---------- //' | tr ' ' '-' | sed 's/-$//' | grep -v '^$'
 
 echo
 

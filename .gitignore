@@ -64,6 +64,8 @@ e2e-results/
 .cache/
 .parcel-cache/
 .turbo/
+# MCP cache directory
+.mcp/.cache/
 
 # Log files
 *.log
@@ -80,7 +82,7 @@ claude-code-instruction-*.md
 claude-context-*.md
 claude-output.md
 .claude-instructions
-analysis-results.md
+# analysis-results.md # Removed during cleanup
 
 # Development notes with potential sensitive info
 docs/qa/*-investigation.md
@@ -89,12 +91,12 @@ docs/qa/*-analysis.md
 !docs/qa/_template.md
 !docs/rfcs/_template.md
 
-# Temporary development files
-docs/dev-notes/tmp-*
-docs/dev-notes/draft-*
+# Temporary development files (use .tmp-docs/ instead)
+# docs/dev-notes/tmp-*
+# docs/dev-notes/draft-*
 
 # Work-in-progress documentation
-docs/claude-integration.md
+# docs/claude-integration.md # Now stable, should be tracked
 
 # Internal workflow details (optional - uncomment if needed)
 # docs/agents/
@@ -113,3 +115,32 @@ core.*
 *.crt
 .secrets/
 secrets.json
+
+# MCP-specific files to ignore
+.mcp/node_modules/
+.mcp/dist/
+.mcp/coverage/
+.mcp/*.log
+.mcp/.env
+.mcp/.env.local
+# MCP test outputs
+.mcp/test-results/
+.mcp/*.test-results/
+# MCP temporary files
+.mcp/*.tmp
+.mcp/*.temp
+# Keep important MCP files
+!.mcp/package.json
+!.mcp/tsconfig.json
+!.mcp/vitest.config.ts
+!.mcp/*.ts
+# MCP cache directory
+.mcp/.cache/
+
+# Temporary documentation directory
+.tmp-docs/
+# This directory contains:
+# - Work-in-progress documentation
+# - Integration reports
+# - Analysis results
+# - Any temporary documentation files

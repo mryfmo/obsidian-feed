@@ -53,29 +53,36 @@ runs:
         case "${{ inputs.phase }}" in
           FETCH)
             echo "## FETCH Phase Guidelines" >> $CONTEXT_FILE
-            echo "- Use tools/fetch_doc.sh for downloads" >> $CONTEXT_FILE
+            echo "- Use tools/fetch_doc.sh for downloads (MCP-enhanced with Context7)" >> $CONTEXT_FILE
             echo "- Network access is allowed in this phase only" >> $CONTEXT_FILE
+            echo "- Library docs available via: ./tools/fetch_doc.sh <library-name>" >> $CONTEXT_FILE
             ;;
           BUILD)
             echo "## BUILD Phase Guidelines" >> $CONTEXT_FILE
             echo "- Maximum 1000 lines of code" >> $CONTEXT_FILE
             echo "- Maximum 10 files per patch" >> $CONTEXT_FILE
+            echo "- All 26 validation guards enforced via turn_guard.sh" >> $CONTEXT_FILE
             ;;
           PLAN)
             echo "## PLAN Phase Guidelines" >> $CONTEXT_FILE
             echo "- Create RFC in docs/rfcs/" >> $CONTEXT_FILE
-            echo "- Requires approval before proceeding" >> $CONTEXT_FILE
+            echo "- Requires approval before proceeding (RFC-OK marker)" >> $CONTEXT_FILE
+            echo "- WBS validation available (WBS-OK marker)" >> $CONTEXT_FILE
             ;;
         esac
         echo "" >> $CONTEXT_FILE
         
         # Add available tools
-        echo "## Available Tools" >> $CONTEXT_FILE
+        echo "## Available Tools (MCP-Enhanced)" >> $CONTEXT_FILE
+        echo "All tools support MCP bridge with intelligent fallback:" >> $CONTEXT_FILE
         for tool in tools/*.sh; do
           if [ -f "$tool" ]; then
-            echo "- $tool" >> $CONTEXT_FILE
+            tool_name=$(basename "$tool" .sh)
+            echo "- $tool (or: npx tsx .mcp/bridge.ts $tool_name)" >> $CONTEXT_FILE
           fi
         done
+        echo "" >> $CONTEXT_FILE
+        echo "MCP servers available: filesystem, github, memory, sequential-thinking, context7" >> $CONTEXT_FILE
         echo "" >> $CONTEXT_FILE
         
         # Output results

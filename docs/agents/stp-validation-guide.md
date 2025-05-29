@@ -103,6 +103,7 @@ Update checklists in RFC or QA documents:
 
 You can validate STP markers locally before pushing:
 
+### Traditional Shell Script
 ```bash
 # Check current branch
 ./tools/validate-stp-markers.sh
@@ -113,6 +114,17 @@ You can validate STP markers locally before pushing:
 # Check specific commit range
 ./tools/validate-stp-markers.sh "" origin/main feature-branch
 ```
+
+### MCP-Enhanced Execution
+```bash
+# Check with MCP bridge (intelligent fallback)
+npx tsx .mcp/bridge.ts validate_stp_markers
+
+# With PR body
+npx tsx .mcp/bridge.ts validate_stp_markers "Your PR description"
+```
+
+**Note**: The MCP integration provides enhanced validation with caching and performance optimization. It automatically falls back to the shell script if MCP servers are unavailable.
 
 ## CI/CD Integration
 
@@ -191,5 +203,7 @@ Co-authored-by: @teammate
 ## Related Documentation
 
 - [`01_task-lifecycle.md`](./01_task-lifecycle.md) - Full STP specification
-- [`validate-stp-markers.sh`](../../tools/validate-stp-markers.sh) - Validation script
+- [`validate-stp-markers.sh`](../../tools/validate-stp-markers.sh) - Validation script (MCP-enhanced)
 - [`.github/workflows/stp-guard.yml`](../../.github/workflows/stp-guard.yml) - CI workflow
+- [`MCP_DOCUMENTATION.md`](../../MCP_DOCUMENTATION.md) - Complete MCP integration details
+- [`.mcp/bridge.ts`](../../.mcp/bridge.ts) - MCP bridge implementation

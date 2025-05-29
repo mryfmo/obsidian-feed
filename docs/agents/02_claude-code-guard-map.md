@@ -1,10 +1,19 @@
 # Complete Guard Map for Claude Code Workflow
 
-This document provides the complete guard definitions referenced in `02_claude-code.md`.
+This document provides the complete guard definitions referenced in `02_claude-code.md`. All guards have been enhanced with MCP integration (Phase 2 Complete - 2025-01-29).
 
 ## Guard Map Overview
 
 Guards are automated checks enforced by `tools/turn_guard.sh` and CI workflows. Each guard has a unique ID, verification logic, and specific exit code.
+
+**MCP Enhancement**: All guards now support intelligent fallback through the MCP bridge:
+```bash
+# Traditional execution (still supported)
+./tools/turn_guard.sh turn.md
+
+# MCP-enhanced execution (with fallback)
+npx tsx .mcp/bridge.ts turn_guard turn.md
+```
 
 ## Complete Guard Definitions
 
@@ -34,6 +43,8 @@ Guards are automated checks enforced by `tools/turn_guard.sh` and CI workflows. 
 | **G-ROLE** | 40 | Role-based path restrictions | All tasks | "Role not allowed to edit path" |
 | **G-STATE** | 41 | Valid state transitions | All tasks | "Invalid state transition" |
 | **G-ARTIFACT** | 42 | Required artifacts present | Phase-specific | "Missing required artifact" |
+| **RFC-OK** | N/A | RFC document approved | PLAN phase | "RFC not approved" |
+| **WBS-OK** | N/A | WBS document approved | PLAN phase | "WBS not approved" |
 
 ## Guard Categories
 
@@ -63,6 +74,8 @@ Guards are automated checks enforced by `tools/turn_guard.sh` and CI workflows. 
 - **G-WBS-OK**: Work breakdown approval
 - **G-RISK**: Risk management
 - **G-DOC**: Documentation requirements
+- **RFC-OK**: RFC approval marker (specialized guard)
+- **WBS-OK**: WBS approval marker (specialized guard)
 
 ### 4. Access Control Guards (40-49)
 - **G-ROLE**: Role-based restrictions
@@ -124,12 +137,33 @@ To add a new guard:
 ## Testing Guards
 
 ```bash
-# Test individual guard
+# Test individual guard (traditional)
 ./tools/turn_guard.sh tests/fixtures/example.md
 
-# Run guard test suite
+# Test with MCP enhancement
+npx tsx .mcp/bridge.ts turn_guard tests/fixtures/example.md
+
+# Run guard test suite (122 tests - all passing)
 pnpm test tests/guard.spec.ts
 
-# List all guards
+# List all guards (traditional)
 ./tools/list_guards.sh
+
+# List guards with MCP fallback
+npx tsx .mcp/bridge.ts list_guards
 ```
+
+## MCP Integration Features
+
+### Enhanced Capabilities
+1. **Intelligent Fallback**: Automatically falls back to shell scripts if MCP servers unavailable
+2. **Performance Optimization**: Caching with TTL and LRU eviction for faster validation
+3. **Context7 Integration**: Library documentation fetching for `fetch_doc.sh`
+4. **GitHub Integration**: PR/issue management through MCP github server
+5. **Sequential Thinking**: AI-powered analysis for complex validations
+
+### Shell Script Compatibility
+All shell scripts have been updated for macOS compatibility:
+- Replaced `grep -P` with POSIX-compatible patterns
+- Added proper exit code propagation
+- Automatic cache directory creation

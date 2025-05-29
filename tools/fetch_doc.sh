@@ -1,20 +1,52 @@
 #!/usr/bin/env bash
 # Safe fetch helper: caches every remote file inside repo history.
-# Usage: tools/fetch_doc.sh <url> [output-name]
+# Usage: tools/fetch_doc.sh <url_or_path> [output-name]
 
 set -euo pipefail
-url="$1"; shift
-name="${1:-$(basename "$url")}"
-mkdir -p .cache/fetch
-hash=$(printf '%s' "$url" | sha256sum | cut -c1-8)
-dest=".cache/fetch/${hash}_${name}"
 
-if [[ -f "$dest" ]]; then
-  echo "fetch_doc: cache hit -> $dest"
+# Check if MCP integration is available
+if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+  # Try to use MCP integration
+  if npx tsx .mcp/bridge.ts fetch_doc "$@" 2>/dev/null; then
+    exit $?
+  fi
+  # Fall back to shell implementation if MCP fails
+fi
+
+source="$1"; shift
+name="${1:-$(basename "$source")}"
+
+# Check if source is a local file or URL
+if [[ "$source" =~ ^https?:// ]]; then
+  # Handle URL
+  mkdir -p .cache/fetch
+  hash=$(printf '%s' "$source" | sha256sum | cut -c1-8)
+  dest=".cache/fetch/${hash}_${name}"
+  
+  if [[ -f "$dest" ]]; then
+    echo "fetch_doc: cache hit -> $dest"
+  else
+    echo "fetch_doc: downloading $source"
+    curl -sSL "$source" -o "$dest"
+    echo "fetch_doc: saved to $dest (remember to git add)"
+  fi
 else
-  echo "fetch_doc: downloading $url"
-  curl -sSL "$url" -o "$dest"
-  echo "fetch_doc: saved to $dest (remember to git add)"
+  # Handle local file
+  if [[ ! -f "$source" ]]; then
+    echo "fetch_doc: error - file not found: $source" >&2
+    exit 1
+  fi
+  
+  # If output name is different from source, copy the file
+  if [[ "$name" != "$source" ]]; then
+    dest="$name"
+    cp "$source" "$dest"
+    echo "fetch_doc: copied $source to $dest"
+  else
+    # Just return the source path
+    dest="$source"
+    echo "fetch_doc: using local file $dest"
+  fi
 fi
 
 echo "$dest"

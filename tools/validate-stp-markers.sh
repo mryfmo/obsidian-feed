@@ -4,6 +4,15 @@
 
 set -euo pipefail
 
+# Check for MCP bridge availability
+if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+    # Try to use MCP bridge for enhanced validation
+    if npx tsx .mcp/bridge.ts validate_stp "$@" 2>/dev/null; then
+        exit $?
+    fi
+    # Fall back to shell implementation if MCP fails
+fi
+
 # Colors for output (disabled in CI)
 if [[ -t 1 ]] && [[ -z "${CI:-}" ]]; then
   RED='\033[0;31m'

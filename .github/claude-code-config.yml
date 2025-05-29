@@ -14,20 +14,28 @@ required_context:
     description: Coding conventions
     max_lines: 50
 
-# Tools that should be available
+# Tools that should be available (MCP-enhanced with fallback)
 available_tools:
   - path: tools/turn_guard.sh
-    description: Validates Claude output format
+    description: Validates Claude output format (26 guards, MCP-enhanced)
     executable: true
+    mcp_bridge: .mcp/bridge.ts turn_guard
   - path: tools/fetch_doc.sh
-    description: Downloads external documents (FETCH phase only)
+    description: Downloads external documents and library docs via Context7 (FETCH phase only)
     executable: true
+    mcp_bridge: .mcp/bridge.ts fetch_doc
   - path: tools/list_guards.sh
-    description: Lists available guard checks
+    description: Lists all 26 validation guards
     executable: true
+    mcp_bridge: .mcp/bridge.ts list_guards
   - path: tools/gen_wbs.py
-    description: Generates work breakdown structure
+    description: Generates work breakdown structure (AI-powered via MCP)
     executable: true
+    mcp_bridge: .mcp/bridge.ts generate_wbs
+  - path: tools/validate-stp-markers.sh
+    description: Validates STP lifecycle markers
+    executable: true
+    mcp_bridge: .mcp/bridge.ts validate_stp_markers
 
 # Phase-specific configuration
 phases:
@@ -118,3 +126,10 @@ integration:
   update_labels: true
   post_summary: true
   enforce_guards: true
+  mcp_enabled: true
+  mcp_servers:
+    - filesystem
+    - github
+    - memory
+    - sequential-thinking
+    - context7

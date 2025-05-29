@@ -183,6 +183,13 @@ fetch_doc() {
 
 # Main entry point
 main() {
+  # Try MCP bridge first if available
+  if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+    if npx tsx .mcp/bridge.ts fetch_doc_secure "$@" 2>/dev/null; then
+      exit $?
+    fi
+  fi
+  
   if [[ $# -eq 0 ]]; then
     cat <<EOF
 Usage: $0 <url> [output_file]

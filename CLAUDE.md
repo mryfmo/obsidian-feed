@@ -11,13 +11,72 @@ This file provides guidance to Claude Code (claude.ai/code) and Claude Code Acti
 3. **docs/agents/01_task-lifecycle.md** - Standard Task Protocol (STP) that must be followed
 4. **docs/agents/00_common-rules.md** - Coding conventions and shared constraints
 
-## 🛠️ Available Tools
+## 🛠️ MCP (Model Context Protocol) Integration
 
-**Guard and validation scripts in `tools/` directory:**
-- `tools/turn_guard.sh` - Validates Claude output format and phase compliance
-- `tools/fetch_doc.sh` - Safe document fetching (FETCH phase only)
-- `tools/list_guards.sh` - Lists available guard checks
-- `tools/gen_wbs.py` - Generates Work Breakdown Structure
+This project uses official MCP servers for enhanced capabilities.
+
+Configure Claude Desktop with:
+
+### Required MCP Servers
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/mryfmo/Sources/obsidian-feed"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env": {
+        "USER_AGENT": "Claude-Code-Fetcher/1.0"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
+```
+
+### MCP Server Usage Guidelines
+
+1. **File Operations**: Use `filesystem` server instead of direct file access
+2. **GitHub Integration**: Use `github` server for PR/issue management
+3. **Document Fetching**: Use `fetch` server for web content retrieval
+4. **Memory Management**: Use `memory` server for context persistence
+5. **Complex Analysis**: Use `sequential-thinking` for step-by-step reasoning
+
+### Enhanced Shell Scripts (Hybrid Approach)
+All shell scripts now have MCP fallback for enhanced capabilities:
+- `tools/turn_guard.sh` → Enhanced with 26 validation guards + macOS compatibility
+- `tools/fetch_doc.sh` → Enhanced with Context7 library docs + local file support
+- `tools/list_guards.sh` → Enhanced with complete guard listing + macOS compatibility
+- `tools/gen_wbs.sh` → Enhanced with AI-powered WBS generation
+- `tools/validate-stp-markers.sh` → MCP fallback for STP validation
+
+### Recent Updates (2025-01-29)
+- ✅ Fixed shell script compatibility for macOS (grep -P → POSIX patterns)
+- ✅ MCP bridge now creates actual connections to MCP servers
+- ✅ Proper exit code propagation for guard failures
+- ✅ Automatic cache directory creation
+- ✅ Implemented specialized guards (RFC-OK, WBS-OK)
+- ✅ Added performance optimization with caching (TTL & LRU)
+- ✅ Complete test coverage - all 122 tests passing
+- ✅ Fixed module resolution issues for MCP SDK
 
 ## Essential Commands
 
@@ -114,3 +173,15 @@ When working with Claude Code Action:
 - `path-guard.yml` - Role-based path restrictions
 - `guard-unit.yml` - Runs guard validation tests
 - `ci.yml` - Standard CI pipeline
+- `mcp-validation.yml` - MCP integration health checks
+
+## Development Guidelines
+
+### Temporary Documentation
+Use `.tmp-docs/` directory for all temporary documentation:
+- Work-in-progress guides
+- Analysis reports
+- Draft specifications
+- Integration summaries
+
+This directory is git-ignored. Move files to `docs/` when they're ready to be tracked.

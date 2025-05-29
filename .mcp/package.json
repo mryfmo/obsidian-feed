@@ -1,0 +1,32 @@
+{
+  "name": "obsidian-feed-mcp",
+  "version": "1.0.0",
+  "description": "Minimal MCP integration for obsidian-feed",
+  "scripts": {
+    "bridge": "tsx bridge.ts",
+    "test": "vitest",
+    "test:unit": "vitest run --dir tests --exclude tests/integration",
+    "test:integration": "vitest run tests/integration",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "axios": "^1.6.0",
+    "turndown": "^7.1.2",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^20.0.0",
+    "@types/turndown": "^5.0.4",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
+    "@typescript-eslint/parser": "^8.33.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.55.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.1.4"
+  }
+}
