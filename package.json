@@ -26,7 +26,6 @@
     "clean": "rimraf dist",
     "prebuild": "pnpm run clean",
     "check-deps": "depcheck",
-    "postinstall": "pnpm run check-deps",
     "check:all": "pnpm typecheck && pnpm lint && pnpm test && cd .mcp && pnpm typecheck && pnpm lint && pnpm test"
   },
   "dependencies": {
