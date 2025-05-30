@@ -395,7 +395,12 @@ jobs:
               return;
             }
 
-            const issue_number = context.issue.number;
+            const issue_number = context.issue?.number || context.payload.pull_request?.number;
+            
+            if (!issue_number) {
+              console.log('No issue or PR number found');
+              return;
+            }
 
             try {
               // Get current labels
