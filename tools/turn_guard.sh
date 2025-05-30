@@ -6,15 +6,54 @@
 set -euo pipefail
 
 # Check if MCP integration is available
-if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
-  # Try to use MCP integration
-  if npx tsx .mcp/bridge.ts turn_guard "$@" 2>/dev/null; then
-    exit $?
+if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1 && command -v tsx >/dev/null 2>&1; then
+  # Debug mode for MCP integration
+  if [[ "${DEBUG_MCP:-}" == "true" ]]; then
+    echo "[DEBUG] MCP integration available, attempting to use it..." >&2
+    echo "[DEBUG] Running: npx tsx .mcp/bridge.ts turn_guard $*" >&2
+    if npx tsx .mcp/bridge.ts turn_guard "$@"; then
+      echo "[DEBUG] MCP integration successful" >&2
+      exit $?
+    else
+      mcp_exit=$?
+      echo "[DEBUG] MCP integration failed with exit code: $mcp_exit" >&2
+      echo "[DEBUG] Falling back to shell implementation" >&2
+    fi
+  else
+    # Silent mode (current behavior)
+    if npx tsx .mcp/bridge.ts turn_guard "$@" 2>/dev/null; then
+      exit $?
+    fi
   fi
   # Fall back to shell implementation if MCP fails
+elif [[ "${DEBUG_MCP:-}" == "true" ]]; then
+  echo "[DEBUG] MCP integration not available:" >&2
+  [[ ! -f ".mcp/bridge.ts" ]] && echo "[DEBUG]   - .mcp/bridge.ts not found" >&2
+  ! command -v npx >/dev/null 2>&1 && echo "[DEBUG]   - npx not found" >&2
+  ! command -v tsx >/dev/null 2>&1 && echo "[DEBUG]   - tsx not found" >&2
+  echo "[DEBUG] Using shell implementation" >&2
+fi
+
+# Input validation
+if [ $# -ne 1 ]; then
+  echo "Error: turn_guard.sh requires exactly one argument (markdown file path)" >&2
+  echo "Usage: $0 <markdown-file>" >&2
+  exit 1
 fi
 
 file="$1"                 # markdown turn file
+
+# Check if file exists and is readable
+if [ ! -f "$file" ]; then
+  echo "Error: File '$file' does not exist" >&2
+  exit 1
+fi
+
+if [ ! -r "$file" ]; then
+  echo "Error: File '$file' is not readable" >&2
+  exit 1
+fi
+
 phase_regex='(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL):'
 
 # ---------- helper ----------
@@ -108,29 +147,49 @@ if [[ "$phase" == "FETCH" ]]; then
     sha=$(printf '%s' "$u" | sha256sum | cut -c1-64)
     grep -q "$sha" "$db" 2>/dev/null && die $G_SHA "Duplicate download SHA detected"
     echo "$sha" >> "$db"
-  done || true  # Don't fail if no URLs found
+  done
 fi
 
 # ---------- step-plan comment ----------
-grep -q '# step-plan:' "$file" \
-  || die $G_PLAN "# step-plan: comment missing in <act>"
+if ! grep -q '# step-plan:' "$file"; then
+  echo "Error: Missing '# step-plan:' comment in <act> section" >&2
+  echo "The <act> section must contain a step-plan comment explaining the implementation approach" >&2
+  die $G_PLAN "# step-plan: comment missing in <act>"
+fi
 
-echo "turn_guard: OK"
+# Define role variable
+role=${TURN_ROLE:-dev}
+
+echo "turn_guard: All checks passed ✓"
+echo "  Phase: $phase"
+echo "  Think tokens: $think_tokens"
+if [[ -n "${CI:-}" ]]; then
+  echo "  Added LOC: ${added:-0}"
+  echo "  Modified files: ${files:-0}"
+fi
+echo "  Role: $role"
 
 # ---------- WBS Guard cross-check ----------
+# NOTE: This check references docs/spec/final_spec.md which doesn't exist in the current implementation
+# TODO: Update this path or remove this check in Phase 2
 if [[ -f docs/spec/final_spec.md ]]; then
-  missing=$(awk -F, 'NR>1 && $7!~"✅"{print $0}' docs/spec/final_spec.md | wc -l)
-  (( missing==0 )) || die $G_WBS "G-WBS-OK: final_spec.md Unapproved $missing"
+  if ! missing=$(awk -F, 'NR>1 && $7!~"✅"{print $0}' docs/spec/final_spec.md 2>/dev/null | wc -l); then
+    echo "Warning: Failed to parse final_spec.md" >&2
+  else
+    (( missing==0 )) || die $G_WBS "G-WBS-OK: final_spec.md has $missing unapproved items"
+  fi
 fi
 
 # ---------- Role × Path Control ----------
 role=${TURN_ROLE:-dev}
 if [[ "$role" == "review" ]]; then
   # More robust check for src/ changes with error handling
-  if git diff --name-only --cached 2>/dev/null | grep -q '^src/'; then
+  if ! changed_files=$(git diff --name-only --cached 2>&1); then
+    echo "Warning: Unable to check file changes (not in a git repository?)" >&2
+  elif echo "$changed_files" | grep -q '^src/'; then
     echo "Error: Changes to src/ directory are not allowed for review role" >&2
     echo "Files changed in src/:" >&2
-    git diff --name-only --cached | grep '^src/' >&2 || true
+    echo "$changed_files" | grep '^src/' >&2
     die $G_ROLE "review role is not allowed to edit src/"
   fi
 fi

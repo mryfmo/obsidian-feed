@@ -34,10 +34,7 @@ const MCP_SERVERS: Record<string, MCPServerConfig> = {
       GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_TOKEN || ''
     }
   },
-  git: {
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-git', '.']
-  },
+  // git server removed - package doesn't exist in npm
   memory: {
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-memory']
@@ -46,13 +43,7 @@ const MCP_SERVERS: Record<string, MCPServerConfig> = {
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-sequential-thinking']
   },
-  fetch: {
-    command: 'uvx',
-    args: ['mcp-server-fetch'],
-    env: {
-      USER_AGENT: 'Claude-Code-Fetcher/1.0'
-    }
-  }
+  // fetch server removed - requires Python uvx command
 };
 
 export async function createMCPClients(): Promise<MCPClients> {
@@ -90,11 +81,11 @@ export async function createMCPClients(): Promise<MCPClients> {
   // Try to connect Context7
   try {
     const context7 = new Context7Client();
-    await context7.connect();
+    // Context7Client doesn't have a connect method - it's initialized on construction
     clients.context7 = context7;
-    console.log('✅ Connected to Context7');
+    console.log('✅ Context7 client initialized');
   } catch (error) {
-    console.warn('⚠️  Failed to connect to Context7:', error);
+    console.warn('⚠️  Failed to initialize Context7:', error);
   }
   
   return clients;

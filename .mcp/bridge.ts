@@ -44,6 +44,25 @@ async function main() {
     switch (command) {
       case 'turn_guard': {
         result = await integration.validate(commandArgs[0]);
+        
+        // Output validation results
+        if (!result.valid) {
+          console.error('\n❌ Validation failed:');
+          if (result.errors && result.errors.length > 0) {
+            result.errors.forEach((error: string) => {
+              console.error(`  - ${error}`);
+            });
+          }
+          if (result.guardFailures && result.guardFailures.length > 0) {
+            console.error('\nFailed guards:');
+            result.guardFailures.forEach((failure: any) => {
+              console.error(`  - ${failure.guard}: ${failure.message}`);
+            });
+          }
+        } else {
+          console.log('\n✅ All validation checks passed');
+        }
+        
         // Exit with the specific guard exit code if validation fails
         if (!result.valid && result.failedGuard) {
           // Map guard names to exit codes as defined in validator.ts

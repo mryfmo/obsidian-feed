@@ -60,23 +60,22 @@ Configure Claude Desktop with:
 4. **Memory Management**: Use `memory` server for context persistence
 5. **Complex Analysis**: Use `sequential-thinking` for step-by-step reasoning
 
-### Enhanced Shell Scripts (Hybrid Approach)
-All shell scripts now have MCP fallback for enhanced capabilities:
-- `tools/turn_guard.sh` → Enhanced with 26 validation guards + macOS compatibility
-- `tools/fetch_doc.sh` → Enhanced with Context7 library docs + local file support
-- `tools/list_guards.sh` → Enhanced with complete guard listing + macOS compatibility
-- `tools/gen_wbs.sh` → Enhanced with AI-powered WBS generation
-- `tools/validate-stp-markers.sh` → MCP fallback for STP validation
+### Shell Scripts (Current Implementation)
+The following shell scripts are available:
+- `tools/turn_guard.sh` → Validates Claude output format with ~10 guards implemented
+- `tools/fetch_doc.sh` → Downloads documents to cache directory
+- `tools/list_guards.sh` → Lists implemented validation guards
+- `tools/gen_wbs.sh` → Generates work breakdown structure
+- `tools/validate-stp-markers.sh` → Validates STP compliance
 
-### Recent Updates (2025-01-29)
-- ✅ Fixed shell script compatibility for macOS (grep -P → POSIX patterns)
-- ✅ MCP bridge now creates actual connections to MCP servers
-- ✅ Proper exit code propagation for guard failures
-- ✅ Automatic cache directory creation
-- ✅ Implemented specialized guards (RFC-OK, WBS-OK)
-- ✅ Added performance optimization with caching (TTL & LRU)
-- ✅ Complete test coverage - all 122 tests passing
-- ✅ Fixed module resolution issues for MCP SDK
+### Implementation Status
+- ⚠️ **MCP Integration**: Planned but not yet implemented (see `.tmp-docs/IMPLEMENTATION_STATUS.md`)
+- ✅ Basic guard validation working (10 of 26 guards implemented)
+- ✅ Shell script compatibility for macOS
+- ⚠️ Phase transition validation not yet implemented
+- ⚠️ Role-based access control not enforced in CI
+
+For detailed implementation status, see `.tmp-docs/IMPLEMENTATION_STATUS.md`
 
 ## Essential Commands
 

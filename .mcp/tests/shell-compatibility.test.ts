@@ -45,7 +45,11 @@ State-Transition: FETCH→INV
       fs.writeFileSync(turnFile, content);
       
       try {
-        execSync(`bash ${turnGuardPath} ${turnFile}`, { encoding: 'utf8' });
+        // Run from the project root directory to ensure MCP can be found
+        const result = execSync(`bash ${turnGuardPath} ${turnFile}`, { 
+          encoding: 'utf8',
+          cwd: path.resolve(__dirname, '../../')  // Go up to project root
+        });
         // If no error thrown, validation passed
         expect(true).toBe(true);
       } catch (error: any) {

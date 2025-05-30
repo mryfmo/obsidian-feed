@@ -143,8 +143,11 @@ Look for:
 4. Suggested improvements
 `;
       
-      const result = await sequentialThinking.think(prompt);
-      const suggestions = this.parseAISuggestions(result.response);
+      // Sequential thinking MCP server doesn't have a direct 'think' method
+      // We need to use the proper MCP protocol
+      // For now, skip AI analysis since it's optional
+      console.log('AI analysis skipped - sequential thinking integration needs update');
+      const suggestions: string[] = [];
       
       return {
         ...validationResult,

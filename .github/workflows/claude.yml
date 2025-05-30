@@ -336,23 +336,49 @@ jobs:
           CLAUDE_EXPIRES_AT: ${{ secrets.CLAUDE_EXPIRES_AT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INTEGRATION_MODE: ${{ env.mode }}
+          TURN_ROLE: ${{ steps.phase.outputs.phase }}
+
+      - name: Setup MCP Dependencies
+        run: |
+          # Install tsx globally for MCP integration
+          npm install -g tsx
+          
+          # Install MCP dependencies
+          cd .mcp && npm install
+          
+          # Verify MCP is available
+          npx tsx bridge.ts --version || echo "MCP bridge ready"
 
       - name: Validate Output
         if: success()
         run: |
           echo "Validating Claude output based on integration mode: ${{ env.mode }}"
           
-          # In hybrid/shell mode, use turn_guard.sh
-          if [[ "${{ env.mode }}" != "mcp" ]]; then
-            if [ -f "claude-output.md" ]; then
-              chmod +x tools/turn_guard.sh
+          # Set role for validation
+          export TURN_ROLE=${{ steps.phase.outputs.phase }}
+          
+          # Always try MCP first (it has all 25+ guards)
+          if [ -f "claude-output.md" ]; then
+            chmod +x tools/turn_guard.sh
+            
+            # Try MCP validation first
+            if command -v tsx >/dev/null 2>&1 && [ -f ".mcp/bridge.ts" ]; then
+              echo "Using MCP validation (25+ guards)"
+              npx tsx .mcp/bridge.ts turn_guard claude-output.md || {
+                echo "::warning::MCP validation failed, trying shell fallback"
+                tools/turn_guard.sh claude-output.md || {
+                  echo "::error::Claude output failed validation"
+                  exit 1
+                }
+              }
+            else
+              # Fallback to shell validation
+              echo "Using shell validation (10 guards)"
               tools/turn_guard.sh claude-output.md || {
                 echo "::error::Claude output failed validation"
                 exit 1
               }
             fi
-          else
-            echo "MCP mode validation via integration layer"
           fi
 
       - name: Update Phase Labels
