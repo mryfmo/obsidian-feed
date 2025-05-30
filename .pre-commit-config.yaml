@@ -3,14 +3,14 @@ repos:
     rev: v3.3.1
     hooks:
       - id: prettier
-        additional_dependencies: ["@prettier/plugin-xml"]
-        args: ["--write", "--ignore-unknown"]
+        additional_dependencies: ['@prettier/plugin-xml']
+        args: ['--write', '--ignore-unknown']
 
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v9.26.0
     hooks:
       - id: eslint
-        args: ["--ext", ".ts,.tsx,.js,.jsx", "--fix"]
+        args: ['--ext', '.ts,.tsx,.js,.jsx', '--fix']
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

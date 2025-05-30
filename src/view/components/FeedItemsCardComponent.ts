@@ -1,5 +1,5 @@
-import { FeedsReaderView } from '../../view';
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderView } from '../types';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 import { RssFeedItem } from '../../types';
 
 import { renderFeedItemCard } from './FeedItemCardComponent';
@@ -14,13 +14,13 @@ import { isVisibleItem, shuffleArray } from '../../utils';
 export function renderFeedItemsCard(
   contentAreaEl: HTMLElement,
   items: RssFeedItem[],
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
-) {
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
+): void {
   contentAreaEl.empty();
 
   if (!items || items.length === 0) {
-    const placeholder = (() => {
+    const placeholder = ((): string => {
       if (view.isMixedViewEnabled()) {
         return 'All feeds are up-to-date!';
       }
@@ -77,11 +77,14 @@ export function renderFeedItemsCard(
   }
 
   if (pageItems.length === 0) {
-    const baseMsg = view.isMixedViewEnabled()
-      ? 'All feeds are up-to-date!'
-      : view.currentFeed
-        ? `No items match filter for "${view.currentFeed}". Check your filters.`
-        : 'No feed selected.';
+    let baseMsg: string;
+    if (view.isMixedViewEnabled()) {
+      baseMsg = 'All feeds are up-to-date!';
+    } else if (view.currentFeed) {
+      baseMsg = `No items match filter for "${view.currentFeed}". Check your filters.`;
+    } else {
+      baseMsg = 'No feed selected.';
+    }
 
     contentAreaEl.setText(view.currentPage === 0 ? baseMsg : 'No more items.');
     return;

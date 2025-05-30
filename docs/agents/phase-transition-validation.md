@@ -12,7 +12,7 @@ graph LR
     PLAN --> BUILD
     BUILD --> VERIF
     VERIF --> REL
-    
+
     %% Skip paths for trivial changes
     INV -.->|trivial fix| BUILD
     BUILD -.->|trivial fix| VERIF
@@ -21,6 +21,7 @@ graph LR
 ## Phase Definitions with Explicit Dependencies
 
 ### FETCH Phase
+
 ```yaml
 phase: FETCH
 purpose: Retrieve external documents and resources
@@ -43,6 +44,7 @@ validation:
 ```
 
 ### INV Phase
+
 ```yaml
 phase: INV
 purpose: Investigate and reproduce issues
@@ -52,7 +54,7 @@ allowed_operations:
   - document_reproduction
 depends_on:
   - FETCH # If external docs needed
-  - null  # Can be entry point
+  - null # Can be entry point
 required_artifacts:
   - fail-log.md
   - test.spec.ts (failing test)
@@ -67,6 +69,7 @@ validation:
 ```
 
 ### ANA Phase
+
 ```yaml
 phase: ANA
 purpose: Root cause analysis and impact assessment
@@ -90,6 +93,7 @@ validation:
 ```
 
 ### PLAN Phase
+
 ```yaml
 phase: PLAN
 purpose: Design solution and get approval
@@ -115,6 +119,7 @@ validation:
 ```
 
 ### BUILD Phase
+
 ```yaml
 phase: BUILD
 purpose: Implement solution
@@ -140,6 +145,7 @@ validation:
 ```
 
 ### VERIF Phase
+
 ```yaml
 phase: VERIF
 purpose: Verify implementation quality
@@ -168,6 +174,7 @@ validation:
 ```
 
 ### REL Phase
+
 ```yaml
 phase: REL
 purpose: Create release
@@ -198,6 +205,7 @@ validation:
 ## Transition Enforcement Mechanism
 
 ### 1. Phase Completion Artifacts
+
 Each phase must generate a completion artifact before transition:
 
 ```bash
@@ -223,6 +231,7 @@ EOF
 ```
 
 ### 2. Transition Validation Function
+
 Add to `tools/turn_guard.sh`:
 
 ```bash
@@ -230,7 +239,7 @@ Add to `tools/turn_guard.sh`:
 validate_phase_transition() {
   local current_phase="$1"
   local next_phase="$2"
-  
+
   # Check if previous phase completed
   case "$next_phase" in
     INV)
@@ -279,23 +288,23 @@ validate_phase_transition() {
 
 validate_url() {
   local url="$1"
-  
+
   # Blocklist check
   if grep -qE "(malicious|phishing|spam)" <<< "$url"; then
     die "URL blocked: suspicious domain"
   fi
-  
+
   # Protocol check
   if ! grep -qE "^https?://" <<< "$url"; then
     die "Only HTTP(S) protocols allowed"
   fi
-  
+
   # Size check (HEAD request)
   size=$(curl -sI "$url" | grep -i content-length | awk '{print $2}' | tr -d '\r')
   if [[ -n "$size" && "$size" -gt 10485760 ]]; then # 10MB
     die "File too large: $size bytes (max 10MB)"
   fi
-  
+
   # Content-Type check
   content_type=$(curl -sI "$url" | grep -i content-type)
   if grep -qiE "(executable|binary|application/x-)" <<< "$content_type"; then
@@ -307,7 +316,7 @@ validate_url() {
 fetch_doc() {
   local url="$1"
   validate_url "$url"
-  
+
   # Download with timeout and size limit
   curl -L --max-time 30 --max-filesize 10M \
     --user-agent "Claude-Code-Fetcher/1.0" \
@@ -319,6 +328,7 @@ fetch_doc() {
 ### 4. Constraint Adjustment Recommendations
 
 #### BUILD Phase Constraints
+
 Current constraints may be too restrictive. Recommend:
 
 ```yaml
@@ -350,13 +360,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Extract phase from label
         id: phase
         run: |
           PHASE=$(echo "${{ github.event.label.name }}" | grep -oE "(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL)")
           echo "phase=$PHASE" >> $GITHUB_OUTPUT
-      
+
       - name: Check phase dependencies
         run: |
           # Check for required artifacts
@@ -369,7 +379,7 @@ jobs:
               fi
               ;;
           esac
-      
+
       - name: Run phase-specific validation
         run: |
           ./tools/turn_guard.sh validate-phase-transition \
@@ -387,6 +397,7 @@ jobs:
 6. **CI Integration**: Automated phase transition validation in PRs
 
 These improvements ensure:
+
 - No phase can start without required dependencies
 - Security risks in FETCH phase are mitigated
 - BUILD constraints are practical with escape hatches

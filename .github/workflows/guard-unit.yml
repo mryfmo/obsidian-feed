@@ -7,12 +7,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
-        with: {version: 8}
+        with: { version: 8 }
       - run: pnpm install
       - run: pnpm test
       - name: add check-failed label
         if: failure()
-        run: gh pr edit ${{ github.event.pull_request.number }} --add-label "check-failed"      
+        run: gh pr edit ${{ github.event.pull_request.number }} --add-label "check-failed"
       - name: label on failure
         if: failure()
         uses: actions/github-script@v7

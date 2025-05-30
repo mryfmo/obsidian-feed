@@ -1,15 +1,16 @@
 import { App, Modal, Notice } from 'obsidian';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
+import { showConfirmDialog } from './utils/confirm';
 
 export class FRManageFeedsModal extends Modal {
-  private plugin: FeedsReaderPlugin;
+  private plugin: IFeedsReaderPlugin;
 
-  constructor(app: App, plugin: FeedsReaderPlugin) {
+  constructor(app: App, plugin: IFeedsReaderPlugin) {
     super(app);
     this.plugin = plugin;
   }
 
-  onOpen() {
+  onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl('h3', { text: 'Manage Subscriptions' });
@@ -27,7 +28,7 @@ export class FRManageFeedsModal extends Modal {
     // Use a copy of the list to avoid issues if list is modified during iteration (e.g. by unsubscribe)
     const feedListCopy = [...this.plugin.feedList];
 
-    feedListCopy.forEach(feed => {
+    feedListCopy.forEach((feed): void => {
       const feedDiv = listEl.createEl('div', { cls: 'fr-manage-feed' });
       feedDiv.style.borderBottom = '1px solid var(--background-modifier-border)';
       feedDiv.style.padding = '0.5em 0';
@@ -52,7 +53,7 @@ export class FRManageFeedsModal extends Modal {
         text: 'Mark all read',
         title: `Mark all items in ${feed.name} as read`,
       });
-      markAllBtn.addEventListener('click', async () => {
+      markAllBtn.addEventListener('click', async (): Promise<void> => {
         // Use standard listener
         markAllBtn.disabled = true;
         markAllBtn.textContent = 'Marking...';
@@ -83,8 +84,12 @@ export class FRManageFeedsModal extends Modal {
         text: 'Purge deleted',
         title: `Permanently remove deleted items from ${feed.name}`,
       });
-      purgeDelBtn.addEventListener('click', async () => {
-        if (!confirm(`PERMANENTLY remove deleted items from "${feed.name}"?`)) return;
+      purgeDelBtn.addEventListener('click', async (): Promise<void> => {
+        const confirmed = await showConfirmDialog(
+          this.app,
+          `PERMANENTLY remove deleted items from "${feed.name}"?`
+        );
+        if (!confirmed) return;
         purgeDelBtn.disabled = true;
         purgeDelBtn.textContent = 'Purging...';
         try {
@@ -113,9 +118,12 @@ export class FRManageFeedsModal extends Modal {
         text: 'Purge all items',
         title: `Permanently remove ALL items from ${feed.name} (keeps subscription)`,
       });
-      purgeAllBtn.addEventListener('click', async () => {
-        if (!confirm(`PERMANENTLY remove ALL items from "${feed.name}"? Subscription remains.`))
-          return;
+      purgeAllBtn.addEventListener('click', async (): Promise<void> => {
+        const confirmed = await showConfirmDialog(
+          this.app,
+          `PERMANENTLY remove ALL items from "${feed.name}"? Subscription remains.`
+        );
+        if (!confirmed) return;
         purgeAllBtn.disabled = true;
         purgeAllBtn.textContent = 'Purging...';
         try {
@@ -139,9 +147,12 @@ export class FRManageFeedsModal extends Modal {
         title: `Unsubscribe and remove all data for ${feed.name}`,
       });
       removeBtn.style.color = 'var(--text-error)';
-      removeBtn.addEventListener('click', async () => {
-        if (!confirm(`PERMANENTLY unsubscribe from "${feed.name}" and delete all its data?`))
-          return;
+      removeBtn.addEventListener('click', async (): Promise<void> => {
+        const confirmed = await showConfirmDialog(
+          this.app,
+          `PERMANENTLY unsubscribe from "${feed.name}" and delete all its data?`
+        );
+        if (!confirmed) return;
         removeBtn.disabled = true;
         removeBtn.textContent = 'Unsubscribing...';
         try {
@@ -162,7 +173,7 @@ export class FRManageFeedsModal extends Modal {
     });
   }
 
-  onClose() {
+  onClose(): void {
     this.contentEl.empty();
   }
 }

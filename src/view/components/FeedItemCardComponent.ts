@@ -1,7 +1,7 @@
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 import { RssFeedItem } from '../../types';
 import { pickImageUrl } from '../../utils';
-import { FeedsReaderView } from '../../view';
+import { IFeedsReaderView } from '../types';
 
 import { createFeedItemBase, renderItemMarkdown } from './FeedItemBase';
 
@@ -12,8 +12,8 @@ import { createFeedItemBase, renderItemMarkdown } from './FeedItemBase';
 export function renderFeedItemCard(
   item: RssFeedItem,
   parentEl: HTMLElement,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): void {
   // Build the shared skeleton and flag this instance as "card" layout so that
   // CSS can align it using the dedicated .fr-item-card grid rules.

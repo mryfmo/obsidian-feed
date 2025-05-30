@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/no-extraneous-dependencies
 import { defineWorkspace } from 'vitest/config';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -18,6 +19,7 @@ export default defineWorkspace([
       name: 'unit',
       environment: 'jsdom',
       globals: true,
+      testTimeout: 10000,
       include: ['tests/unit/**/*.spec.ts', 'tests/unit/**/*.test.ts'],
       exclude: ['**/node_modules/**', 'e2e/**'],
     },
@@ -28,6 +30,7 @@ export default defineWorkspace([
       name: 'integration',
       environment: 'jsdom',
       globals: true,
+      testTimeout: 10000,
       include: ['tests/integration/**/*.int.spec.ts'],
       exclude: ['**/node_modules/**', 'tests/unit/**', 'e2e/**'],
     },

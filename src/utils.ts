@@ -54,9 +54,12 @@ export function generateDeterministicItemId(input: string): string {
   /* c8 ignore stop */
 
   // FNV-1a 32-bit fallback (deterministic, fast, non-crypto-secure)
+  // eslint-disable-next-line no-bitwise
   let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
+  for (let i = 0; i < input.length; i += 1) {
+    // eslint-disable-next-line no-bitwise
     hash ^= input.charCodeAt(i);
+    // eslint-disable-next-line no-bitwise
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, '0');
@@ -67,8 +70,10 @@ export function generateDeterministicItemId(input: string): string {
  * as a last-ditch fallback when the deterministic hash fails or collides.
  */
 export function generateRandomUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c: string): string => {
+    // eslint-disable-next-line no-bitwise
     const r = (Math.random() * 16) | 0;
+    // eslint-disable-next-line no-bitwise
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
@@ -86,7 +91,7 @@ export function isVisibleItem(item: RssFeedItem, showAll: boolean): boolean {
 
 /** Fisher-Yates shuffle.  Prioritizes determinism in tests by using Math.random(). */
 export function shuffleArray<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
+  for (let i = array.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
   }

@@ -65,9 +65,8 @@
   margin-right: 0 !important;
 }
 
-
 .fr-feed-item-selected {
-  background-color: var(--text-selection-bg, rgba(100,100,255,0.2));
+  background-color: var(--text-selection-bg, rgba(100, 100, 255, 0.2));
 }
 
 .fr-content-area {
@@ -154,13 +153,13 @@
 ------------------------------------------------------------------------ */
 
 .fr-thumbnail {
-  width: 160px;           /* default/card */
-  aspect-ratio: 16 / 9;   /* enforce 16:9 frame */
-  height: auto;           /* let aspect-ratio calculate height */
+  width: 160px; /* default/card */
+  aspect-ratio: 16 / 9; /* enforce 16:9 frame */
+  height: auto; /* let aspect-ratio calculate height */
   /* Show the full image without cropping.  "contain" scales the picture
      down to fit into the fixed 16:9 bounding box while keeping its full
      contents visible, avoiding any unintended trimming. */
-  object-fit: contain;    /* keep full image, may letterbox */
+  object-fit: contain; /* keep full image, may letterbox */
   object-position: center;
 
   /* Card view: keep image on the right hand side of text */
@@ -171,7 +170,7 @@
 /* List view: smaller thumb + no float (flex handles layout) */
 .fr-item-list .fr-thumbnail {
   width: 96px;
-  margin: 0 0.75rem 0 0;  /* right gap before text */
+  margin: 0 0.75rem 0 0; /* right gap before text */
 }
 
 /* Only card view needs the classic magazine float */
@@ -198,8 +197,8 @@
 .fr-item-card {
   display: grid;
   grid-template-columns: auto 1fr;
-  column-gap: 1rem;           /* give card thumbnail a bit more breathing room */
-  align-items: start;         /* start-align so multi-line titles stay flush */
+  column-gap: 1rem; /* give card thumbnail a bit more breathing room */
+  align-items: start; /* start-align so multi-line titles stay flush */
 }
 
 .fr-item-card > :not(img) {
@@ -208,8 +207,8 @@
 
 /* Card thumbnail: override the old float-right behaviour */
 .fr-item-card .fr-thumbnail {
-  float: none !important;     /* turn off float – grid handles layout */
-  margin: 0 1rem 0 0;         /* right gap before text */
+  float: none !important; /* turn off float – grid handles layout */
+  margin: 0 1rem 0 0; /* right gap before text */
   /* Start in the very first grid row and stretch downward so the picture
      occupies its own column next to the full text stack, independent of
      how many rows the text needs. */
@@ -224,7 +223,7 @@
 
 /* Keyboard navigation - currently selected item */
 .fr-item-selected {
-  background-color: var(--text-selection-bg, rgba(100,100,255,0.2));
+  background-color: var(--text-selection-bg, rgba(100, 100, 255, 0.2));
 }
 
 .fr-search-results .fr-search-result {
@@ -234,7 +233,7 @@
 
 /* Style for the custom ribbon icon */
 .feeds-ribbon-class svg {
-  width: 18px;  /* Desired width for the icon */
+  width: 18px; /* Desired width for the icon */
   height: 18px; /* Desired height for the icon */
 }
 
@@ -255,8 +254,13 @@
   }
 
   @keyframes blink-highlight {
-    0%, 100% { background-color: transparent; }
-    50% { background-color: rgba(255, 255, 0, 0.5); }
+    0%,
+    100% {
+      background-color: transparent;
+    }
+    50% {
+      background-color: rgba(255, 255, 0, 0.5);
+    }
   }
 }
 

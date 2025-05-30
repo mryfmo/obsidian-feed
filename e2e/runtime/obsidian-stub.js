@@ -45,14 +45,13 @@ function sanitizeHTMLToDom(html) {
 }
 
 function setIcon(_el, _name) {
-  void _el;
-  void _name;
+  // Unused parameters
   /* no-op */
 }
 
 // ---------- Request (network) ----------
 async function requestUrl(_param) {
-  void _param;
+  // Unused parameter
   return {
     text: '',
     status: 200,

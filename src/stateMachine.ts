@@ -83,7 +83,7 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
   const state: ViewState = { ...prev, expandedItems: new Set(prev.expandedItems) };
   const effects: Effect[] = [];
 
-  const render = () => {
+  const render = (): void => {
     if (!effects.find(e => e.type === 'Render')) effects.push({ type: 'Render' });
   };
 
@@ -135,12 +135,13 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
       break;
     }
     case 'CycleItemOrder': {
-      state.itemOrder =
-        state.itemOrder === 'New to old'
-          ? 'Old to new'
-          : state.itemOrder === 'Old to new'
-            ? 'Random'
-            : 'New to old';
+      if (state.itemOrder === 'New to old') {
+        state.itemOrder = 'Old to new';
+      } else if (state.itemOrder === 'Old to new') {
+        state.itemOrder = 'Random';
+      } else {
+        state.itemOrder = 'New to old';
+      }
       render();
       break;
     }
@@ -169,6 +170,11 @@ export function reducer(prev: ViewState, event: Event): [ViewState, Effect[]] {
       state.expandedItems.delete(event.id);
       render();
       break;
+    }
+    default: {
+      // Exhaustive check - this should never be reached
+      const exhaustiveCheck: never = event;
+      throw new Error(`Unhandled event type: ${(exhaustiveCheck as Event).type}`);
     }
   }
 

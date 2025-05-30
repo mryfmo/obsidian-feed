@@ -1,4 +1,3 @@
-
 # Claude Code Action Integration Guide
 
 This guide explains how Claude Code Action integrates with the strict workflow system.
@@ -13,18 +12,24 @@ This guide explains how Claude Code Action integrates with the strict workflow s
 ## Integration Architecture
 
 ### 1. Workflow Triggers
+
 Claude Code Action activates when:
+
 - `@claude` mentioned in issues/PRs/comments
 - PR opened/synchronized (for auto-review)
 
 ### 2. Context Detection
+
 The action automatically detects:
+
 - Current phase from PR title/labels
 - Required artifacts for the phase
 - Valid next transitions
 
 ### 3. Response Format
+
 All Claude responses must follow:
+
 ```markdown
 <think>
 [Analysis of request and current state]
@@ -50,6 +55,7 @@ State-Transition: CURRENT→NEXT
 ### 4. Phase-Specific Requirements
 
 #### FETCH Phase
+
 - **Purpose**: Retrieve external documents/resources
 - **Allowed**: Network operations via `fetch_doc.sh`
 - **Artifacts**: Downloaded files in `.cache/`
@@ -57,24 +63,28 @@ State-Transition: CURRENT→NEXT
 - **Security**: URL validation, malicious content blocking, 10MB size limit
 
 #### INV Phase
+
 - **Purpose**: Investigate and reproduce issues
 - **Allowed**: Run tests, create reproduction cases
 - **Artifacts**: Failing test, investigation notes in `docs/qa/`
 - **Restrictions**: No fixes, only diagnosis
 
 #### ANA Phase
+
 - **Purpose**: Root cause analysis
 - **Allowed**: Code analysis, impact assessment
 - **Artifacts**: Analysis document in `docs/qa/`
 - **Restrictions**: No implementation
 
 #### PLAN Phase
+
 - **Purpose**: Design solution
 - **Allowed**: Create RFC, define scope
 - **Artifacts**: RFC in `docs/rfcs/`
 - **Restrictions**: Requires review approval to proceed
 
 #### BUILD Phase
+
 - **Purpose**: Implement solution
 - **Allowed**: Code changes, test updates
 - **Artifacts**: Patches via `apply_patch`
@@ -82,12 +92,14 @@ State-Transition: CURRENT→NEXT
 - **Dependencies**: Requires approved PLAN phase completion
 
 #### VERIF Phase
+
 - **Purpose**: Verify implementation
 - **Allowed**: Run tests, check coverage
 - **Artifacts**: Test results, CHANGELOG update
 - **Restrictions**: No new features
 
 #### REL Phase
+
 - **Purpose**: Release preparation
 - **Allowed**: Version bump, release notes
 - **Artifacts**: Release commit, GitHub release, VERIF completion certificate
@@ -97,6 +109,7 @@ State-Transition: CURRENT→NEXT
 ## GitHub Action Configuration
 
 ### Required Secrets
+
 ```yaml
 CLAUDE_ACCESS_TOKEN: OAuth access token
 CLAUDE_REFRESH_TOKEN: OAuth refresh token
@@ -104,7 +117,9 @@ CLAUDE_EXPIRES_AT: Token expiration timestamp
 ```
 
 ### Workflow Integration
+
 The main workflow (`claude.yml`) should:
+
 1. Detect current phase from context
 2. Run Claude with phase-aware prompt
 3. Validate output with turn_guard.sh
@@ -112,6 +127,7 @@ The main workflow (`claude.yml`) should:
 5. Trigger dependent workflows
 
 ### Example PR Flow
+
 1. User creates PR with title "INV: Fix feed parsing error"
 2. User comments "@claude investigate this issue"
 3. Claude Code Action:
@@ -135,6 +151,7 @@ The main workflow (`claude.yml`) should:
 ## Error Recovery
 
 If validation fails:
+
 1. Error logged to PR comment
 2. Phase label remains unchanged
 3. User must correct and retry
@@ -143,6 +160,7 @@ If validation fails:
 ## Monitoring
 
 Track success via:
+
 - Guard validation pass rate
 - Phase transition accuracy
 - Artifact completeness

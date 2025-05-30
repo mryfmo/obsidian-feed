@@ -161,7 +161,6 @@ describe('FeedItemsListComponent', () => {
     ];
 
     const view = createView();
-    // @ts-ignore
     view.itemOrder = 'Old to new';
     const plugin = createPlugin(items);
 
@@ -180,7 +179,6 @@ describe('FeedItemsListComponent', () => {
   it('shows "No more items." when page beyond range', () => {
     const items = [stubItem('x1')];
     const view = createView();
-    // @ts-ignore
     view.currentPage = 2; // beyond
     const plugin = createPlugin(items);
 

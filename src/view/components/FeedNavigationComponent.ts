@@ -1,11 +1,11 @@
 import { Notice, setIcon } from 'obsidian';
-import { FeedsReaderView } from '../../view';
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderView } from '../types';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 
 export function renderFeedNavigation(
   navEl: HTMLElement,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): void {
   if (!navEl) return;
   navEl.empty();
@@ -56,9 +56,7 @@ export function renderFeedNavigation(
         loadingNotice.hide();
         if (!plugin.feedsStore[feedName]?.items) {
           new Notice(`Failed to load data for ${feedName}.`);
-          (view as FeedsReaderView).contentAreaEl.setText(
-            `Data for ${feedName} could not be loaded.`
-          );
+          view.contentAreaEl.setText(`Data for ${feedName} could not be loaded.`);
           view.currentFeed = null;
           view.createControlButtons();
           view.renderFeedList();

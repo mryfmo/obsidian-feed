@@ -7,6 +7,7 @@ won’t enter commits; it merely helps you keep the STP checklist in sync.
 -->
 
 ### STP Checklist
+
 - [ ] INV
 - [ ] ANA
 - [ ] PLAN
@@ -14,11 +15,14 @@ won’t enter commits; it merely helps you keep the STP checklist in sync.
 - [ ] VERIF
 
 ### What to do (current phase: …)
+
 1. …
 2. …
 
 ### Notes / Scratchpad
+
 <optional>
 
 ---
+
 # State-Transition: (e.g. INV→ANA)

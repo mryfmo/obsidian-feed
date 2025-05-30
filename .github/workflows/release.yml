@@ -1,7 +1,7 @@
 name: release
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,11 +14,11 @@ jobs:
       - name: bundle strict workflow patch
         run: |
           set -euo pipefail
-          
+
           # Get the root commit (first commit in repo)
           ROOT_COMMIT=$(git rev-list --max-parents=0 HEAD)
           echo "Root commit: $ROOT_COMMIT"
-          
+
           # Get the last tag, or use root commit if no tags exist
           if git describe --abbrev=0 --tags HEAD 2>/dev/null; then
             LAST_TAG=$(git describe --abbrev=0 --tags HEAD)
@@ -27,14 +27,14 @@ jobs:
             LAST_TAG="$ROOT_COMMIT"
             echo "No tags found, using root commit"
           fi
-          
+
           # Create patch file with proper error handling
           if ! git diff "${LAST_TAG}..HEAD" > strict_workflow.patch; then
             echo "Warning: Failed to create patch from $LAST_TAG to HEAD"
             # Fallback: create empty patch file
             touch strict_workflow.patch
           fi
-          
+
           # Show patch statistics
           if [[ -s strict_workflow.patch ]]; then
             echo "Patch created successfully:"
@@ -48,7 +48,7 @@ jobs:
           path: strict_workflow.patch
       - name: sign SBOM
         env:
-          COSIGN_EXPERIMENTAL: "1"
+          COSIGN_EXPERIMENTAL: '1'
         run: |
           cosign sign-blob -key cosign.key sbom.xml > sbom.sig
       - uses: actions/upload-artifact@v4

@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, setIcon } from 'obsidian';
 import { UndoAction } from './globals';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
+import { IFeedsReaderView } from './view/types';
 import { renderControlsBar } from './view/components/ControlsBarComponent';
 import { renderFeedNavigation } from './view/components/FeedNavigationComponent';
 import {
@@ -11,7 +12,7 @@ import {
 import { renderFeedItemsCard } from './view/components/FeedItemsCardComponent';
 import { renderItemMarkdown as renderSingleItemContent } from './view/components/FeedItemBase';
 import { isVisibleItem } from './utils';
-import { RssFeedItem } from './types';
+import { RssFeedItem, RssFeedContent } from './types';
 // Centralized FSM – governs view state & side-effects
 import {
   reducer as viewReducer,
@@ -23,17 +24,17 @@ import {
 
 export const VIEW_TYPE_FEEDS_READER = 'feeds-reader-view';
 
-export class FeedsReaderView extends ItemView {
+export class FeedsReaderView extends ItemView implements IFeedsReaderView {
   // View-Specific State
   public currentFeed: string | null = null;
 
-  private showAll: boolean = false;
+  public showAll: boolean = false;
 
-  private titleOnly: boolean = true;
+  public titleOnly: boolean = true;
 
-  private itemOrder: 'New to old' | 'Old to new' | 'Random' = 'New to old';
+  public itemOrder: 'New to old' | 'Old to new' | 'Random' = 'New to old';
 
-  private currentPage: number = 0;
+  public currentPage: number = 0;
 
   public undoList: UndoAction[] = [];
 
@@ -43,7 +44,7 @@ export class FeedsReaderView extends ItemView {
 
   private focusArea: 'content' | 'nav' = 'content';
 
-  private navSelectedIndex: number = 0;
+  public navSelectedIndex: number = 0;
 
   private readonly MAX_UNDO_STEPS = 20;
 
@@ -68,9 +69,11 @@ export class FeedsReaderView extends ItemView {
     let pool: Array<RssFeedItem & { __sourceFeed?: string }> = [];
 
     if (this.fsm.mixedView) {
-      for (const feed of Object.values(this.plugin.feedsStore)) {
+      for (const feed of Object.values(this.plugin.feedsStore) as RssFeedContent[]) {
         const title = feed.title || '(unknown)';
-        pool = pool.concat(feed.items.map(item => ({ ...item, __sourceFeed: title })));
+        pool = pool.concat(
+          feed.items.map((item: RssFeedItem) => ({ ...item, __sourceFeed: title }))
+        );
       }
     } else {
       if (!this.currentFeed) return [];
@@ -92,14 +95,14 @@ export class FeedsReaderView extends ItemView {
   public actionIconsGroupEl!: HTMLElement; // Made public for components
 
   // Plugin Reference
-  public plugin: FeedsReaderPlugin;
+  public plugin: IFeedsReaderPlugin;
 
   /** Finite-state machine representing the UI state.  Acts as the single
    *  source of truth; legacy class properties proxy selected fields for now
    *  to avoid a massive refactor. */
   private fsm: ViewState;
 
-  constructor(leaf: WorkspaceLeaf, plugin: FeedsReaderPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: IFeedsReaderPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.icon = 'rss';
@@ -116,11 +119,11 @@ export class FeedsReaderView extends ItemView {
     this.syncLegacyFieldsFromFsm();
   }
 
-  getViewType() {
+  getViewType(): string {
     return VIEW_TYPE_FEEDS_READER;
   }
 
-  getDisplayText() {
+  getDisplayText(): string {
     this.itemsPerPage = this.plugin.settings.nItemPerPage ?? 20;
     return 'Feeds Reader';
   }
@@ -168,10 +171,10 @@ export class FeedsReaderView extends ItemView {
       attr: { 'aria-label': 'Toggle Feed List Sidebar' },
     });
     this.controlsEl.insertBefore(navBtn, this.actionIconsGroupEl);
-    const syncNavIcon = () =>
+    const syncNavIcon = (): void =>
       setIcon(navBtn, this.navEl.hidden ? 'panel-left-open' : 'panel-left-close');
     syncNavIcon();
-    this.registerDomEvent(navBtn, 'click', () => {
+    this.registerDomEvent(navBtn, 'click', (): void => {
       this.dispatch({ type: 'ToggleNav' });
       // navHidden mirrored into legacy field inside dispatch
       this.navEl.hidden = this.fsm.navHidden;
@@ -191,10 +194,10 @@ export class FeedsReaderView extends ItemView {
     // programmatic changes.  The icon depicts *list* when the **unified
     // timeline** (mixed view) is active and the classic *rss* icon when
     // browsing a single feed.
-    const syncMixedIcon = () =>
+    const syncMixedIcon = (): void =>
       setIcon(mixedBtn, this.fsm.mixedView ? 'circle-chevron-down' : 'circle-chevron-right');
     syncMixedIcon();
-    this.registerDomEvent(mixedBtn, 'click', async () => {
+    this.registerDomEvent(mixedBtn, 'click', async (): Promise<void> => {
       this.dispatch({ type: 'ToggleMixedView' });
 
       // Persist preference so the view re-opens in the same mode next time.
@@ -208,7 +211,7 @@ export class FeedsReaderView extends ItemView {
       // appear empty until the user manually refreshes.
       if (this.fsm.mixedView) {
         const loadingNotice = new Notice('Loading feeds…', 0);
-        (async () => {
+        (async (): Promise<void> => {
           for (const feedInfo of this.plugin.feedList) {
             try {
               await this.plugin.ensureFeedDataLoaded(feedInfo.name);
@@ -254,7 +257,7 @@ export class FeedsReaderView extends ItemView {
 
     if (this.fsm.mixedView) {
       const loadingNotice = new Notice('Loading feeds…', 0);
-      (async () => {
+      (async (): Promise<void> => {
         for (const feedInfo of this.plugin.feedList) {
           try {
             await this.plugin.ensureFeedDataLoaded(feedInfo.name);
@@ -270,20 +273,20 @@ export class FeedsReaderView extends ItemView {
     }
 
     this.renderFeedList();
-    this.registerDomEvent(this.contentAreaEl, 'click', event =>
-      handleItemsListClick(event, this, this.plugin)
-    );
+    this.registerDomEvent(this.contentAreaEl, 'click', (event): void => {
+      handleItemsListClick(event, this, this.plugin);
+    });
 
     // Register a single scroll listener for reading-progress updates. Guard to
     // ensure we don't attach multiple listeners if onOpen somehow executes
     // more than once (shouldn't happen, but defensive).
     if (!this._scrollCb) {
-      this._scrollCb = () => this.updateReadingProgress();
+      this._scrollCb = (): void => this.updateReadingProgress();
       this.registerDomEvent(this.contentAreaEl, 'scroll', this._scrollCb);
     }
 
     // Keyboard navigation
-    this.registerDomEvent(this.containerEl.ownerDocument, 'keydown', (e: KeyboardEvent) =>
+    this.registerDomEvent(this.containerEl.ownerDocument, 'keydown', (e: KeyboardEvent): void =>
       this.handleKeyDown(e)
     );
   }
@@ -333,7 +336,7 @@ export class FeedsReaderView extends ItemView {
     this.navHidden = s.navHidden;
   }
 
-  private renderFeedList(): void {
+  public renderFeedList(): void {
     renderFeedNavigation(this.navEl, this, this.plugin);
   }
 
@@ -344,7 +347,7 @@ export class FeedsReaderView extends ItemView {
     return this.fsm.mixedView;
   }
 
-  public nextPage() {
+  public nextPage(): void {
     const items = this.getVisibleItems();
     if (items.length === 0) {
       new Notice('No items to paginate.');
@@ -353,22 +356,20 @@ export class FeedsReaderView extends ItemView {
 
     const totalPages = Math.ceil(items.length / this.itemsPerPage);
     if (this.currentPage < totalPages - 1) {
-      this.currentPage++;
+      this.currentPage += 1;
       this.renderFeedContent();
     } else {
       new Notice('You are on the last page.');
     }
   }
 
-  public prevPage() {
+  public prevPage(): void {
     if (this.currentPage > 0) {
-      this.currentPage--;
+      this.currentPage -= 1;
       this.renderFeedContent();
-    } else {
+    } else if (this.getVisibleItems().length > 0) {
       // Only notify if there is at least one page worth of items
-      if (this.getVisibleItems().length > 0) {
-        new Notice('You are on the first page.');
-      }
+      new Notice('You are on the first page.');
     }
   }
 
@@ -436,9 +437,11 @@ export class FeedsReaderView extends ItemView {
     // Persist user preference asynchronously
     if (this.plugin.settings.defaultTitleOnly !== this.titleOnly) {
       this.plugin.settings.defaultTitleOnly = this.titleOnly;
-      void this.plugin
+      this.plugin
         .saveSettings()
-        .catch(err => console.error('FeedsReaderView: Failed to persist defaultTitleOnly', err));
+        .catch((err: unknown) =>
+          console.error('FeedsReaderView: Failed to persist defaultTitleOnly', err)
+        );
     }
   }
 
@@ -481,11 +484,13 @@ export class FeedsReaderView extends ItemView {
           let itemData: import('./types').RssFeedItem | undefined;
 
           if (this.currentFeed) {
-            itemData = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+            itemData = this.plugin.feedsStore[this.currentFeed]?.items.find(
+              (i: RssFeedItem) => i.id === itemId
+            );
           } else {
             // Mixed view – walk every feed once to locate the item.
-            for (const feed of Object.values(this.plugin.feedsStore)) {
-              const found = feed.items.find(i => i.id === itemId);
+            for (const feed of Object.values(this.plugin.feedsStore) as RssFeedContent[]) {
+              const found = feed.items.find((i: RssFeedItem) => i.id === itemId);
               if (found) {
                 itemData = found;
                 break;
@@ -494,7 +499,7 @@ export class FeedsReaderView extends ItemView {
           }
 
           if (itemData) {
-            void renderSingleItemContent(itemData, contentEl, this.plugin);
+            renderSingleItemContent(itemData, contentEl, this.plugin);
           }
         }
       }
@@ -640,7 +645,7 @@ export class FeedsReaderView extends ItemView {
 
     if (jOrDown) {
       if (this.selectedIndex < currentItems.length - 1) {
-        this.selectedIndex++;
+        this.selectedIndex += 1;
         this.highlightSelected();
       } else {
         // end of list, advance page
@@ -653,7 +658,7 @@ export class FeedsReaderView extends ItemView {
 
     if (kOrUp) {
       if (this.selectedIndex > 0) {
-        this.selectedIndex--;
+        this.selectedIndex -= 1;
         this.highlightSelected();
       } else {
         // top of list, previous page
@@ -686,7 +691,9 @@ export class FeedsReaderView extends ItemView {
     if (!itemId || !this.currentFeed) return;
 
     if (markKey) {
-      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(
+        (i: RssFeedItem) => i.id === itemId
+      );
       if (item) {
         this.plugin.markItemReadState(this.currentFeed, itemId, item.read === '0');
         this.renderFeedContent();
@@ -696,7 +703,9 @@ export class FeedsReaderView extends ItemView {
     }
 
     if (delKey) {
-      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(i => i.id === itemId);
+      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(
+        (i: RssFeedItem) => i.id === itemId
+      );
       if (item) {
         this.plugin.markItemDeletedState(this.currentFeed, itemId, item.deleted === '0');
         this.renderFeedContent();
@@ -831,7 +840,7 @@ export class FeedsReaderView extends ItemView {
     if (lastAction.action === 'markAllRead' && lastAction.previousStates) {
       lastAction.previousStates.forEach(prevState => {
         const itemToUndo = this.plugin.feedsStore[this.currentFeed!]?.items.find(
-          i => i.id === prevState.itemId
+          (i: RssFeedItem) => i.id === prevState.itemId
         );
         if (itemToUndo) {
           itemToUndo.read = prevState.readState;
@@ -845,7 +854,7 @@ export class FeedsReaderView extends ItemView {
     } else if (lastAction.itemId) {
       // Single item undo
       const itemToUndo = this.plugin.feedsStore[this.currentFeed]?.items.find(
-        i => i.id === lastAction.itemId
+        (i: RssFeedItem) => i.id === lastAction.itemId
       );
       if (itemToUndo && lastAction.previousState !== undefined) {
         if (lastAction.action === 'read' || lastAction.action === 'unread') {

@@ -1,11 +1,10 @@
-
 name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
 
 jobs:
   build:
@@ -31,15 +30,24 @@ jobs:
           version: 8
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          pnpm install --frozen-lockfile
+          cd .mcp && pnpm install --frozen-lockfile
+
+      - name: TypeScript Check
+        run: |
+          pnpm tsc --noEmit --skipLibCheck
+          cd .mcp && pnpm typecheck
 
       - name: Lint & Format
-        run: pnpm lint
+        run: |
+          pnpm lint
+          cd .mcp && pnpm lint
 
       - name: Unit & Integration Tests
         run: pnpm test:unit && pnpm test:int
 
-      - name: Build (type-check + bundle)
+      - name: Build (bundle)
         run: pnpm build
 
       - name: End-to-End Tests

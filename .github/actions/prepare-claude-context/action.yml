@@ -25,12 +25,12 @@ runs:
       run: |
         # Create context file
         CONTEXT_FILE="claude-context-${{ github.run_id }}.md"
-        
+
         echo "# Context for Claude Code Action" > $CONTEXT_FILE
         echo "Generated at: $(date)" >> $CONTEXT_FILE
         echo "Phase: ${{ inputs.phase }}" >> $CONTEXT_FILE
         echo "" >> $CONTEXT_FILE
-        
+
         # Add CLAUDE.md
         if [ -f "CLAUDE.md" ]; then
           echo "## CLAUDE.md" >> $CONTEXT_FILE
@@ -39,7 +39,7 @@ runs:
           echo '```' >> $CONTEXT_FILE
           echo "" >> $CONTEXT_FILE
         fi
-        
+
         # Add workflow documentation
         if [ -f "docs/agents/02_claude-code.md" ]; then
           echo "## Workflow Documentation" >> $CONTEXT_FILE
@@ -48,7 +48,7 @@ runs:
           echo '```' >> $CONTEXT_FILE
           echo "" >> $CONTEXT_FILE
         fi
-        
+
         # Add phase-specific documentation
         case "${{ inputs.phase }}" in
           FETCH)
@@ -71,7 +71,7 @@ runs:
             ;;
         esac
         echo "" >> $CONTEXT_FILE
-        
+
         # Add available tools
         echo "## Available Tools (MCP-Enhanced)" >> $CONTEXT_FILE
         echo "All tools support MCP bridge with intelligent fallback:" >> $CONTEXT_FILE
@@ -84,15 +84,15 @@ runs:
         echo "" >> $CONTEXT_FILE
         echo "MCP servers available: filesystem, github, memory, sequential-thinking, context7" >> $CONTEXT_FILE
         echo "" >> $CONTEXT_FILE
-        
+
         # Output results
         echo "context_file=$CONTEXT_FILE" >> $GITHUB_OUTPUT
         echo "context_size=$(wc -c < $CONTEXT_FILE)" >> $GITHUB_OUTPUT
-        
+
         # Generate system prompt
         PROMPT="You are Claude Code Action in phase ${{ inputs.phase }}. "
         PROMPT+="You must follow the workflow documentation and use the required response format: "
         PROMPT+="<think>, <act>, <verify>, <next> tags. "
         PROMPT+="Current phase: ${{ inputs.phase }}. "
-        
+
         echo "system_prompt=$PROMPT" >> $GITHUB_OUTPUT

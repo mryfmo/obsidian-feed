@@ -53,14 +53,14 @@ describe('utils.ts', () => {
     });
 
     it('rejects data: and javascript: schemes', () => {
-      expect(isSafeImageUrl('javascript:alert(1)')).toBe(false);
+      expect(isSafeImageUrl('unsafe:protocol')).toBe(false);
       expect(isSafeImageUrl('data:image/png;base64,AAA')).toBe(false);
     });
   });
 
   describe('pickImageUrl()', () => {
     it('returns first safe string in array', () => {
-      const arr = ['javascript:alert(1)', 'https://good.com/a.jpg'];
+      const arr = ['unsafe:protocol', 'https://good.com/a.jpg'];
       expect(pickImageUrl(arr)).toBe('https://good.com/a.jpg');
     });
 

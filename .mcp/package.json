@@ -2,13 +2,14 @@
   "name": "obsidian-feed-mcp",
   "version": "1.0.0",
   "description": "Minimal MCP integration for obsidian-feed",
+  "type": "module",
   "scripts": {
     "bridge": "tsx bridge.ts",
     "test": "vitest",
     "test:unit": "vitest run --dir tests --exclude tests/integration",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@modelcontextprotocol/server-memory": "^2025.4.25",
     "@modelcontextprotocol/server-sequential-thinking": "^0.6.2",
     "axios": "^1.6.0",
+    "chalk": "^4.1.2",
     "turndown": "^7.1.2",
     "zod": "^3.22.0"
   },

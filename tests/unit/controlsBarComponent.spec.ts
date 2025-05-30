@@ -66,7 +66,6 @@ function createView() {
     renderFeedContent: vi.fn(),
     toggleTitleOnlyMode() {
       // 'this' will be the view object
-      // @ts-ignore
       this.titleOnly = !this.titleOnly;
     },
     registerDomEvent: (el: Element, ev: string, cb: EventListener) => el.addEventListener(ev, cb),

@@ -2,10 +2,11 @@
 INV: Investigating the issue with turn_guard.sh validation. This test file needs to have at least twenty words in the think section to pass the token validation. The current implementation requires between 20 and 700 tokens.
 
 Assumed Goals:
+
 - Test MCP integration functionality
 - Validate all guards are working correctly
 - Ensure proper error handling
-</think>
+  </think>
 
 <act>
 # step-plan: Test the turn_guard validation with proper format

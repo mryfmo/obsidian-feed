@@ -78,6 +78,11 @@ export class ItemView {
 }
 
 // ---------- Plugin / settings skeleton ----------
+export interface PluginManifest {
+  id: string;
+  dir: string;
+}
+
 export class Plugin {
   public app: App;
 
@@ -212,10 +217,6 @@ export class Vault {
 // Export types used only for typing in tests so that `import { Vault, TFolder, PluginManifest } from 'obsidian'` succeeds.
 // They don't require runtime behavior.
 export type TFolder = Record<string, unknown>;
-export interface PluginManifest {
-  id: string;
-  dir: string;
-}
 
 // Default export (some code uses `import obsidian from 'obsidian'`)
 export default {};

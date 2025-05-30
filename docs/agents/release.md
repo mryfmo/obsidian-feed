@@ -10,24 +10,24 @@ Runs after a PR labelled `ready-for-release` is merged into `main` **and** CI is
 
 1. **Determine Next Version**  
    • inspect commit messages since last tag (Conventional Commits).  
-   • bump *patch* for `fix`, *minor* for `feat`, *major* if `BREAKING CHANGE` footer present.
-2. **Update Files**  
-   * `package.json`  
-   * `manifest.json` (Obsidian manifest)  
-   * `versions.json` (BRAT)  
-   * heading in `CHANGELOG.md` → move *[Unreleased]* under the new version.
+   • bump _patch_ for `fix`, _minor_ for `feat`, _major_ if `BREAKING CHANGE` footer present.
+2. **Update Files**
+   - `package.json`
+   - `manifest.json` (Obsidian manifest)
+   - `versions.json` (BRAT)
+   - heading in `CHANGELOG.md` → move _[Unreleased]_ under the new version.
 3. **Build**  
    `pnpm build` → produces zipped `contents-feeds-reader-vX.Y.Z.zip`.
-4. **Git & GitHub**  
-   * Commit with `chore(release): vX.Y.Z`.  
-   * Create annotated tag `vX.Y.Z`.  
-   * Draft GitHub Release with changelog body; attach the zip.
+4. **Git & GitHub**
+   - Commit with `chore(release): vX.Y.Z`.
+   - Create annotated tag `vX.Y.Z`.
+   - Draft GitHub Release with changelog body; attach the zip.
 
 ## 3. Safety Nets
 
-* Abort if working tree dirty.
-* Abort if tests or lint fail.
-* Abort if `CHANGELOG.md` still contains `[Unreleased]` section.
+- Abort if working tree dirty.
+- Abort if tests or lint fail.
+- Abort if `CHANGELOG.md` still contains `[Unreleased]` section.
 
 ## 4. Termination
 

@@ -19,36 +19,36 @@ jobs:
     strategy:
       matrix:
         node-version: [18.x, 20.x]
-        
+
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          
+
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 8
-          
+
       - name: Install dependencies
         run: |
           cd .mcp
           pnpm install
-          
+
       - name: Run MCP tests
         run: |
           cd .mcp
           pnpm test
-          
+
       - name: Test MCP bridge fallback
         run: |
           # Test that bridge falls back to shell scripts when MCP unavailable
           cd .mcp
           NODE_ENV=test npx tsx bridge.ts list_guards
-          
+
       - name: Validate shell script compatibility
         run: |
           # Ensure all shell scripts work on Ubuntu
@@ -58,4 +58,3 @@ jobs:
           echo "<act>Test action</act>" >> test-turn.md
           ./tools/turn_guard.sh test-turn.md || true
           rm -f test-turn.md
-          

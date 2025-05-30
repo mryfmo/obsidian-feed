@@ -1,8 +1,8 @@
 import { MarkdownRenderer, setIcon } from 'obsidian';
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 import { RssFeedItem } from '../../types';
 import { generateDeterministicItemId, generateRandomUUID } from '../../utils';
-import { FeedsReaderView } from '../../view';
+import { IFeedsReaderView } from '../types';
 import { createItemActionButtons } from './ItemActionButtons';
 
 export interface FeedItemBaseElements {
@@ -22,8 +22,8 @@ export interface FeedItemBaseElements {
 export function createFeedItemBase(
   item: RssFeedItem,
   parentEl: HTMLElement,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin,
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin,
   extraRootClasses: string[] = []
 ): FeedItemBaseElements {
   const { settings } = plugin;
@@ -121,7 +121,11 @@ export function createFeedItemBase(
     const pubTime = Date.parse(item.pubDate);
     if (!Number.isNaN(pubTime)) {
       const ageHours = (Date.now() - pubTime) / 3.6e6;
-      score += ageHours < 24 ? 20 : ageHours < 168 ? 10 : 0;
+      if (ageHours < 24) {
+        score += 20;
+      } else if (ageHours < 168) {
+        score += 10;
+      }
     }
   }
   if (item.read === '0') score += 10;
@@ -154,8 +158,8 @@ export function createFeedItemBase(
 export async function renderItemMarkdown(
   item: RssFeedItem,
   contentEl: HTMLElement,
-  plugin: FeedsReaderPlugin
-) {
+  plugin: IFeedsReaderPlugin
+): Promise<void> {
   try {
     contentEl.empty();
     if (item.content && item.content.trim() !== '') {

@@ -1,15 +1,16 @@
 import { App, Modal, Notice } from 'obsidian';
-import FeedsReaderPlugin, { PluginOperationError, FeedValidationError } from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
+import { PluginOperationError, FeedValidationError } from './errors';
 
 export class FRAddFeedModal extends Modal {
-  private plugin: FeedsReaderPlugin;
+  private plugin: IFeedsReaderPlugin;
 
-  constructor(app: App, plugin: FeedsReaderPlugin) {
+  constructor(app: App, plugin: IFeedsReaderPlugin) {
     super(app);
     this.plugin = plugin;
   }
 
-  onOpen() {
+  onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl('h3', { text: 'Add New Feed' });
@@ -41,9 +42,9 @@ export class FRAddFeedModal extends Modal {
     });
     const cancelButton = buttonContainer.createEl('button', { text: 'Cancel', type: 'button' });
 
-    cancelButton.addEventListener('click', () => this.close());
+    cancelButton.addEventListener('click', (): void => this.close());
 
-    form.addEventListener('submit', async e => {
+    form.addEventListener('submit', async (e): Promise<void> => {
       e.preventDefault();
       const name = nameInput.value.trim();
       const url = urlInput.value.trim();
@@ -117,7 +118,7 @@ export class FRAddFeedModal extends Modal {
     window.setTimeout(() => nameInput.focus(), 50);
   }
 
-  onClose() {
+  onClose(): void {
     this.contentEl.empty();
   }
 }

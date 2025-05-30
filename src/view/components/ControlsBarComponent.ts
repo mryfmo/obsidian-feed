@@ -1,6 +1,6 @@
 import { Notice, setIcon } from 'obsidian';
-import { FeedsReaderView } from '../../view';
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderView } from '../types';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 import { FRAddFeedModal } from '../../addFeedModal';
 import { FRManageFeedsModal } from '../../manageFeedsModal';
 import { FRSearchModal } from '../../searchModal';
@@ -17,8 +17,8 @@ import { FRHelpModal } from '../../helpModal';
  */
 export function renderControlsBar(
   controlsEl: HTMLElement,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): void {
   controlsEl.empty(); // Clear existing buttons
 
@@ -27,14 +27,16 @@ export function renderControlsBar(
     attr: { 'aria-label': 'Add new feed', title: 'Add new feed' },
   });
   setIcon(addBtn, 'plus');
-  view.registerDomEvent(addBtn, 'click', () => new FRAddFeedModal(view.app, plugin).open());
+  view.registerDomEvent(addBtn, 'click', (): void => new FRAddFeedModal(view.app, plugin).open());
 
   const manageBtn = controlsEl.createEl('button', {
     cls: 'clickable-icon',
     attr: { 'aria-label': 'Manage feeds', title: 'Manage feeds' },
   });
   setIcon(manageBtn, 'settings-2');
-  view.registerDomEvent(manageBtn, 'click', () => new FRManageFeedsModal(view.app, plugin).open());
+  view.registerDomEvent(manageBtn, 'click', (): void =>
+    new FRManageFeedsModal(view.app, plugin).open()
+  );
 
   const updateBtn = controlsEl.createEl('button', {
     cls: 'clickable-icon',
@@ -42,7 +44,7 @@ export function renderControlsBar(
   });
   setIcon(updateBtn, 'refresh-ccw');
   // Delegate the heavy lifting to controller layer to keep UI lean
-  view.registerDomEvent(updateBtn, 'click', async () => {
+  view.registerDomEvent(updateBtn, 'click', async (): Promise<void> => {
     const { updateAllFeeds } = await import('../../controller/updateAllFeeds');
 
     const progressNotice = new Notice('Fetching updates for all feeds…', 0);
@@ -60,7 +62,7 @@ export function renderControlsBar(
     attr: { 'aria-label': 'Save feed data', title: 'Save feed data' },
   });
   setIcon(saveBtn, 'save');
-  view.registerDomEvent(saveBtn, 'click', async () => {
+  view.registerDomEvent(saveBtn, 'click', async (): Promise<void> => {
     if (plugin.feedsStoreChange) {
       const savingNotice = new Notice('Saving data...', 0);
       try {
@@ -84,7 +86,7 @@ export function renderControlsBar(
       attr: { 'aria-label': 'Search in feed', title: 'Search in feed' },
     });
     setIcon(searchBtn, 'search');
-    view.registerDomEvent(searchBtn, 'click', () => {
+    view.registerDomEvent(searchBtn, 'click', (): void => {
       if (view.currentFeed && plugin.feedsStore[view.currentFeed]) {
         new FRSearchModal(view.app, view.currentFeed, plugin).open();
       } else {
@@ -96,9 +98,9 @@ export function renderControlsBar(
       cls: 'clickable-icon',
       attr: { 'aria-label': 'Toggle unread / all', title: 'Toggle unread / all' },
     });
-    const syncUnreadIcon = () => setIcon(unreadBtn, view.showAll ? 'filter' : 'filter-x');
+    const syncUnreadIcon = (): void => setIcon(unreadBtn, view.showAll ? 'filter' : 'filter-x');
     syncUnreadIcon();
-    view.registerDomEvent(unreadBtn, 'click', () => {
+    view.registerDomEvent(unreadBtn, 'click', (): void => {
       view.dispatchEvent({ type: 'ToggleShowAll' });
       syncUnreadIcon();
       view.renderFeedContent();
@@ -108,10 +110,10 @@ export function renderControlsBar(
       cls: 'clickable-icon',
       attr: { 'aria-label': 'Toggle title / content', title: 'Toggle title / content' },
     });
-    const syncContentIcon = () =>
+    const syncContentIcon = (): void =>
       setIcon(contentBtn, view.titleOnly ? 'layout-list' : 'layout-grid');
     syncContentIcon();
-    view.registerDomEvent(contentBtn, 'click', () => {
+    view.registerDomEvent(contentBtn, 'click', (): void => {
       view.toggleTitleOnlyMode();
       syncContentIcon();
     });
@@ -120,18 +122,19 @@ export function renderControlsBar(
       cls: 'clickable-icon',
       attr: { 'aria-label': 'Change sort order', title: 'Change sort order' },
     });
-    const syncOrderIcon = () => {
-      setIcon(
-        orderBtn,
-        view.itemOrder === 'New to old'
-          ? 'sort-desc'
-          : view.itemOrder === 'Old to new'
-            ? 'sort-asc'
-            : 'shuffle'
-      );
+    const syncOrderIcon = (): void => {
+      let iconName: string;
+      if (view.itemOrder === 'New to old') {
+        iconName = 'sort-desc';
+      } else if (view.itemOrder === 'Old to new') {
+        iconName = 'sort-asc';
+      } else {
+        iconName = 'shuffle';
+      }
+      setIcon(orderBtn, iconName);
     };
     syncOrderIcon();
-    view.registerDomEvent(orderBtn, 'click', () => {
+    view.registerDomEvent(orderBtn, 'click', (): void => {
       view.dispatchEvent({ type: 'CycleItemOrder' });
       syncOrderIcon();
       view.renderFeedContent();
@@ -143,7 +146,7 @@ export function renderControlsBar(
     });
     setIcon(undoBtn, 'rotate-ccw');
     undoBtn.disabled = view.undoList.length === 0;
-    view.registerDomEvent(undoBtn, 'click', () => view.handleUndo());
+    view.registerDomEvent(undoBtn, 'click', (): void => view.handleUndo());
   }
 
   // ---------------------------------------------------------------------
@@ -154,7 +157,7 @@ export function renderControlsBar(
     attr: { 'aria-label': 'Help / Shortcuts', title: 'Help / Shortcuts' },
   });
   setIcon(helpBtn, 'help-circle');
-  view.registerDomEvent(helpBtn, 'click', () => {
+  view.registerDomEvent(helpBtn, 'click', (): void => {
     new FRHelpModal(view.app).open();
   });
 }

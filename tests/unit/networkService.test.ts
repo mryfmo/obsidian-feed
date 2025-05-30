@@ -57,8 +57,8 @@ const createAdapter = (): Mocked<FileSystemAdapter> =>
 const url = 'http://example.com/page';
 
 // Utility to compute cache path using private method
-function getCachePath(service: NetworkService, url: string): string {
-  return service.getCacheFilePath(url);
+function getCachePath(service: NetworkService, testUrl: string): string {
+  return service.getCacheFilePath(testUrl);
 }
 
 describe('NetworkService.fetchHtml', () => {

@@ -9,7 +9,7 @@ import {
   RssFeedMeta,
   RssFeedMetaSchema,
 } from './types';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
 import {
   SUBSCRIPTIONS_FNAME,
   LEN_STR_PER_FILE,
@@ -28,12 +28,12 @@ export async function loadSubscriptions(
   try {
     const fileExists = await app.vault.adapter.exists(subsPath);
     if (!fileExists) {
-      console.log('Subscriptions file not found, returning empty list.', subsPath); // Less verbose
+      // Debug: Subscriptions file not found, returning empty list
       return [];
     }
     const raw = await app.vault.adapter.read(subsPath);
     if (!raw.trim()) {
-      console.log('Subscriptions file is empty, returning empty list.', subsPath); // Less verbose
+      // Debug: Subscriptions file is empty, returning empty list
       return [];
     }
     const json = JSON.parse(raw);
@@ -49,7 +49,7 @@ export async function loadSubscriptions(
     }
     // Validate/Rebuild folder paths relative to plugin structure
     let listModified = false;
-    result.data.forEach(feedInfo => {
+    result.data.forEach((feedInfo): void => {
       // Ensure folder path starts with the base directory name and a slash
       if (!feedInfo.folder || !feedInfo.folder.startsWith(`${feedsStoreBase}/`)) {
         console.warn(
@@ -79,14 +79,14 @@ export async function loadSubscriptions(
 
 // saveSubscriptions now takes plugin instance and the feedList to save
 export async function saveSubscriptions(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   feedList: FeedInfo[]
 ): Promise<void> {
   const { app } = plugin;
   const subsPath = `${plugin.feeds_reader_dir}/${SUBSCRIPTIONS_FNAME}`;
   try {
     // Ensure unread counts are up-to-date based on plugin's feedsStore
-    feedList.forEach(feedInfo => {
+    feedList.forEach((feedInfo): void => {
       const feedStoreData = plugin.feedsStore[feedInfo.name];
       if (feedStoreData?.items) {
         feedInfo.unread = feedStoreData.items.filter(
@@ -98,7 +98,7 @@ export async function saveSubscriptions(
     });
     const json = JSON.stringify(feedList, null, 2);
     await app.vault.adapter.write(subsPath, json);
-    console.log(`Subscriptions saved to ${subsPath}`); // Less verbose
+    // Debug: Subscriptions saved
   } catch (err: unknown) {
     const errorMessage = `Error saving subscriptions to "${subsPath}". Your feed list might not be saved correctly. Please check file permissions or disk space.`;
     console.error(`saveSubscriptions: Failed to save subscriptions to ${subsPath}. Details:`, err);
@@ -111,7 +111,7 @@ export async function saveSubscriptions(
 }
 
 export async function removeAllFeedDataFiles(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   feedFolderRelativePath: string
 ): Promise<void> {
   const { vault } = plugin.app;
@@ -129,7 +129,7 @@ export async function removeAllFeedDataFiles(
             (file.name.startsWith(OLD_FEEDS_DATA_FNAME_BASE) && file.name.endsWith('.frag.gzip')))
       );
       if (filesToRemove.length > 0) {
-        console.log(`Removing ${filesToRemove.length} data file(s) from ${fullFolderPath}`);
+        // Debug: Removing data files
         for (const file of filesToRemove) {
           await vault.delete(file);
         }
@@ -178,7 +178,7 @@ export function decompress(byteArray: Uint8Array): string {
 }
 
 type FeedContext = {
-  plugin: FeedsReaderPlugin;
+  plugin: IFeedsReaderPlugin;
   feedName: string;
   feed: RssFeedContent | undefined;
   metaInfo: RssFeedMeta;
@@ -188,7 +188,7 @@ type FeedContext = {
 };
 
 export async function saveFeedsData(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   names: Set<string> | string[]
 ): Promise<Set<string>> {
   const successSaved = new Set<string>();
@@ -206,25 +206,25 @@ export async function saveFeedsData(
     try {
       await ensureFolder(ctx);
       const { meta, items } = await prepareData(ctx);
-      console.log(`saveFeedsData: Prepared data for feed: ${name}`);
+      // Debug: Prepared data for feed
       await writeMeta(ctx, meta);
-      console.log(`saveFeedsData: Wrote meta for feed: ${name}`);
+      // Debug: Wrote meta for feed
       await writeItems(ctx, items);
-      console.log(`saveFeedsData: Wrote items for feed: ${name}`);
+      // Debug: Wrote items for feed
       await swapIn(ctx);
-      console.log(`saveFeedsData: Swapped in for feed: ${name}`);
+      // Debug: Swapped in for feed
       successSaved.add(name);
       console.info(`Successfully saved data for feed: ${name}`);
     } catch (err) {
       console.error(`Failed to save data for feed: ${name}`, err);
       await cleanupTmp(ctx);
-      console.log(`saveFeedsData: Cleanup tmp for feed: ${name}`);
+      // Debug: Cleanup tmp for feed
     }
   }
   return successSaved;
 }
 
-function buildContext(plugin: FeedsReaderPlugin, feedName: string): FeedContext | null {
+function buildContext(plugin: IFeedsReaderPlugin, feedName: string): FeedContext | null {
   const feedFromStore = plugin.feedsStore[feedName];
   const feedInfoFromList = plugin.feedList.find(f => f.name === feedName);
 
@@ -249,9 +249,7 @@ function buildContext(plugin: FeedsReaderPlugin, feedName: string): FeedContext 
     pubDate: feedFromStore?.pubDate,
   };
 
-  console.log(`feedFromStore: ${JSON.stringify(feedFromStore)}`);
-  console.log(`contextMetaInfo: ${JSON.stringify(contextMetaInfo)}`);
-  console.log(`feedInfoFromList: ${JSON.stringify(feedInfoFromList)}`);
+  // Debug: Feed validation data available via debug mode
 
   return {
     plugin,
@@ -268,13 +266,13 @@ async function ensureFolder({
   plugin,
   absFolder,
 }: {
-  plugin: FeedsReaderPlugin;
+  plugin: IFeedsReaderPlugin;
   absFolder: string;
-}) {
+}): Promise<void> {
   const { vault } = plugin.app;
   if (!(await vault.adapter.exists(absFolder))) {
     await vault.createFolder(absFolder);
-    console.log(`ensureFolder: Created folder ${absFolder}`);
+    // Debug: Created folder
   }
 }
 
@@ -291,7 +289,7 @@ async function prepareData(ctx: FeedContext): Promise<{ meta: RssFeedMeta; items
       description: feed?.description,
       pubDate: feed?.pubDate,
     };
-    console.log(`prepareData: Created meta ${JSON.stringify(meta)}`);
+    // Debug: Created meta
     return { meta, items: [] };
   }
 
@@ -314,24 +312,23 @@ async function prepareData(ctx: FeedContext): Promise<{ meta: RssFeedMeta; items
   const validContent = RssFeedContentSchema.parse(feed);
   const { items, ...meta } = validContent;
   RssFeedMetaSchema.parse(meta);
-  console.log(`saveFeedsData: Validated meta ${JSON.stringify(meta)}`);
-  console.log(`saveFeedsData: Validated items ${JSON.stringify(items)}`);
+  // Debug: Validated meta and items
 
   return { meta, items };
 }
 
-async function writeMeta(ctx: FeedContext, meta: RssFeedMeta) {
+async function writeMeta(ctx: FeedContext, meta: RssFeedMeta): Promise<void> {
   const tmpDir = ctx.stagingDir;
   await ensureFolder({ ...ctx, absFolder: tmpDir });
 
   const tmp = `${tmpDir}/${FEEDS_META_FNAME}`;
   const gzip = compress(JSON.stringify(meta));
-  console.log(`writeMeta: Compressed meta ${JSON.stringify(meta)}`);
+  // Debug: Compressed meta
   await ctx.plugin.app.vault.adapter.writeBinary(
     tmp,
     gzip.buffer.slice(gzip.byteOffset, gzip.byteOffset + gzip.byteLength) as ArrayBuffer
   );
-  console.log(`writeMeta: Wrote meta to ${tmp}`);
+  // Debug: Wrote meta to file
 }
 
 /**
@@ -355,25 +352,23 @@ async function writeItems(ctx: FeedContext, items: RssFeedItem[]): Promise<numbe
   let currentChunkItems: RssFeedItem[] = [];
   let currentChunkSize = 2; // account for the opening & closing brackets []
 
-  const flushChunk = async () => {
+  const flushChunk = async (): Promise<void> => {
     if (currentChunkItems.length === 0) return;
 
     const json = JSON.stringify(currentChunkItems);
     const gzip = compress(json);
     const tmpPath = `${dir}/${FEEDS_ITEMS_CHUNK_FNAME_PREFIX}${chunkIndex}${FEEDS_ITEMS_CHUNK_FNAME_SUFFIX}`;
-    console.log(
-      `writeItems: Compressed item chunk ${chunkIndex} (${currentChunkItems.length} items) for path ${tmpPath}`
-    );
+    // Debug: Compressed item chunk
 
     const writePromise = ctx.plugin.app.vault.adapter
       .writeBinary(
         tmpPath,
         gzip.buffer.slice(gzip.byteOffset, gzip.byteOffset + gzip.byteLength) as ArrayBuffer
       )
-      .then(() => {
-        console.log(`writeItems: Successfully wrote item chunk ${chunkIndex} to ${tmpPath}`);
+      .then((): void => {
+        // Debug: Successfully wrote item chunk
       })
-      .catch(err => {
+      .catch((err): void => {
         console.error(`writeItems: Failed to write item chunk ${chunkIndex} to ${tmpPath}`, err);
         throw err;
       });
@@ -403,7 +398,7 @@ async function writeItems(ctx: FeedContext, items: RssFeedItem[]): Promise<numbe
 
   try {
     await Promise.all(writePromises);
-    console.log(`writeItems: All ${writePromises.length} item chunks written successfully.`);
+    // Debug: All item chunks written successfully
   } catch (error) {
     console.error('writeItems: Error writing one or more item chunks in parallel.', error);
     throw error;
@@ -423,7 +418,7 @@ async function writeItems(ctx: FeedContext, items: RssFeedItem[]): Promise<numbe
  * Note: At every instant either the old complete data or the new complete data folder is present in <absFolder>
  *       so concurrent save operations will not leave the folder empty.
  */
-async function swapIn(ctx: FeedContext) {
+async function swapIn(ctx: FeedContext): Promise<void> {
   const { plugin, absFolder, stagingDir } = ctx;
   const { vault } = plugin.app;
 
@@ -433,12 +428,12 @@ async function swapIn(ctx: FeedContext) {
     // Step-1: move current live folder away (if it exists)
     if (await vault.adapter.exists(absFolder)) {
       await vault.adapter.rename(absFolder, oldBackupDir);
-      console.log(`swapIn: Moved existing data folder to backup ${oldBackupDir}`);
+      // Debug: Moved existing data folder to backup
     }
 
     // Step-2: promote stagingDir to live path
     await vault.adapter.rename(stagingDir, absFolder);
-    console.log(`swapIn: Promoted staging folder ${stagingDir} to live path ${absFolder}`);
+    // Debug: Promoted staging folder to live path
   } catch (err) {
     console.error('swapIn: Atomic folder swap failed', err);
     // Attempt best-effort rollback – if live folder missing, restore backup
@@ -453,14 +448,14 @@ async function swapIn(ctx: FeedContext) {
   }
 
   // Step-3: delete old backup asynchronously (do not block function)
-  (async () => {
+  (async (): Promise<void> => {
     try {
       if (await vault.adapter.exists(oldBackupDir)) {
         // Using Obsidian API: remove folder recursively
         const oldFolder = vault.getAbstractFileByPath(oldBackupDir);
         if (oldFolder) {
           await vault.delete(oldFolder, true);
-          console.log(`swapIn: Deleted old backup folder ${oldBackupDir}`);
+          // Debug: Deleted old backup folder
         }
       }
     } catch (cleanupErr) {
@@ -469,7 +464,7 @@ async function swapIn(ctx: FeedContext) {
   })();
 }
 
-async function cleanupTmp(ctx: FeedContext) {
+async function cleanupTmp(ctx: FeedContext): Promise<void> {
   const { absFolder, tmpSuffix, plugin } = ctx;
   const { vault } = plugin.app;
 
@@ -485,7 +480,7 @@ async function cleanupTmp(ctx: FeedContext) {
 }
 
 async function loadOldFormatData(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   feedMeta: FeedInfo,
   feedFolderPathAbsolute: string
 ): Promise<RssFeedContent | null> {
@@ -496,9 +491,7 @@ async function loadOldFormatData(
   // Simplified placeholder for the original logic:
   const oldFormatFilePath = `${feedFolderPathAbsolute}/${OLD_FEEDS_DATA_FNAME_BASE}.frag.gzip`; // Example, might be more complex
   if (await plugin.app.vault.adapter.exists(oldFormatFilePath)) {
-    console.log(
-      `Attempting to load old format data for ${feedMeta.name} from ${oldFormatFilePath}`
-    );
+    // Debug: Attempting to load old format data
     try {
       // Simulate reading and parsing old format
       const binaryData = await plugin.app.vault.adapter.readBinary(oldFormatFilePath);
@@ -508,7 +501,7 @@ async function loadOldFormatData(
       if (parsed && parsed.items && parsed.name) {
         const validated = RssFeedContentSchema.safeParse(parsed);
         if (validated.success) {
-          console.log(`Successfully loaded and migrated old format data for ${feedMeta.name}`);
+          // Debug: Successfully loaded and migrated old format data
           // Mark for re-save in new format:
           // This should ideally be handled by the caller or a higher-level migration logic
           // For now, we can assume the main plugin will eventually save it in the new format.
@@ -532,7 +525,7 @@ async function loadOldFormatData(
  * Includes on-the-fly migration from old data format if necessary.*
  */
 export async function loadFeedsStoredData(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   feedMeta: FeedInfo
 ): Promise<RssFeedContent> {
   const { vault } = plugin.app;
@@ -576,7 +569,7 @@ export async function loadFeedsStoredData(
         const readPromises = chunkFilePaths.map(path => vault.adapter.readBinary(path));
         try {
           const compressedChunks = await Promise.all(readPromises);
-          compressedChunks.forEach(compressedChunk => {
+          compressedChunks.forEach((compressedChunk): void => {
             const chunkJson = decompress(new Uint8Array(compressedChunk));
             const itemsInChunk = JSON.parse(chunkJson) as RssFeedItem[];
             loadedItems.push(...itemsInChunk);
@@ -605,9 +598,7 @@ export async function loadFeedsStoredData(
         // This ensures migration happens on next save.
         plugin.feedsStoreChange = true;
         plugin.feedsStoreChangeList.add(feedMeta.name);
-        console.log(
-          `loadFeedsStoredData: Feed "${feedMeta.name}" loaded from old format and marked for migration to new format.`
-        );
+        // Debug: Feed loaded from old format and marked for migration
       }
     }
 

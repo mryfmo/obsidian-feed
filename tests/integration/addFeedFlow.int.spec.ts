@@ -180,7 +180,7 @@ describe('integration – addNewFeed flow', () => {
 
   it('propagates FeedFetchError from getFeedItems', async () => {
     const { getFeedItems } = await import('../../src/getFeed');
-    const { FeedFetchError } = await import('../../src/main');
+    const { FeedFetchError } = await import('../../src/errors');
 
     // Mock getFeedItems to throw FeedFetchError
     vi.mocked(getFeedItems).mockRejectedValueOnce(new FeedFetchError('network-fail'));

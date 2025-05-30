@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Validator, ValidationResult } from '../validator';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+import { Validator } from '../validator';
 
 // Mock fs and child_process
 vi.mock('fs');
@@ -9,7 +9,7 @@ vi.mock('child_process');
 
 describe('Validator', () => {
   let validator: Validator;
-  
+
   beforeEach(() => {
     validator = new Validator();
     vi.clearAllMocks();
@@ -36,15 +36,15 @@ Verification
 <next>
 Next steps
 </next>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       // Log errors for debugging
       if (!result.valid) {
         console.log('Validation errors:', result.errors);
       }
-      
+
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
     });
@@ -59,10 +59,10 @@ Actions first
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('G-PHASE: Tag order invalid: act think');
     });
@@ -74,10 +74,10 @@ ${Array(30).fill('word').join(' ')}
       const content = `<think>
 ${words}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const tokenError = result.errors.find(e => e.includes('G-TOKEN'));
       expect(tokenError).toBeUndefined();
     });
@@ -86,10 +86,10 @@ ${words}
       const content = `<think>
 Too short
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-TOKEN: <think> tokens out of range (2)');
     });
 
@@ -98,21 +98,23 @@ Too short
       const content = `<think>
 ${words}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
-      expect(result.errors.some(e => e.includes('G-TOKEN') && e.includes('out of range (800)'))).toBe(true);
+
+      expect(
+        result.errors.some(e => e.includes('G-TOKEN') && e.includes('out of range (800)'))
+      ).toBe(true);
     });
 
     it('should fail when think section is missing', async () => {
       const content = `<act>
 No think section
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-TOKEN: <think> section not found');
     });
   });
@@ -124,10 +126,10 @@ No think section
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.phase).toBe('FETCH');
       const labelError = result.errors.find(e => e.includes('G-LABEL'));
       expect(labelError).toBeUndefined();
@@ -137,10 +139,10 @@ ${Array(30).fill('word').join(' ')}
       const content = `<think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-LABEL: Phase label missing');
     });
   });
@@ -156,10 +158,10 @@ ${Array(30).fill('word').join(' ')}
 <act>
 Downloading from https://example.com
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const netError = result.errors.find(e => e.includes('G-NET'));
       expect(netError).toBeUndefined();
     });
@@ -174,10 +176,10 @@ ${Array(30).fill('word').join(' ')}
 <act>
 Getting https://example.com/api
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-NET: Network access only allowed in FETCH phase');
     });
   });
@@ -189,14 +191,14 @@ Getting https://example.com/api
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync)
         .mockReturnValueOnce('') // git rev-parse
         .mockReturnValueOnce('10\t5\tfile1.ts\n20\t10\tfile2.ts'); // git diff
-      
+
       const result = await validator.validate('test.md');
-      
+
       const sizeError = result.errors.find(e => e.includes('G-SIZE'));
       expect(sizeError).toBeUndefined();
     });
@@ -207,15 +209,17 @@ ${Array(30).fill('word').join(' ')}
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync)
         .mockReturnValueOnce('') // git rev-parse
         .mockReturnValueOnce('1500\t100\tfile1.ts'); // git diff
-      
+
       const result = await validator.validate('test.md');
-      
-      expect(result.errors.some(e => e.includes('G-SIZE') && e.includes('Patch size exceeds limit'))).toBe(true);
+
+      expect(
+        result.errors.some(e => e.includes('G-SIZE') && e.includes('Patch size exceeds limit'))
+      ).toBe(true);
     });
 
     it('should handle non-git environments gracefully', async () => {
@@ -224,14 +228,14 @@ ${Array(30).fill('word').join(' ')}
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockImplementation(() => {
         throw new Error('Not a git repository');
       });
-      
+
       const result = await validator.validate('test.md');
-      
+
       const sizeError = result.errors.find(e => e.includes('G-SIZE'));
       expect(sizeError).toBeUndefined();
     });
@@ -249,10 +253,10 @@ ${Array(30).fill('word').join(' ')}
 # step-plan: implement feature X
 code here
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const planError = result.errors.find(e => e.includes('G-PLAN'));
       expect(planError).toBeUndefined();
     });
@@ -267,10 +271,10 @@ ${Array(30).fill('word').join(' ')}
 <act>
 Just code without plan
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-PLAN: # step-plan: comment missing in <act>');
     });
   });
@@ -287,10 +291,10 @@ ${Array(30).fill('word').join(' ')}
 # step-plan: analyze the issue
 Missing assumed goals
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-TRIAGE: Assumed Goals section missing');
     });
 
@@ -300,10 +304,10 @@ Missing assumed goals
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const triageError = result.errors.find(e => e.includes('G-TRIAGE'));
       expect(triageError).toBeUndefined();
     });
@@ -339,10 +343,10 @@ Schedule
 
 RFC-OK: Approved by team
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const rfcError = result.errors.find(e => e.includes('G-RFC'));
       expect(rfcError).toBeUndefined();
     });
@@ -366,11 +370,13 @@ Description
 ## Solution
 Approach
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
-      expect(result.errors.some(e => e.includes('G-RFC') && e.includes('missing required sections'))).toBe(true);
+
+      expect(
+        result.errors.some(e => e.includes('G-RFC') && e.includes('missing required sections'))
+      ).toBe(true);
     });
 
     it('should skip RFC check in non-PLAN phases', async () => {
@@ -383,10 +389,10 @@ ${Array(30).fill('word').join(' ')}
 <act>
 No RFC needed here
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const rfcError = result.errors.find(e => e.includes('G-RFC'));
       expect(rfcError).toBeUndefined();
     });
@@ -408,14 +414,16 @@ Assumed Goals:
 
 Changes to implement
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockReturnValue('src/main.ts\ntests/test.spec.ts');
-      
+
       const restrictedValidator = new Validator({ role: 'doc' });
       const result = await restrictedValidator.validate('test.md');
-      
-      expect(result.errors.some(e => e.includes('G-ROLE') && e.includes('doc role not allowed'))).toBe(true);
+
+      expect(
+        result.errors.some(e => e.includes('G-ROLE') && e.includes('doc role not allowed'))
+      ).toBe(true);
     });
 
     it('should allow unrestricted roles', async () => {
@@ -424,13 +432,13 @@ Changes to implement
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockReturnValue('docs/README.md');
-      
+
       const devValidator = new Validator({ role: 'dev' });
       const result = await devValidator.validate('test.md');
-      
+
       const roleError = result.errors.find(e => e.includes('G-ROLE'));
       expect(roleError).toBeUndefined();
     });
@@ -451,10 +459,10 @@ Work done
 <next>
 State-Transition: FETCH→INV
 </next>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const stateError = result.errors.find(e => e.includes('G-STATE'));
       expect(stateError).toBeUndefined();
     });
@@ -474,10 +482,10 @@ Work done
 <next>
 State-Transition: FETCH→BUILD
 </next>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       expect(result.errors).toContain('G-STATE: Invalid state transition: FETCH→BUILD');
     });
   });
@@ -516,11 +524,13 @@ May miss some tasks
 | PLAN | P-2 | Task 2 | – |
 | PLAN | P-3 | Task 3 | – |
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
-      expect(result.errors.some(e => e.includes('G-WBS-OK') && e.includes('not approved'))).toBe(true);
+
+      expect(result.errors.some(e => e.includes('G-WBS-OK') && e.includes('not approved'))).toBe(
+        true
+      );
     });
 
     it('should pass with all WBS items approved', async () => {
@@ -542,10 +552,10 @@ ${Array(30).fill('word').join(' ')}
 
 WBS-OK: Approved by PM
 </act>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       const wbsError = result.errors.find(e => e.includes('G-WBS-OK'));
       expect(wbsError).toBeUndefined();
     });
@@ -556,9 +566,9 @@ WBS-OK: Approved by PM
       vi.mocked(fs.readFileSync).mockImplementation(() => {
         throw new Error('File not found');
       });
-      
+
       const result = await validator.validate('nonexistent.md');
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Validation error: File not found');
     });
@@ -571,14 +581,14 @@ WBS-OK: Approved by PM
 <think>
 ${Array(30).fill('word').join(' ')}
 </think>`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       const result = await validator.validate('test.md');
-      
+
       // Should not have RFC or TEST errors in FETCH phase
       const rfcError = result.errors.find(e => e.includes('G-RFC'));
       const testError = result.errors.find(e => e.includes('G-TEST'));
-      
+
       expect(rfcError).toBeUndefined();
       expect(testError).toBeUndefined();
     });
@@ -587,11 +597,11 @@ ${Array(30).fill('word').join(' ')}
   describe('Multiple Guard Failures', () => {
     it('should report all guard failures when checkAllGuards is true', async () => {
       const content = `Invalid content with no structure`;
-      
+
       vi.mocked(fs.readFileSync).mockReturnValue(content);
-      const validator = new Validator({ checkAllGuards: true });
-      const result = await validator.validate('test.md');
-      
+      const allGuardsValidator = new Validator({ checkAllGuards: true });
+      const result = await allGuardsValidator.validate('test.md');
+
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(1);
       expect(result.guardFailures).toBeDefined();

@@ -48,6 +48,54 @@ This implementation follows the **integration** approach:
 - **7-phase lifecycle**: FETCH → INV → ANA → PLAN → BUILD → VERIF → REL
 - GitHub label synchronization
 - State transition validation
+- Workflow automation with auto-transitions
+- Interactive CLI interface
+
+## Usage for Developers
+
+### Basic Commands
+
+```bash
+# Validate a turn file
+./tools/turn_guard.sh turn.md
+# Or use MCP directly
+npx tsx .mcp/bridge.ts turn_guard turn.md
+
+# Fetch documentation
+./tools/fetch_doc.sh https://api.example.com/docs
+./tools/fetch_doc.sh react  # Fetches from Context7
+
+# List all guards
+./tools/list_guards.sh
+```
+
+### Workflow Commands
+
+```bash
+# Initialize workflow for a task
+npx tsx .mcp/bridge.ts workflow init TASK-001
+
+# Check and auto-transition if ready
+npx tsx .mcp/bridge.ts workflow auto check TASK-001
+
+# Generate visualization
+npx tsx .mcp/bridge.ts workflow auto visualize TASK-001
+```
+
+### Interactive CLI
+
+```bash
+# Launch interactive mode
+npx tsx .mcp/bridge.ts cli
+```
+
+In CLI mode:
+
+- `task new` - Create new task
+- `task select` - Select existing task
+- `validate <file>` - Validate a turn file
+- `workflow status` - Show current phase
+- `guards` - List all validation guards
 - Phase artifact management
 - Progress tracking
 
@@ -83,7 +131,7 @@ import { MCPIntegration } from './.mcp';
 
 const integration = new MCPIntegration({
   validation: { useAI: true },
-  context7: { enabled: true }
+  context7: { enabled: true },
 });
 
 await integration.initialize();

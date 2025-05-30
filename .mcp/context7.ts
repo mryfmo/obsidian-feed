@@ -3,6 +3,7 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 export interface LibraryDoc {
   content: string;
@@ -16,68 +17,82 @@ export interface GetDocumentationOptions {
 
 export class Context7Client {
   private client: Client | null = null;
+
   private libraryCache: Map<string, string> = new Map();
 
   async initialize(): Promise<void> {
     if (this.client) return;
 
     this.client = new Client(
-      { 
+      {
         name: 'context7-client',
-        version: '1.0.0'
+        version: '1.0.0',
       },
       { capabilities: {} }
     );
 
-    await this.client.connect({
+    const transport = new StdioClientTransport({
       command: 'npx',
       args: ['-y', '@upstash/context7-mcp'],
       env: {
         ...process.env,
-        DEFAULT_MINIMUM_TOKENS: '10000'
-      }
-    } as any);
+        DEFAULT_MINIMUM_TOKENS: '10000',
+      } as Record<string, string>,
+    });
+
+    await this.client.connect(transport);
   }
 
-  async getDocumentation(libraryName: string, options?: GetDocumentationOptions): Promise<LibraryDoc> {
+  async getDocumentation(
+    libraryName: string,
+    options?: GetDocumentationOptions
+  ): Promise<LibraryDoc> {
     if (!this.client) {
       throw new Error('Context7 client not initialized');
     }
 
     try {
       // Check cache for library ID
-      let libraryId = this.libraryCache.get(libraryName);
-      
+      let libraryId: string | undefined = this.libraryCache.get(libraryName);
+
       if (!libraryId) {
         // Resolve library ID
-        const resolveResult = await this.client.callTool({
+        const resolveResult = (await this.client.callTool({
           name: 'resolve-library-id',
-          arguments: { libraryName: libraryName }
-        }) as any;
+          arguments: { libraryName },
+        })) as { library_id: string };
 
         if (!resolveResult.library_id) {
           throw new Error('Failed to resolve library ID');
         }
-        
+
         libraryId = resolveResult.library_id;
-        this.libraryCache.set(libraryName, libraryId);
+        this.libraryCache.set(libraryName, resolveResult.library_id);
+      }
+
+      if (!libraryId) {
+        throw new Error(`Library ID not found for ${libraryName}`);
       }
 
       // Fetch documentation
-      const docsResult = await this.client.callTool({
+      const docsResult = (await this.client.callTool({
         name: 'get-docs',
         arguments: {
           library_id: libraryId,
-          minimum_tokens: options?.minimumTokens || 10000
-        }
-      }) as any;
+          minimum_tokens: options?.minimumTokens || 10000,
+        },
+      })) as { content: string; version?: string; library_id?: string };
 
       return {
         content: docsResult.content || '',
-        version: docsResult.metadata?.version,
-        libraryId: libraryId
+        version: docsResult.version,
+        libraryId,
       };
-    } catch (error: any) {
+    } catch (error) {
+      // Re-throw with more context
+      if (error instanceof Error) {
+        error.message = `Context7 error for ${libraryName}: ${error.message}`;
+      }
       throw error;
     }
   }
@@ -88,12 +103,12 @@ export class Context7Client {
   ): Promise<LibraryDoc | null> {
     try {
       const result = await this.getDocumentation(libraryName, {
-        minimumTokens: options?.tokens
+        minimumTokens: options?.tokens,
       });
       return {
         content: result.content,
         version: result.version || 'unknown',
-        libraryId: result.libraryId
+        libraryId: result.libraryId,
       };
     } catch (error) {
       console.error(`Context7 error: ${error}`);
@@ -112,7 +127,7 @@ export class Context7Client {
     if (source.startsWith('http://') || source.startsWith('https://')) {
       return false;
     }
-    
+
     return /^(@[a-z0-9-]+\/)?[a-z0-9-]+$/.test(source);
   }
 }

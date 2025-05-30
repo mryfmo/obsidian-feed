@@ -22,16 +22,16 @@
  * unit-test.
  */
 
-import type FeedsReaderPlugin from '../main';
-import type { FeedsReaderView } from '../view';
+import type { IFeedsReaderPlugin } from '../pluginTypes';
+import type { IFeedsReaderView } from '../view/types';
 import { getFeedItems } from '../getFeed';
 
 /** Callback signature for UI notifications */
 export type NotifyFn = (message: string, timeoutMs?: number) => void;
 
 export async function updateAllFeeds(
-  plugin: FeedsReaderPlugin,
-  view: FeedsReaderView,
+  plugin: IFeedsReaderPlugin,
+  view: IFeedsReaderView,
   notify: NotifyFn = () => {}
 ): Promise<void> {
   notify('Fetching updates for all feeds…', 0);

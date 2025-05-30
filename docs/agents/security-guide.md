@@ -12,6 +12,7 @@ This guide provides comprehensive security guidelines for contributors and revie
 ## Threat Model
 
 ### Primary Threats
+
 - **Malicious Feed Content**: XSS, script injection via RSS/Atom feeds
 - **Path Traversal**: Accessing files outside the vault
 - **API Key Exposure**: Leaking user credentials
@@ -19,6 +20,7 @@ This guide provides comprehensive security guidelines for contributors and revie
 - **Resource Exhaustion**: DoS via large feeds or infinite loops
 
 ### Trust Boundaries
+
 - User vault boundary (must not escape)
 - Network abstraction layer
 - Plugin settings storage
@@ -29,10 +31,12 @@ This guide provides comprehensive security guidelines for contributors and revie
 ### 1. Network Layer (`/src/network/`)
 
 #### Allowed Operations
+
 - HTTP(S) requests via Obsidian's `requestUrl` API
 - Optional CORS proxy usage (must be user-configurable)
 
 #### Security Requirements
+
 ```typescript
 // Always validate URLs before fetching
 const allowedProtocols = ['http:', 'https:'];
@@ -47,11 +51,12 @@ const response = await requestUrl({
   timeout: 30000, // 30 seconds max
   headers: {
     'User-Agent': 'Obsidian-Feed-Reader/1.0',
-  }
+  },
 });
 
 // Validate response size
-if (response.arrayBuffer.byteLength > 10 * 1024 * 1024) { // 10MB
+if (response.arrayBuffer.byteLength > 10 * 1024 * 1024) {
+  // 10MB
   throw new Error('Feed too large');
 }
 ```
@@ -59,6 +64,7 @@ if (response.arrayBuffer.byteLength > 10 * 1024 * 1024) { // 10MB
 ### 2. Content Parsing (`/src/contentParserService.ts`)
 
 #### HTML Sanitization
+
 ```typescript
 // REQUIRED: Sanitize all external HTML
 import { sanitizeHTMLToDom } from 'obsidian';
@@ -73,11 +79,12 @@ const clean = DOMPurify.sanitize(untrustedHtml, {
   ALLOWED_ATTR: ['href'],
   ALLOW_DATA_ATTR: false,
   FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed'],
-  FORBID_ATTR: ['style', 'onclick', 'onload']
+  FORBID_ATTR: ['style', 'onclick', 'onload'],
 });
 ```
 
 #### URL Validation in Content
+
 ```typescript
 // Validate all URLs in feed content
 function sanitizeUrl(url: string): string | null {
@@ -102,6 +109,7 @@ function sanitizeUrl(url: string): string | null {
 ### 3. File System Operations
 
 #### Path Validation
+
 ```typescript
 import { normalizePath } from 'obsidian';
 import { normalize, resolve } from 'path';
@@ -110,28 +118,25 @@ function ensureInVault(vaultPath: string, requestedPath: string): string {
   // Normalize both paths
   const normalizedVault = normalize(vaultPath);
   const resolved = resolve(normalizedVault, requestedPath);
-  
+
   // Ensure resolved path is within vault
   if (!resolved.startsWith(normalizedVault)) {
     throw new Error('Path traversal attempt blocked');
   }
-  
+
   // Additional Obsidian normalization
   return normalizePath(resolved);
 }
 ```
 
 #### Safe File Operations
+
 ```typescript
 // Use Obsidian's safe file APIs
-async function safeWriteFile(
-  vault: Vault,
-  path: string,
-  content: string
-): Promise<void> {
+async function safeWriteFile(vault: Vault, path: string, content: string): Promise<void> {
   // Validate path
   const safePath = ensureInVault(vault.adapter.basePath, path);
-  
+
   // Use Obsidian's API, not direct fs access
   await vault.adapter.write(safePath, content);
 }
@@ -140,14 +145,15 @@ async function safeWriteFile(
 ### 4. Settings and Secrets
 
 #### Storage Guidelines
+
 ```typescript
 interface SecureSettings {
   // NEVER store secrets in code
   apiKey?: string; // User-provided, encrypted by Obsidian
-  
+
   // Document security implications
   corsProxy?: string; // WARNING: This sends URLs to third party
-  
+
   // Provide secure defaults
   allowExternalImages: boolean; // Default: false
   maxFeedSize: number; // Default: 5MB
@@ -155,12 +161,13 @@ interface SecureSettings {
 ```
 
 #### Handling Secrets
+
 ```typescript
 // NEVER log secrets
 function debugLog(message: string, settings: SecureSettings) {
   const sanitized = {
     ...settings,
-    apiKey: settings.apiKey ? '[REDACTED]' : undefined
+    apiKey: settings.apiKey ? '[REDACTED]' : undefined,
   };
   console.log(message, sanitized);
 }
@@ -183,41 +190,43 @@ function validateApiKey(key: string | undefined): boolean {
 ### 5. User Interface Security
 
 #### Event Handler Safety
+
 ```typescript
 // Sanitize user inputs in event handlers
-inputEl.addEventListener('change', (e) => {
+inputEl.addEventListener('change', e => {
   const target = e.target as HTMLInputElement;
   const sanitized = target.value
     .trim()
     .replace(/[<>]/g, '') // Remove potential HTML
     .substring(0, 1000); // Limit length
-  
+
   // Process sanitized value
   processUserInput(sanitized);
 });
 ```
 
 #### Dynamic Content Rendering
+
 ```typescript
 // Safe dynamic content rendering
 function renderFeedItem(container: HTMLElement, item: FeedItem) {
   // Create elements programmatically, not via innerHTML
   const titleEl = container.createEl('h3');
   titleEl.textContent = item.title; // Safe text content
-  
+
   const contentEl = container.createEl('div');
   // Sanitize HTML content before appending
   const sanitized = sanitizeHTMLToDom(item.content);
   contentEl.appendChild(sanitized);
-  
+
   // Safe link creation
   if (item.link && isValidUrl(item.link)) {
     const linkEl = container.createEl('a', {
       href: item.link,
       attr: {
         target: '_blank',
-        rel: 'noopener noreferrer' // Prevent window.opener access
-      }
+        rel: 'noopener noreferrer', // Prevent window.opener access
+      },
     });
     linkEl.textContent = 'Read more';
   }
@@ -227,6 +236,7 @@ function renderFeedItem(container: HTMLElement, item: FeedItem) {
 ## Security Testing
 
 ### Manual Testing Checklist
+
 - [ ] Test with malicious feed content (XSS payloads)
 - [ ] Attempt path traversal (../../etc/passwd)
 - [ ] Submit oversized feeds (>10MB)
@@ -237,21 +247,22 @@ function renderFeedItem(container: HTMLElement, item: FeedItem) {
 - [ ] Check for resource exhaustion (infinite loops)
 
 ### Automated Security Checks
+
 ```typescript
 // Example security test
 describe('Security', () => {
   it('should sanitize malicious HTML', () => {
     const malicious = '<script>alert("XSS")</script><p>Safe content</p>';
     const sanitized = sanitizeContent(malicious);
-    
+
     expect(sanitized).not.toContain('<script>');
     expect(sanitized).toContain('Safe content');
   });
-  
+
   it('should prevent path traversal', () => {
     const vaultPath = '/vault';
     const maliciousPath = '../../../etc/passwd';
-    
+
     expect(() => {
       ensureInVault(vaultPath, maliciousPath);
     }).toThrow('Path traversal attempt blocked');
@@ -262,12 +273,14 @@ describe('Security', () => {
 ## Incident Response
 
 ### If a Security Issue is Found
+
 1. **Do NOT** create a public issue
 2. Contact the maintainers privately
 3. Provide detailed reproduction steps
 4. Allow time for a fix before disclosure
 
 ### Security Update Process
+
 1. Fix developed in private branch
 2. Security advisory drafted
 3. Patch released with minimal details

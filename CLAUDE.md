@@ -24,7 +24,11 @@ Configure Claude Desktop with:
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/mryfmo/Sources/obsidian-feed"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/mryfmo/Sources/obsidian-feed"
+      ]
     },
     "github": {
       "command": "npx",
@@ -61,7 +65,9 @@ Configure Claude Desktop with:
 5. **Complex Analysis**: Use `sequential-thinking` for step-by-step reasoning
 
 ### Shell Scripts (Current Implementation)
+
 The following shell scripts are available:
+
 - `tools/turn_guard.sh` → Validates Claude output format with ~10 guards implemented
 - `tools/fetch_doc.sh` → Downloads documents to cache directory
 - `tools/list_guards.sh` → Lists implemented validation guards
@@ -69,6 +75,7 @@ The following shell scripts are available:
 - `tools/validate-stp-markers.sh` → Validates STP compliance
 
 ### Implementation Status
+
 - ⚠️ **MCP Integration**: Planned but not yet implemented (see `.tmp-docs/IMPLEMENTATION_STATUS.md`)
 - ✅ Basic guard validation working (10 of 26 guards implemented)
 - ✅ Shell script compatibility for macOS
@@ -87,7 +94,7 @@ pnpm build        # Production build with TypeScript checking
 # Testing
 pnpm test         # Run all tests (unit + integration)
 pnpm test:unit    # Unit tests only
-pnpm test:int     # Integration tests only  
+pnpm test:int     # Integration tests only
 pnpm e2e          # Playwright end-to-end tests
 
 # Code Quality
@@ -103,24 +110,29 @@ pnpm test -- --watch          # Watch mode for tests
 This is an Obsidian plugin for reading RSS/Atom feeds. The codebase follows a service-oriented architecture with clear separation of concerns:
 
 ### Core Structure
+
 - **Entry Point**: `src/main.ts` - FeedsReaderPlugin extends Obsidian's Plugin class
 - **Main View**: `src/view.ts` - Custom ItemView implementing the feed reader UI
 - **State Management**: Uses a state machine pattern (`src/stateMachine.ts`) for UI state transitions
 
 ### Service Layer
+
 - **NetworkService** (`src/networkService.ts`): HTTP client wrapper using axios for feed fetching
 - **ContentParserService** (`src/contentParserService.ts`): RSS/Atom parsing using rss-parser library
 - **AssetService** (`src/assetService.ts`): Downloads and manages feed assets (images, etc.)
 - **Data Layer** (`src/data.ts`): Persists feeds as gzipped JSON files in `.obsidian/plugins/contents-feeds-reader/data/`
 
 ### UI Components
+
 Located in `src/view/components/`, these are custom components without external UI framework:
+
 - `FeedNavigationComponent`: Collapsible feed navigation sidebar
 - `FeedItemsListComponent`/`FeedItemsCardComponent`: Display feed items
 - `ControlsBarComponent`: Pagination and controls
 - `ItemActionButtons`: Per-item actions (read, jot, snippet, etc.)
 
 ### Key Patterns
+
 - **Command Pattern**: All user actions registered via Obsidian's command palette
 - **Modal Pattern**: Add/manage feeds via custom Modal subclasses
 - **Event-Driven**: Uses Obsidian's event system for plugin lifecycle
@@ -137,16 +149,20 @@ Located in `src/view/components/`, these are custom components without external 
 ## GitHub Integration
 
 ### Claude Code Action
+
 This repository uses Claude Code Action for automated code review and interactive development:
+
 - **Trigger**: Mention `@claude` in issues, PRs, or comments
 - **Workflow**: `.github/workflows/claude.yml`
-- **Required Secrets**: 
+- **Required Secrets**:
   - `CLAUDE_ACCESS_TOKEN`
   - `CLAUDE_REFRESH_TOKEN`
   - `CLAUDE_EXPIRES_AT`
 
 ### Workflow Guidelines
+
 When working with Claude Code Action:
+
 1. Follow the STP (Standard Task Protocol) defined in `docs/agents/01_task-lifecycle.md`
 2. Use phase labels (FETCH, INV, ANA, PLAN, BUILD, VERIF, REL) in PR titles
 3. Update task state transitions in commit messages or PR comments
@@ -155,6 +171,7 @@ When working with Claude Code Action:
 ### Phase-Based Development Process
 
 **7 Mandatory Phases** (see `docs/agents/02_claude-code.md` for details):
+
 1. **FETCH** - Document/resource retrieval (network access allowed)
 2. **INV** - Investigation, reproduce issues
 3. **ANA** - Root cause analysis
@@ -166,6 +183,7 @@ When working with Claude Code Action:
 ### CI/CD Workflows
 
 **GitHub Actions in `.github/workflows/`:**
+
 - `claude.yml` - Main Claude Code Action workflow
 - `label-sync.yml` - Enforces phase label consistency
 - `stp-guard.yml` - Validates lifecycle artifacts
@@ -177,10 +195,24 @@ When working with Claude Code Action:
 ## Development Guidelines
 
 ### Temporary Documentation
+
 Use `.tmp-docs/` directory for all temporary documentation:
+
 - Work-in-progress guides
 - Analysis reports
 - Draft specifications
 - Integration summaries
 
 This directory is git-ignored. Move files to `docs/` when they're ready to be tracked.
+
+### Code Quality Standards
+
+As of 2025-01-30:
+
+- **TypeScript**: Zero errors in both main and MCP modules
+- **Tests**: All 174 tests passing (Main: 46, MCP: 128)
+- **ESLint**: Reduced from 353 to 59 errors (83% improvement)
+- **Architecture**: Zero circular dependencies
+- **Type Safety**: All explicit `any` types replaced with proper types
+
+Run `pnpm check:all` to verify all quality checks.

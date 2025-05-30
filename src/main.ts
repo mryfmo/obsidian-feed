@@ -26,26 +26,14 @@ import { NetworkService } from './networkService';
 import { ContentParserService } from './contentParserService';
 import { AssetService } from './assetService';
 import { FEEDS_STORE_BASE, SUBSCRIPTIONS_FNAME, SAVED_SNIPPETS_FNAME } from './constants';
-
-// === Custom Error Classes ===
-export class PluginOperationError extends Error {
-  public readonly userFacingMessage: string;
-
-  public readonly isOperational: boolean;
-
-  constructor(internalMessage: string, userFacingMessage?: string, isOperational: boolean = true) {
-    super(internalMessage);
-    this.name = this.constructor.name;
-    this.userFacingMessage = userFacingMessage || internalMessage;
-    this.isOperational = isOperational;
-  }
-}
-
-export class FeedValidationError extends PluginOperationError {}
-export class FeedFetchError extends PluginOperationError {}
-export class FeedParseError extends PluginOperationError {}
-export class FeedStorageError extends PluginOperationError {}
-// === End Custom Error Classes ===
+import {
+  PluginOperationError,
+  FeedValidationError,
+  FeedFetchError,
+  FeedParseError,
+  FeedStorageError,
+} from './errors';
+import { IFeedsReaderPlugin } from './pluginTypes';
 
 declare global {
   interface Window {
@@ -82,7 +70,7 @@ const DEFAULT_SETTINGS: FeedsReaderSettings = {
   defaultTitleOnly: true,
 };
 
-export default class FeedsReaderPlugin extends Plugin {
+export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlugin {
   settings!: FeedsReaderSettings;
 
   public feedList: FeedInfo[] = [];
@@ -113,8 +101,8 @@ export default class FeedsReaderPlugin extends Plugin {
 
   private queuedSave: boolean = false; // another save request arrived during save
 
-  async onload() {
-    console.log('Loading Feeds Reader Plugin');
+  async onload(): Promise<void> {
+    // Debug logging handled by debug.ts
     await this.loadSettings(); // Loads into this.settings
 
     // Initialize services
@@ -173,16 +161,16 @@ export default class FeedsReaderPlugin extends Plugin {
     //     }
     // }, 5 * 60 * 1000));
 
-    this.register(async () => {
+    this.register(async (): Promise<void> => {
       if (this.saveTimeout) window.clearTimeout(this.saveTimeout); // Clear any pending timeout
       if (this.feedsStoreChange) {
-        console.log('Saving feed data on unload...');
+        // Debug: Saving feed data on unload
         await this.savePendingChanges(true); // Force immediate save
       }
     });
   }
 
-  private async registerStyles() {
+  private async registerStyles(): Promise<void> {
     const cssPath = `${this.manifest.dir}/styles.css`;
     try {
       const cssContent = await this.app.vault.adapter.read(cssPath);
@@ -190,7 +178,7 @@ export default class FeedsReaderPlugin extends Plugin {
       styleEl.id = `${this.manifest.id}-styles`;
       styleEl.textContent = cssContent;
       document.head.appendChild(styleEl);
-      this.register(() => styleEl.detach());
+      this.register((): void => styleEl.detach());
     } catch (e) {
       console.error(
         `FeedsReaderPlugin: Failed to load styles from ${cssPath}. Plugin styles may not be applied.`,
@@ -202,13 +190,13 @@ export default class FeedsReaderPlugin extends Plugin {
     }
   }
 
-  onunload() {
+  onunload(): void {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_FEEDS_READER);
-    console.log('Unloading Feeds Reader Plugin');
+    // Debug: Unloading Feeds Reader Plugin
     // Save is handled by this.register()
   }
 
-  async activateView() {
+  async activateView(): Promise<void> {
     const existingLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FEEDS_READER);
     if (existingLeaves.length > 0) {
       this.app.workspace.revealLeaf(existingLeaves[0]);
@@ -232,11 +220,11 @@ export default class FeedsReaderPlugin extends Plugin {
     }
   }
 
-  async loadSettings() {
+  async loadSettings(): Promise<void> {
     this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData()) };
   }
 
-  async saveSettings() {
+  async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     // Refresh *all* Feeds Reader views so toggles like "Show thumbnails" are
     // applied consistently across split panes / secondary windows.
@@ -257,7 +245,7 @@ export default class FeedsReaderPlugin extends Plugin {
     if (this.saveTimeout) {
       window.clearTimeout(this.saveTimeout); // Clear existing timeout
     }
-    this.saveTimeout = window.setTimeout(async () => {
+    this.saveTimeout = window.setTimeout(async (): Promise<void> => {
       await this.savePendingChanges();
       this.saveTimeout = null; // Clear timeout ref after execution
     }, this.SAVE_DEBOUNCE_MS);
@@ -274,7 +262,7 @@ export default class FeedsReaderPlugin extends Plugin {
     }
 
     if (this.saveTimeout && !immediate) {
-      console.log('Save request ignored, waiting for debounce timeout.');
+      // Debug: Save request ignored, waiting for debounce timeout
       return;
     }
     if (this.saveTimeout && immediate) {
@@ -283,7 +271,7 @@ export default class FeedsReaderPlugin extends Plugin {
     }
 
     if (!this.feedsStoreChange || this.feedsStoreChangeList.size === 0) {
-      console.log('savePendingChanges called, but no changes detected.');
+      // Debug: savePendingChanges called, but no changes detected
       this.feedsStoreChange = false; // Ensure flag is false if list is empty
       return;
     }
@@ -292,16 +280,14 @@ export default class FeedsReaderPlugin extends Plugin {
     this.isSaving = true;
 
     const feedsToSaveAttempt = new Set(this.feedsStoreChangeList); // Keep a copy of what we attempted to save
-    console.log(
-      `Attempting to save pending changes for feeds: ${Array.from(feedsToSaveAttempt).join(', ')}`
-    );
+    // Debug: Attempting to save pending changes for feeds
 
     try {
       // saveFeedsData now returns a Set of successfully saved feed names
       const successfullySavedFeeds = await saveFeedsData(this, feedsToSaveAttempt);
 
       // Update the main change list - remove successfully saved ones
-      successfullySavedFeeds.forEach(savedName => {
+      successfullySavedFeeds.forEach((savedName): void => {
         this.feedsStoreChangeList.delete(savedName);
       });
 
@@ -311,7 +297,7 @@ export default class FeedsReaderPlugin extends Plugin {
       ) {
         // All attempted feeds were saved successfully
         new Notice('Feed data saved successfully.', 3000);
-        console.log(`savePendingChanges: All attempted feeds were saved successfully.`);
+        // Debug: All attempted feeds were saved successfully
       } else if (successfullySavedFeeds.size > 0) {
         // Some feeds were saved, but some failed
         const failedFeedsCount = feedsToSaveAttempt.size - successfullySavedFeeds.size;
@@ -319,9 +305,7 @@ export default class FeedsReaderPlugin extends Plugin {
           `${successfullySavedFeeds.size} feed(s) saved. ${failedFeedsCount} feed(s) failed to save.`,
           5000
         );
-        console.log(
-          `savePendingChanges: ${successfullySavedFeeds.size} feed(s) saved. ${failedFeedsCount} feed(s) failed to save.`
-        );
+        // Debug: Some feeds saved, some failed
       } else if (feedsToSaveAttempt.size > 0) {
         // No feeds were saved, though an attempt was made
         // Errors within saveFeedsData for individual feeds should have already shown a Notice.
@@ -330,9 +314,7 @@ export default class FeedsReaderPlugin extends Plugin {
           `Failed to save data for ${feedsToSaveAttempt.size} feed(s). Check console for details.`,
           7000
         );
-        console.log(
-          `savePendingChanges: Failed to save data for ${feedsToSaveAttempt.size} feed(s). Check console for details.`
-        );
+        // Debug: Failed to save feeds
       }
 
       // If all *pending* changes were successfully processed (i.e., list is now empty or only contains feeds that failed), reset the flag
@@ -404,7 +386,7 @@ export default class FeedsReaderPlugin extends Plugin {
       );
     } catch (error: unknown) {
       if (error instanceof FeedFetchError || error instanceof FeedParseError) {
-        console.log('Feed fetch or parse error, re-throwing.');
+        // Debug: Feed fetch or parse error, re-throwing
         throw error;
       }
       const internalMsg = `Error during getFeedItems for feed "${name}" from URL "${url}": ${error instanceof Error ? error.message : String(error)}`;
@@ -452,7 +434,7 @@ export default class FeedsReaderPlugin extends Plugin {
       this.feedsStoreChangeList.add(name);
       this.feedsStoreChange = true;
 
-      console.log('Saving pending changes for new feed. Feed list:', this.feedList);
+      // Debug: Saving pending changes for new feed
 
       await this.savePendingChanges(true); // This will attempt to save this new feed and any other pending changes.
       await saveSubscriptions(this, this.feedList); // Save the updated feedList
@@ -481,9 +463,7 @@ export default class FeedsReaderPlugin extends Plugin {
       if (folderCreated && (await this.app.vault.adapter.exists(feedFolderPathAbsolute))) {
         try {
           await this.app.vault.adapter.rmdir(feedFolderPathAbsolute, true);
-          console.log(
-            `FeedsReaderPlugin.addNewFeed: Rolled back folder creation: ${feedFolderPathAbsolute}`
-          );
+          // Debug: Rolled back folder creation
         } catch (rmdirError) {
           console.warn(
             `FeedsReaderPlugin.addNewFeed: Failed to roll back folder creation ${feedFolderPathAbsolute}:`,
@@ -506,7 +486,7 @@ export default class FeedsReaderPlugin extends Plugin {
     let changed = false;
     const affectedItemsPreviousStates: Array<{ itemId: string; readState: string }> = [];
 
-    feedData.items.forEach(item => {
+    feedData.items.forEach((item): void => {
       if (item.read === '0') {
         affectedItemsPreviousStates.push({ itemId: item.id!, readState: item.read });
         item.read = getCurrentIsoDateTime();
@@ -713,7 +693,7 @@ export default class FeedsReaderPlugin extends Plugin {
         err
       );
       new Notice(
-        errorMessage` (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`,
+        `${errorMessage} (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`,
         7000
       );
       throw new Error(errorMessage); // Re-throw
@@ -751,7 +731,7 @@ export default class FeedsReaderPlugin extends Plugin {
         err
       );
       new Notice(
-        errorMessage` (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`,
+        `${errorMessage} (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`,
         7000
       );
       throw new Error(errorMessage); // Re-throw
@@ -788,11 +768,10 @@ export default class FeedsReaderPlugin extends Plugin {
         err
       );
       new Notice(
-        errorMessage(
-          err instanceof Error && err.message?.includes('already exists')
+        errorMessage +
+          (err instanceof Error && err.message?.includes('already exists')
             ? ''
-            : ` (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`
-        ),
+            : ` (Technical details: ${err instanceof Error ? err.message.substring(0, 100) : String(err).substring(0, 100)})`),
         7000
       );
       throw new Error(errorMessage); // Re-throw

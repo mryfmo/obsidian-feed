@@ -27,14 +27,14 @@ jobs:
         run: |
           CURRENT="${{ inputs.phase }}"
           PHASES="FETCH INV ANA PLAN BUILD VERIF REL"
-          
+
           # Validate current phase
           if [[ ! " $PHASES " =~ " $CURRENT " ]]; then
             echo "::error::Invalid phase: $CURRENT"
             echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          
+
           # Determine next valid phase
           case $CURRENT in
             FETCH) NEXT="INV" ;;
@@ -45,7 +45,7 @@ jobs:
             VERIF) NEXT="REL" ;;
             REL) NEXT="COMPLETE" ;;
           esac
-          
+
           echo "valid=true" >> $GITHUB_OUTPUT
           echo "next_phase=$NEXT" >> $GITHUB_OUTPUT
 
@@ -61,14 +61,14 @@ jobs:
             const pr_number = ${{ inputs.pr_number }};
             const phase = '${{ inputs.phase }}';
             const phases = ['FETCH', 'INV', 'ANA', 'PLAN', 'BUILD', 'VERIF', 'REL'];
-            
+
             // Update PR title if needed
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr_number
             });
-            
+
             const titleRegex = /^(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL):\s*/;
             if (!titleRegex.test(pr.title)) {
               const newTitle = `${phase}: ${pr.title}`;
@@ -79,11 +79,11 @@ jobs:
                 title: newTitle
               });
             }
-            
+
             // Update labels
             const currentLabels = pr.labels.map(l => l.name);
             const phaseLabels = currentLabels.filter(l => phases.includes(l));
-            
+
             // Remove old phase labels
             for (const label of phaseLabels) {
               if (label !== phase) {
@@ -95,7 +95,7 @@ jobs:
                 });
               }
             }
-            
+
             // Add current phase label
             if (!currentLabels.includes(phase)) {
               await github.rest.issues.addLabels({
@@ -111,12 +111,12 @@ jobs:
     needs: validate-phase
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Check Required Artifacts
         run: |
           PHASE="${{ inputs.phase }}"
           MISSING=""
-          
+
           case $PHASE in
             INV)
               # Check for reproduction test or QA doc
@@ -143,7 +143,7 @@ jobs:
               fi
               ;;
           esac
-          
+
           if [[ -n "$MISSING" ]]; then
             echo "::warning::Missing required artifact for $PHASE phase: $MISSING"
           fi

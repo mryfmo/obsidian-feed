@@ -1,6 +1,6 @@
 import { Notice } from 'obsidian';
-import { FeedsReaderView } from '../../view';
-import FeedsReaderPlugin from '../../main';
+import { IFeedsReaderView } from '../types';
+import { IFeedsReaderPlugin } from '../../pluginTypes';
 import { RssFeedItem } from '../../types';
 import { isVisibleItem, shuffleArray } from '../../utils';
 
@@ -9,8 +9,8 @@ import { createFeedItemBase, renderItemMarkdown } from './FeedItemBase';
 export function renderFeedItemListStyle(
   item: RssFeedItem,
   parentEl: HTMLElement,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): void {
   // Build shared skeleton but add the list-specific root class so that
   // CSS Grid rules apply.
@@ -31,12 +31,12 @@ export function renderFeedItemListStyle(
 export function renderFeedItemsList(
   contentAreaEl: HTMLElement,
   items: RssFeedItem[],
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): void {
   contentAreaEl.empty();
   if (!items || items.length === 0) {
-    const placeholder = (() => {
+    const placeholder = ((): string => {
       if (view.isMixedViewEnabled()) {
         return 'All feeds are up-to-date!';
       }
@@ -106,11 +106,14 @@ export function renderFeedItemsList(
     pageItems = itemsToShow.slice(start, end);
   }
   if (pageItems.length === 0) {
-    const baseMsg = view.isMixedViewEnabled()
-      ? 'All feeds are up-to-date!' // unified timeline empty after filtering
-      : view.currentFeed
-        ? `No items match filter for "${view.currentFeed}". Check your filters.`
-        : 'No feed selected.';
+    let baseMsg: string;
+    if (view.isMixedViewEnabled()) {
+      baseMsg = 'All feeds are up-to-date!'; // unified timeline empty after filtering
+    } else if (view.currentFeed) {
+      baseMsg = `No items match filter for "${view.currentFeed}". Check your filters.`;
+    } else {
+      baseMsg = 'No feed selected.';
+    }
 
     contentAreaEl.setText(view.currentPage === 0 ? baseMsg : 'No more items.');
     return;
@@ -123,8 +126,8 @@ export function renderFeedItemsList(
 
 export async function handleContentAreaClick(
   event: MouseEvent,
-  view: FeedsReaderView,
-  plugin: FeedsReaderPlugin
+  view: IFeedsReaderView,
+  plugin: IFeedsReaderPlugin
 ): Promise<void> {
   const target = event.target as HTMLElement;
   const actionButton = target.closest('button[data-action]') as HTMLButtonElement;
@@ -239,13 +242,13 @@ export async function handleContentAreaClick(
           const pr = settings.chatGPTPrompt.replace('{{content}}', pText);
           const m = settings.chatGPTModel || 'gpt-4o-mini';
           const gNotice = new Notice(`Asking ${m}...`, 0);
-          const r = await window.pluginApi.fetchChatGPT(settings.chatGPTApiKey, 0.7, pr, m);
+          await window.pluginApi.fetchChatGPT(settings.chatGPTApiKey, 0.7, pr, m);
           gNotice.hide();
           new Notice(
             `GPT (${m}) summary for "${item.title?.substring(0, 20)}..." (see console).`,
             5000
           );
-          console.log(`GPT Reply for '${item.title}' (${m}):\n${r}`);
+          // Debug: GPT reply received
           break;
         }
         default:

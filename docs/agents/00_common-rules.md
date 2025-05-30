@@ -1,32 +1,32 @@
 # Common Rules & Coding Guidelines
 
-All agents MUST comply with the rules below unless explicitly told otherwise in the task description.  They are kept in a single file so that every agent can embed it in its prompt without blowing the token budget.
+All agents MUST comply with the rules below unless explicitly told otherwise in the task description. They are kept in a single file so that every agent can embed it in its prompt without blowing the token budget.
 
-* For detailed workflow, see 02_claude-code.md.
-* For specific WBS/RACI/Exit Gate/guardrails, see **02_claude-code.md**.
+- For detailed workflow, see 02_claude-code.md.
+- For specific WBS/RACI/Exit Gate/guardrails, see **02_claude-code.md**.
 
 ## 1. Repository Basics
 
-* Node version  : **≥ 20.9**  
-* Package manager : **pnpm**   (run `pnpm install` before anything else)  
-* Source language  : **TypeScript 5**   (uses modern `ES2024` features)  
-* Test frameworks  : **Vitest** (unit / integration) & **Playwright** (E2E)  
-* Linter / Format  : **ESLint** (Airbnb-flavoured ruleset) + **Prettier** for consistent whitespace  
-* Build script   : `pnpm build` → produces `/dist` bundle via ESBuild  
-* Obsidian API     : v1.8.x (Electron 27, DOM = Chromium 119)
+- Node version : **≥ 20.9**
+- Package manager : **pnpm** (run `pnpm install` before anything else)
+- Source language : **TypeScript 5** (uses modern `ES2024` features)
+- Test frameworks : **Vitest** (unit / integration) & **Playwright** (E2E)
+- Linter / Format : **ESLint** (Airbnb-flavoured ruleset) + **Prettier** for consistent whitespace
+- Build script : `pnpm build` → produces `/dist` bundle via ESBuild
+- Obsidian API : v1.8.x (Electron 27, DOM = Chromium 119)
 
 ## 2. Golden Path for Any Change
 
 1. Create a new branch locally (if you are a human) OR work in-place (if you are a bot running inside a sandbox).
 2. Run `pnpm test` → tests must be green **before** you start editing so you catch pre-existing breakage.
-3. Perform the minimal code modifications that solve the problem at its root cause.  Avoid "drive-by" stylistic changes.
+3. Perform the minimal code modifications that solve the problem at its root cause. Avoid "drive-by" stylistic changes.
 4. Update or add tests that reproduce the bug / assert the new behaviour.
 5. Execute:
-   * `pnpm lint` – must be clean.
-   * `pnpm test` and, if the change affects UI or async code, `pnpm e2e`.
+   - `pnpm lint` – must be clean.
+   - `pnpm test` and, if the change affects UI or async code, `pnpm e2e`.
 6. If any new dependency is strictly required, justify it inside the PR description; transient deps are blocked via `depcheck`.
-7. Edit `CHANGELOG.md` under the *[Unreleased]* heading following *Keep-a-Changelog* format.
-8. Submit the patch (or push the branch).  Keep explanation short (<150 words) unless architectural.
+7. Edit `CHANGELOG.md` under the _[Unreleased]_ heading following _Keep-a-Changelog_ format.
+8. Submit the patch (or push the branch). Keep explanation short (<150 words) unless architectural.
 
 ## 3. TypeScript Coding & Comment Style
 
@@ -63,22 +63,22 @@ ESLint + Prettier are wired into the CI; local pre-commit hooks run `pnpm lint:f
 • Remove inline comments you added for yourself before finalising the patch.  
 • Never introduce licence headers or watermarks unless the issue explicitly requests it.  
 • Keep line length ≤ 100 chars when practical.
-• For BUILD-phase size limits **and the new FETCH phase rules**, see *02_claude-code.md*.
+• For BUILD-phase size limits **and the new FETCH phase rules**, see _02_claude-code.md_.
 
 ## 5. Testing Matrix
 
-| Layer | Command | Runs on CI? | Notes |
-|-------|---------|------------|-------|
-| Unit & Integration | `pnpm test` | ✅  | fast, JSDOM environment |
-| E2E (desktop) | `pnpm e2e` | ✅  | uses Playwright + Electron stub |
-| TypeCheck | `pnpm build` | ✅  | `tsc --noEmit` + ESBuild bundle |
+| Layer              | Command      | Runs on CI? | Notes                           |
+| ------------------ | ------------ | ----------- | ------------------------------- |
+| Unit & Integration | `pnpm test`  | ✅          | fast, JSDOM environment         |
+| E2E (desktop)      | `pnpm e2e`   | ✅          | uses Playwright + Electron stub |
+| TypeCheck          | `pnpm build` | ✅          | `tsc --noEmit` + ESBuild bundle |
 
-CI executes the full matrix on `main` and on every PR using GitHub Actions (`.github/workflows/ci.yml`).  All steps must pass.
+CI executes the full matrix on `main` and on every PR using GitHub Actions (`.github/workflows/ci.yml`). All steps must pass.
 
 ## 6. Commit Message Conventions (Conventional Commits)
 
 `type(scope): summary`  
-Types accepted: **feat**, **fix**, **refactor**, **docs**, **test**, **chore**, **build**, **ci**, **perf**.  Example:
+Types accepted: **feat**, **fix**, **refactor**, **docs**, **test**, **chore**, **build**, **ci**, **perf**. Example:
 
 ```
 fix(parser): handle CDATA blocks with namespaced tags
@@ -100,6 +100,7 @@ The `rel` agent will use these to generate the changelog.
 ### Common Security Pitfalls & Examples
 
 #### ❌ BAD: Logging Sensitive Data
+
 ```typescript
 // NEVER DO THIS
 console.log(`Fetching with API key: ${settings.apiKey}`);
@@ -111,9 +112,10 @@ throw new Error('Authentication failed - check your API key in settings');
 ```
 
 #### ❌ BAD: Path Traversal Vulnerability
+
 ```typescript
 // NEVER DO THIS - allows accessing files outside vault
-const path = `${vaultPath}/${userInput}`;  // userInput could be "../../etc/passwd"
+const path = `${vaultPath}/${userInput}`; // userInput could be "../../etc/passwd"
 
 // ✅ GOOD: Validate and normalize paths
 import { normalize, join } from 'path';
@@ -121,7 +123,7 @@ import { normalize, join } from 'path';
 function safeJoinPath(base: string, userPath: string): string {
   const normalized = normalize(userPath);
   const joined = join(base, normalized);
-  
+
   // Ensure the result is still within the base directory
   if (!joined.startsWith(normalize(base))) {
     throw new Error('Invalid path: access outside vault not allowed');
@@ -131,6 +133,7 @@ function safeJoinPath(base: string, userPath: string): string {
 ```
 
 #### ❌ BAD: XSS via Unsanitized Content
+
 ```typescript
 // NEVER DO THIS - allows script injection
 contentEl.innerHTML = feedItem.content;
@@ -145,11 +148,12 @@ contentEl.appendChild(sanitized);
 import DOMPurify from 'dompurify';
 const clean = DOMPurify.sanitize(feedItem.content, {
   ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'a'],
-  ALLOWED_ATTR: ['href', 'title']
+  ALLOWED_ATTR: ['href', 'title'],
 });
 ```
 
 #### ❌ BAD: Unsafe URL Handling
+
 ```typescript
 // NEVER DO THIS - allows javascript: and data: URLs
 window.open(userProvidedUrl);
@@ -170,9 +174,10 @@ if (isValidUrl(userProvidedUrl)) {
 ```
 
 #### ❌ BAD: Command Injection
+
 ```typescript
 // NEVER DO THIS - allows command injection
-exec(`curl ${userUrl}`);  // userUrl could be "example.com; rm -rf /"
+exec(`curl ${userUrl}`); // userUrl could be "example.com; rm -rf /"
 
 // ✅ GOOD: Use safe APIs or proper escaping
 import { requestUrl } from 'obsidian';
@@ -180,11 +185,12 @@ import { requestUrl } from 'obsidian';
 const response = await requestUrl({
   url: userUrl,
   method: 'GET',
-  headers: { 'User-Agent': 'Obsidian-Feed-Reader' }
+  headers: { 'User-Agent': 'Obsidian-Feed-Reader' },
 });
 ```
 
 #### ❌ BAD: Storing Secrets in Code
+
 ```typescript
 // NEVER DO THIS
 const DEFAULT_API_KEY = 'sk-1234567890abcdef';
@@ -192,8 +198,8 @@ const CORS_PROXY = 'https://api.example.com/proxy?key=secret';
 
 // ✅ GOOD: Require user configuration
 interface Settings {
-  apiKey: string;  // User must provide
-  corsProxy?: string;  // Optional, no defaults
+  apiKey: string; // User must provide
+  corsProxy?: string; // Optional, no defaults
 }
 
 // Validate before use
@@ -224,4 +230,4 @@ if (!settings.apiKey) {
 
 ## 9. When in Doubt
 
-Ask for clarification in the issue or PR thread.  Over-communication is cheaper than fixing misunderstandings later.
+Ask for clarification in the issue or PR thread. Over-communication is cheaper than fixing misunderstandings later.

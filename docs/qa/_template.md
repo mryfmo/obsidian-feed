@@ -2,14 +2,14 @@
 
 # QA Sheet – Task NNN
 
-| Item | Details |
-|------|---------|
-| Environment | OS / Node / pnpm / browser versions |
-| Commit hash |  |
-| Lint result | screenshot / log snippet |
-| Test result |  |
-| Manual steps | 1. …<br>2. … |
-| Outcome | ✅ / ❌  |
+| Item         | Details                             |
+| ------------ | ----------------------------------- |
+| Environment  | OS / Node / pnpm / browser versions |
+| Commit hash  |                                     |
+| Lint result  | screenshot / log snippet            |
+| Test result  |                                     |
+| Manual steps | 1. …<br>2. …                        |
+| Outcome      | ✅ / ❌                             |
 
 ## Notes
 

@@ -5,20 +5,26 @@ This template belongs to the *process-documentation* set licensed under MIT
 (see `LICENSE-MIT`).
 -->
 
-# RFC-NNN  — <Title>
+# RFC-NNN — <Title>
 
 ## 1. Summary
+
 <One-paragraph problem statement and objective>
 
 ## 2. Motivation
+
 <Why is this change important? User impact, pain points…>
 
 ## 3. Design Proposal
+
 ### 3.1 Scope / Out-of-Scope
+
 ### 3.2 API / Config changes
+
 ### 3.3 Risk Analysis & Mitigations
 
 ## 4. Test Plan
+
 • Unit • Integration • E2E • Non-functional (perf, security…)
 
 ## 5. Timeline / Effort Estimate
@@ -26,7 +32,8 @@ This template belongs to the *process-documentation* set licensed under MIT
 ## 6. Alternatives considered
 
 ---
-*State‐Transition: PLAN created by @<author>, waiting for approval.*
+
+_State‐Transition: PLAN created by @<author>, waiting for approval._
 
 ---
 

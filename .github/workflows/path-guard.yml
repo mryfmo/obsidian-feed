@@ -5,17 +5,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: 
-          fetch-depth: 0  # Fetch full history for reliable diff
-          
+        with:
+          fetch-depth: 0 # Fetch full history for reliable diff
+
       - name: path guard
         run: |
           set -euo pipefail
-          
+
           # Extract role from PR labels
           ROLE="${{ github.event.pull_request.labels.*.name || '' }}"
           echo "Detected role: $ROLE"
-          
+
           # Check for review role
           if [[ "$ROLE" == *"review"* ]]; then
             echo "Review role detected - checking for src/ modifications..."

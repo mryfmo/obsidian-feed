@@ -36,7 +36,7 @@ jobs:
         run: |
           # Detect integration mode from PR/Issue labels or content
           MODE="hybrid"  # Default to hybrid mode
-          
+
           if [[ "${{ github.event_name }}" == "pull_request"* ]]; then
             LABELS="${{ join(github.event.pull_request.labels.*.name, ',') }}"
             BODY="${{ github.event.pull_request.body }}"
@@ -44,14 +44,14 @@ jobs:
             LABELS="${{ join(github.event.issue.labels.*.name, ',') }}"
             BODY="${{ github.event.issue.body || '' }}"
           fi
-          
+
           # Check for MCP mode indicators
           if [[ "$LABELS" == *"mcp-only"* ]] || [[ "$BODY" == *"@claude-mcp"* ]]; then
             MODE="mcp"
           elif [[ "$LABELS" == *"shell-only"* ]]; then
             MODE="shell"
           fi
-          
+
           echo "mode=$MODE" >> $GITHUB_ENV
           echo "Integration mode: $MODE"
 
@@ -59,13 +59,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          
+
       - name: Setup Python (for MCP servers)
         if: env.mode != 'shell'
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-          
+
       - name: Install UV (for Python MCP servers)
         if: env.mode != 'shell'
         run: |
@@ -75,7 +75,7 @@ jobs:
       - name: Create Hybrid Configuration
         run: |
           mkdir -p .github/claude
-          
+
           # Create MCP configuration if not shell-only
           if [[ "${{ env.mode }}" != "shell" ]]; then
             cat > .github/claude/mcp-config.json << EOF
@@ -111,7 +111,7 @@ jobs:
           }
           EOF
           fi
-          
+
           # Create tools inventory
           cat > .github/claude/tools.json << EOF
           {
@@ -148,12 +148,12 @@ jobs:
             TITLE="${{ github.event.issue.title || '' }}"
             NUMBER="${{ github.event.issue.number || '0' }}"
           fi
-          
+
           # Extract phase
           PHASE=$(echo "$TITLE" | grep -oE '^(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL):' | sed 's/://' || echo "INV")
           echo "phase=$PHASE" >> $GITHUB_OUTPUT
           echo "number=$NUMBER" >> $GITHUB_OUTPUT
-          
+
           # Determine next phase
           case $PHASE in
             FETCH) NEXT="INV" ;;
@@ -166,7 +166,7 @@ jobs:
             *) NEXT="INV" ;;
           esac
           echo "next_phase=$NEXT" >> $GITHUB_OUTPUT
-          
+
           # Get phase-specific constraints
           case $PHASE in
             FETCH)
@@ -189,19 +189,19 @@ jobs:
           # Create comprehensive context
           cat > claude-context.md << 'EOF'
           # Context for Claude Code Integration
-          
+
           ## Integration Mode: ${{ env.mode }}
-          
+
           ### Available Resources
           EOF
-          
+
           # Add CLAUDE.md
           echo "#### CLAUDE.md" >> claude-context.md
           echo '```markdown' >> claude-context.md
           cat CLAUDE.md >> claude-context.md
           echo '```' >> claude-context.md
           echo "" >> claude-context.md
-          
+
           # Add MCP documentation if relevant
           if [[ "${{ env.mode }}" != "shell" ]] && [[ -f ".mcp/README.md" ]]; then
             echo "#### MCP Integration (.mcp/README.md)" >> claude-context.md
@@ -210,7 +210,7 @@ jobs:
             echo '```' >> claude-context.md
             echo "" >> claude-context.md
           fi
-          
+
           # Add workflow documentation
           if [ -f "docs/agents/02_claude-code.md" ]; then
             echo "#### Workflow Documentation" >> claude-context.md
@@ -219,13 +219,13 @@ jobs:
             echo '```' >> claude-context.md
             echo "" >> claude-context.md
           fi
-          
+
           # List available tools based on mode
           echo "### Available Tools (${{ env.mode }} mode)" >> claude-context.md
           echo '```json' >> claude-context.md
           cat .github/claude/tools.json >> claude-context.md
           echo '```' >> claude-context.md
-          
+
           # Save context
           CONTEXT_SIZE=$(wc -c < claude-context.md)
           echo "context_size=$CONTEXT_SIZE" >> $GITHUB_OUTPUT
@@ -235,16 +235,16 @@ jobs:
         run: |
           cat > instructions.md << 'EOF'
           # Claude Code Instructions - ${{ env.mode }} Mode
-          
+
           ## Current Status
           - **Phase**: ${{ steps.phase.outputs.phase }}
           - **Next Phase**: ${{ steps.phase.outputs.next_phase }}
           - **Integration Mode**: ${{ env.mode }}
           - **Issue/PR**: #${{ steps.phase.outputs.number }}
-          
+
           ## Integration Approach
           EOF
-          
+
           case "${{ env.mode }}" in
             "shell")
               cat >> instructions.md << 'EOF'
@@ -278,46 +278,46 @@ jobs:
           - Use `tools/fetch_doc.sh` - it will use Context7 if available
           - Direct MCP usage for advanced features
           - Best of both worlds approach
-          
+
           **True Integration Philosophy (真の統合)**:
           統合 = カスタムシェルスクリプト + カスタムMCPサーバー + 公式MCPサーバーを協調させて、より良いシステムを作る
           EOF
               ;;
           esac
-          
+
           cat >> instructions.md << 'EOF'
-          
+
           ## Required Response Format
           <think>
           [Analysis of the request and context, 20-700 words]
           </think>
-          
+
           <act>
           ${{ steps.phase.outputs.phase }}: [Specific task description]
           [Actual work following phase constraints]
           </act>
-          
+
           <verify>
           [Verification steps and results]
           </verify>
-          
+
           <next>
           [Next steps or completion status]
           State-Transition: ${{ steps.phase.outputs.phase }}→${{ steps.phase.outputs.next_phase }}
           </next>
-          
+
           ## Phase Constraints
           ${{ steps.phase.outputs.phase_constraints }}
-          
+
           ## Validation
           All outputs must pass validation. In hybrid/shell mode, use:
           ```bash
           tools/turn_guard.sh output.md
           ```
-          
+
           In MCP mode, validation is automatic via the integration layer.
           EOF
-          
+
           # Save instructions
           echo "instructions<<EOF" >> $GITHUB_OUTPUT
           cat instructions.md >> $GITHUB_OUTPUT
@@ -342,10 +342,10 @@ jobs:
         run: |
           # Install tsx globally for MCP integration
           npm install -g tsx
-          
+
           # Install MCP dependencies
           cd .mcp && npm install
-          
+
           # Verify MCP is available
           npx tsx bridge.ts --version || echo "MCP bridge ready"
 
@@ -353,10 +353,10 @@ jobs:
         if: success()
         run: |
           echo "Validating Claude output based on integration mode: ${{ env.mode }}"
-          
+
           # Set role for validation
           export TURN_ROLE=${{ steps.phase.outputs.phase }}
-          
+
           # Always try MCP first (it has all 25+ guards)
           if [ -f "claude-output.md" ]; then
             chmod +x tools/turn_guard.sh
@@ -389,14 +389,14 @@ jobs:
             const phase = '${{ steps.phase.outputs.phase }}';
             const mode = '${{ env.mode }}';
             const validPhases = ['FETCH', 'INV', 'ANA', 'PLAN', 'BUILD', 'VERIF', 'REL'];
-            
+
             if (!validPhases.includes(phase)) {
               console.log('Invalid phase detected, skipping label update');
               return;
             }
-            
+
             const issue_number = context.issue.number;
-            
+
             try {
               // Get current labels
               const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
@@ -451,7 +451,7 @@ jobs:
             const phase = '${{ steps.phase.outputs.phase }}';
             const mode = '${{ env.mode }}';
             const contextSize = '${{ steps.context.outputs.context_size }}';
-            
+
             let modeDescription;
             switch(mode) {
               case 'shell':
@@ -464,21 +464,21 @@ jobs:
                 modeDescription = 'True Integration (Shell + MCP)';
                 break;
             }
-            
+
             const comment = `## Claude Code Integration Summary
-            
+
             - **Current Phase**: ${phase}
             - **Integration Mode**: ${mode} - ${modeDescription}
             - **Context Size**: ${contextSize} bytes
             - **Documentation**: CLAUDE.md, workflow docs${mode !== 'shell' ? ', MCP integration' : ''}
-            
+
             ### Available Tools
             ${mode === 'shell' || mode === 'hybrid' ? '- Shell scripts: turn_guard.sh, fetch_doc.sh, etc.' : ''}
             ${mode === 'mcp' || mode === 'hybrid' ? '- MCP servers: filesystem, github, memory, sequential-thinking, context7' : ''}
             ${mode === 'hybrid' ? '- Bridge: Automatic MCP fallback for shell scripts' : ''}
-            
+
             Claude has been configured for ${mode} mode operation.`;
-            
+
             if (context.issue && context.issue.number) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,

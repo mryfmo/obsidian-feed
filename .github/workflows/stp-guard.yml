@@ -10,8 +10,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history to check all commits
-          
+          fetch-depth: 0 # Need full history to check all commits
+
       - name: Check lifecycle documentation exists
         run: |
           if ! test -f docs/agents/01_task-lifecycle.md; then
@@ -19,7 +19,7 @@ jobs:
             exit 1
           fi
           echo '✅ Lifecycle documentation found'
-          
+
       - name: Validate STP markers
         env:
           PR_BODY: ${{ github.event.pull_request.body }}

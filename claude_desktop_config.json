@@ -2,7 +2,11 @@
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/mryfmo/Sources/obsidian-feed"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/mryfmo/Sources/obsidian-feed"
+      ]
     },
     "github": {
       "command": "npx",

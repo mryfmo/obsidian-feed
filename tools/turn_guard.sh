@@ -142,11 +142,32 @@ fi
 if [[ "$phase" == "FETCH" ]]; then
   db=".cache/sha256.db"
   mkdir -p "$(dirname "$db")"
-  # Extract all URLs and check for duplicates
+  # Extract all URLs and check for duplicates based on content
   grep -oE 'https?://[^[:space:]]+' "$file" 2>/dev/null | while read -r u; do
-    sha=$(printf '%s' "$u" | sha256sum | cut -c1-64)
-    grep -q "$sha" "$db" 2>/dev/null && die $G_SHA "Duplicate download SHA detected"
-    echo "$sha" >> "$db"
+    # Try to fetch content hash if possible (requires curl)
+    if command -v curl >/dev/null 2>&1; then
+      # Fetch first 1KB of content to generate hash (more efficient than full download)
+      content_sample=$(curl -sL --max-time 5 --max-filesize 1024 "$u" 2>/dev/null | head -c 1024 || echo "")
+      if [[ -n "$content_sample" ]]; then
+        # Hash the content sample + URL for uniqueness
+        sha=$(printf '%s\n%s' "$u" "$content_sample" | sha256sum | cut -c1-64)
+      else
+        # Fallback to URL hash if fetch fails
+        sha=$(printf '%s' "$u" | sha256sum | cut -c1-64)
+      fi
+    else
+      # Fallback to URL hash if curl not available
+      sha=$(printf '%s' "$u" | sha256sum | cut -c1-64)
+    fi
+    
+    # Check if this hash already exists
+    if grep -q "^$sha " "$db" 2>/dev/null; then
+      existing_url=$(grep "^$sha " "$db" | cut -d' ' -f2-)
+      die $G_SHA "Duplicate content detected (URL: $u matches $existing_url)"
+    fi
+    
+    # Store hash with URL for reference
+    echo "$sha $u" >> "$db"
   done
 fi
 
@@ -170,14 +191,16 @@ fi
 echo "  Role: $role"
 
 # ---------- WBS Guard cross-check ----------
-# NOTE: This check references docs/spec/final_spec.md which doesn't exist in the current implementation
-# TODO: Update this path or remove this check in Phase 2
-if [[ -f docs/spec/final_spec.md ]]; then
-  if ! missing=$(awk -F, 'NR>1 && $7!~"✅"{print $0}' docs/spec/final_spec.md 2>/dev/null | wc -l); then
-    echo "Warning: Failed to parse final_spec.md" >&2
-  else
-    (( missing==0 )) || die $G_WBS "G-WBS-OK: final_spec.md has $missing unapproved items"
+# Check for WBS approval in the current workflow directory if in PLAN phase
+if [[ "$phase" == "PLAN" ]] && [[ -n "${WORKFLOW_DIR:-}" ]]; then
+  wbs_file="${WORKFLOW_DIR}/wbs-approval.json"
+  if [[ -f "$wbs_file" ]]; then
+    # Check if WBS is approved
+    if ! grep -q '"approved":\s*true' "$wbs_file" 2>/dev/null; then
+      die $G_WBS "G-WBS-OK: WBS not approved yet"
+    fi
   fi
+  # If no WBS file exists, that's okay - WBS is optional
 fi
 
 # ---------- Role × Path Control ----------

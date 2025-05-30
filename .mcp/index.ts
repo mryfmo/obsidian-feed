@@ -23,23 +23,59 @@ export interface IntegrationConfig {
 }
 
 export interface MCPClients {
-  filesystem?: any;
-  github?: any;
-  memory?: any;
-  fetch?: any;
-  sequentialThinking?: any;
-  context7?: any;
+  filesystem?: {
+    read_file: (params: { path: string }) => Promise<{ content: string }>;
+  };
+  github?: {
+    add_labels: (params: {
+      issue_number: number;
+      labels: string[];
+      owner?: string;
+      repo?: string;
+    }) => Promise<void>;
+    remove_labels: (params: {
+      issue_number: number;
+      labels: string[];
+      owner?: string;
+      repo?: string;
+    }) => Promise<void>;
+    get_issue: (params: {
+      issue_number: number;
+    }) => Promise<{ labels?: Array<string | { name: string }> }>;
+  };
+  memory?: {
+    store: (params: { key: string; value: unknown }) => Promise<void>;
+    retrieve: (params: { key: string }) => Promise<unknown>;
+  };
+  fetch?: unknown;
+  sequentialThinking?: {
+    analyze: (params: { problem: string; context: unknown; steps: string[] }) => Promise<{
+      success: boolean;
+      insights: string[];
+      recommendations: string[];
+      warnings?: string[];
+    }>;
+  };
+  context7?: unknown;
 }
 
 export class MCPIntegration {
   private validator: Validator;
+
   private fetcher: Fetcher;
+
   private workflowManager: WorkflowManager;
+
   private analyzer: Analyzer;
+
   public mcpClients?: MCPClients; // Made public for bridge.ts access
+
   private validationCache: Map<string, ValidationResult> = new Map();
+
   private fetchCache: Map<string, FetchResult> = new Map();
+
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
+
   private maxCacheSize = 100; // Maximum cache entries
 
   constructor(mcpClients?: MCPClients) {
@@ -48,51 +84,52 @@ export class MCPIntegration {
     this.fetcher = new Fetcher(mcpClients);
     this.workflowManager = new WorkflowManager();
     this.analyzer = new Analyzer(mcpClients);
-    
+
     if (mcpClients) {
       this.workflowManager.setMCPClients(mcpClients);
     }
-    
+
     // Set up cache cleanup
     this.startCacheCleanup();
   }
-  
+
   private startCacheCleanup(): void {
     const interval = setInterval(() => {
       const now = Date.now();
-      
+
       // Clean expired entries from validation cache
       for (const [key, value] of this.validationCache.entries()) {
         if (value.timestamp && now - value.timestamp > this.cacheTimeout) {
           this.validationCache.delete(key);
         }
       }
-      
+
       // Clean expired entries from fetch cache
       for (const [key, value] of this.fetchCache.entries()) {
         if (value.timestamp && now - value.timestamp > this.cacheTimeout) {
           this.fetchCache.delete(key);
         }
       }
-      
+
       // Enforce size limits (LRU eviction)
       this.enforceCacheSizeLimit(this.validationCache);
       this.enforceCacheSizeLimit(this.fetchCache);
     }, this.cacheTimeout / 2); // Check more frequently than timeout
-    
+
     // Prevent memory leak in tests
     if (typeof interval.unref === 'function') {
       interval.unref();
     }
   }
-  
+
   private enforceCacheSizeLimit<T extends { timestamp?: number }>(cache: Map<string, T>): void {
     if (cache.size <= this.maxCacheSize) return;
-    
+
     // Sort by timestamp (oldest first)
-    const entries = Array.from(cache.entries())
-      .sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
-    
+    const entries = Array.from(cache.entries()).sort(
+      (a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0)
+    );
+
     // Remove oldest entries
     const toRemove = entries.slice(0, cache.size - this.maxCacheSize);
     for (const [key] of toRemove) {
@@ -100,41 +137,41 @@ export class MCPIntegration {
     }
   }
 
-  async validate(filePath: string, options?: { checkAllGuards?: boolean; role?: string }): Promise<ValidationResult> {
+  async validate(
+    filePath: string,
+    options?: { checkAllGuards?: boolean; role?: string }
+  ): Promise<ValidationResult> {
     // Check cache
     const cacheKey = `${filePath}:${JSON.stringify(options)}`;
     if (this.validationCache.has(cacheKey)) {
       const cached = this.validationCache.get(cacheKey)!;
       // Return cached result without timestamp for consistency
       const { timestamp, ...resultWithoutTimestamp } = cached;
+      void timestamp; // Mark as intentionally unused
       return resultWithoutTimestamp;
     }
-    
+
     const validator = new Validator(options);
     const result = await validator.validate(filePath);
-    
+
     // Cache result with timestamp
     const resultWithTimestamp = { ...result, timestamp: Date.now() };
     this.validationCache.set(cacheKey, resultWithTimestamp);
-    
+
     // Optional AI analysis
     if (!result.valid && this.mcpClients?.sequentialThinking) {
-      const aiAnalysis = await validator.analyzeWithAI(
-        filePath,
-        result,
-        this.mcpClients.sequentialThinking
-      );
+      const aiAnalysis = await validator.analyzeWithAI(filePath, result);
       return aiAnalysis;
     }
-    
+
     return result;
   }
 
-  async fetch(sources: string | string[], options?: any): Promise<FetchResult[]> {
+  async fetch(sources: string | string[]): Promise<FetchResult[]> {
     const sourceArray = Array.isArray(sources) ? sources : [sources];
     const results: FetchResult[] = [];
     const uncachedSources: string[] = [];
-    
+
     // Check cache for each source
     for (const source of sourceArray) {
       const cached = this.fetchCache.get(source);
@@ -144,51 +181,62 @@ export class MCPIntegration {
         uncachedSources.push(source);
       }
     }
-    
+
     // Fetch uncached sources
     if (uncachedSources.length > 0) {
       const freshResults = await this.fetcher.fetchMultiple(uncachedSources);
-      for (let i = 0; i < uncachedSources.length; i++) {
+      for (let i = 0; i < uncachedSources.length; i += 1) {
         const result = { ...freshResults[i], timestamp: Date.now() };
         this.fetchCache.set(uncachedSources[i], result);
         results.push(result);
       }
     }
-    
+
     return results;
   }
 
-  async fetchSingle(source: string, options?: any): Promise<FetchResult> {
-    const results = await this.fetch(source, options);
+  async fetchSingle(source: string): Promise<FetchResult> {
+    const results = await this.fetch(source);
     return results[0];
   }
 
-  async workflow(command: string, options: any): Promise<WorkflowResult> {
+  async workflow(command: string, options: Record<string, unknown>): Promise<WorkflowResult> {
     switch (command) {
       case 'update-phase': {
         const { issueNumber, fromPhase, toPhase } = options;
-        
+
         // Validate transition
-        const transitionResult = this.workflowManager.validateTransition(fromPhase, toPhase);
+        const transitionResult = this.workflowManager.validateTransition(
+          fromPhase as Phase,
+          toPhase as Phase
+        );
         if (!transitionResult.valid) {
           return { success: false, error: transitionResult.error };
         }
-        
+
         // Update labels
-        return await this.workflowManager.updatePhaseLabel(issueNumber, fromPhase, toPhase);
+        return this.workflowManager.updatePhaseLabel(
+          issueNumber as number,
+          fromPhase as Phase,
+          toPhase as Phase
+        );
       }
-      
+
       case 'add-phase': {
         const { issueNumber, phase, type = 'issue' } = options;
-        return await this.workflowManager.addPhaseLabel(issueNumber, phase, type);
+        return this.workflowManager.addPhaseLabel(
+          issueNumber as number,
+          phase as Phase,
+          type as 'issue' | 'pr'
+        );
       }
-      
+
       case 'validate-transition': {
         const { from, to } = options;
-        const result = this.workflowManager.validateTransition(from, to);
+        const result = this.workflowManager.validateTransition(from as Phase, to as Phase);
         return { success: result.valid, error: result.error };
       }
-      
+
       default:
         return { success: false, error: `Unknown workflow command: ${command}` };
     }
@@ -201,14 +249,14 @@ export class MCPIntegration {
     for (const lib of libraries) {
       try {
         const fetchResults = await this.fetch(lib);
-        const result = fetchResults[0];
+        const [result] = fetchResults;
         if (result.success) {
           results.push(`✅ ${lib}: Fetched successfully`);
         } else {
           results.push(`❌ ${lib}: ${result.error}`);
         }
-      } catch (error: any) {
-        results.push(`❌ ${lib}: ${error.message}`);
+      } catch (error) {
+        results.push(`❌ ${lib}: ${(error as Error).message}`);
       }
     }
 
@@ -218,21 +266,32 @@ export class MCPIntegration {
   /**
    * Analyze a complex problem using sequential thinking
    */
-  async analyzeComplexProblem(problem: string, context: Record<string, any>): Promise<AnalysisResult> {
+  async analyzeComplexProblem(
+    problem: string,
+    context: Record<string, unknown>
+  ): Promise<AnalysisResult> {
     return this.analyzer.analyzeComplexProblem(problem, context);
   }
 
   /**
    * Analyze root cause of an issue
    */
-  async analyzeRootCause(issue: string, symptoms: string[], context: Record<string, any>): Promise<AnalysisResult> {
+  async analyzeRootCause(
+    issue: string,
+    symptoms: string[],
+    context: Record<string, unknown>
+  ): Promise<AnalysisResult> {
     return this.analyzer.analyzeRootCause(issue, symptoms, context);
   }
 
   /**
    * Generate Work Breakdown Structure
    */
-  async generateWBS(task: string, requirements: string[], constraints: Record<string, any>): Promise<AnalysisResult> {
+  async generateWBS(
+    task: string,
+    requirements: string[],
+    constraints: Record<string, unknown>
+  ): Promise<AnalysisResult> {
     return this.analyzer.generateWBS(task, requirements, constraints);
   }
 }

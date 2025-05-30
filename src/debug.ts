@@ -49,7 +49,7 @@ function updateConsolePatch(): void {
   if (isDebugEnabled()) {
     console.log = originalConsoleLog;
   } else {
-    console.log = () => {
+    console.log = (): void => {
       /* noop when debug disabled */
     };
   }

@@ -56,7 +56,7 @@ export class AssetService {
       const localPathAbsolute = join(assetsDir, safeFileName);
 
       if (await this.adapter.exists(localPathAbsolute)) {
-        console.log(`AssetService: Asset "${safeFileName}" already exists. Using cached.`);
+        // Debug: Asset already exists, using cached
         return localPathRelative; // Return path relative to plugin data dir for Obsidian links
       }
 
@@ -68,7 +68,7 @@ export class AssetService {
         return null;
       }
       await this.adapter.writeBinary(localPathAbsolute, assetData);
-      console.log(`AssetService: Downloaded "${absoluteAssetUrl}" to "${localPathAbsolute}"`);
+      // Debug: Downloaded asset
       return localPathRelative;
     } catch (error) {
       console.error(`AssetService: Failed to download asset "${absoluteAssetUrl}":`, error);

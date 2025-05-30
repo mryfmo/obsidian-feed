@@ -41,15 +41,15 @@ jobs:
           else
             TITLE="${{ github.event.issue.title || '' }}"
           fi
-          
+
           # Extract phase label from title
           PHASE=$(echo "$TITLE" | grep -oE '^(FETCH|INV|ANA|PLAN|BUILD|VERIF|REL):' | sed 's/://' || echo "")
-          
+
           # Default to INV if no phase found
           PHASE=${PHASE:-INV}
           echo "phase=$PHASE" >> $GITHUB_OUTPUT
           echo "Current phase: $PHASE"
-          
+
           # Determine next phase
           case $PHASE in
             FETCH) NEXT="INV" ;;
@@ -80,14 +80,14 @@ jobs:
           script: |
             const phase = '${{ steps.phase.outputs.phase }}';
             const validPhases = ['FETCH', 'INV', 'ANA', 'PLAN', 'BUILD', 'VERIF', 'REL'];
-            
+
             if (!validPhases.includes(phase)) {
               console.log('Invalid phase detected, skipping label update');
               return;
             }
-            
+
             const issue_number = context.issue.number;
-            
+
             try {
               // Get current labels
               const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({

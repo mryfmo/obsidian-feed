@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Types from the plugin
 import type { FeedInfo } from '../../src/types';
-import type FeedsReaderPlugin from '../../src/main';
+import type { IFeedsReaderPlugin } from '../../src/pluginTypes';
 import type { NetworkService } from '../../src/networkService';
 import type { ContentParserService } from '../../src/contentParserService';
 import type { AssetService } from '../../src/assetService';
@@ -44,14 +44,14 @@ const ATOM_SAMPLE = `<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://w
 /* Minimal plugin & service mocks                                              */
 /* -------------------------------------------------------------------------- */
 
-function createPlugin(): FeedsReaderPlugin {
+function createPlugin(): IFeedsReaderPlugin {
   return {
     settings: {
       enableHtmlCache: false,
       enableAssetDownload: false,
     },
     manifest: { id: 'test-plugin' },
-  } as unknown as FeedsReaderPlugin;
+  } as unknown as IFeedsReaderPlugin;
 }
 
 const createNetworkMock = (): NetworkService =>
@@ -96,7 +96,7 @@ function mockHttpResponse(url: string, xml: string) {
 /* -------------------------------------------------------------------------- */
 
 describe('getFeedItems', () => {
-  let plugin: FeedsReaderPlugin;
+  let plugin: IFeedsReaderPlugin;
   let net: NetworkService;
   let parser: ContentParserService;
   let asset: AssetService;

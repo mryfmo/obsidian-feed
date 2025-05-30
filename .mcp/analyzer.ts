@@ -1,5 +1,3 @@
-// MCPClient type is just 'any' for now since we use generic client
-
 export interface AnalysisResult {
   success: boolean;
   insights?: string[];
@@ -8,8 +6,37 @@ export interface AnalysisResult {
   error?: string;
 }
 
+export interface AnalysisContext {
+  environment?: string;
+  recentChanges?: Array<{ timestamp: string; description: string }>;
+  errorLogs?: Array<{ type: string; message: string; timestamp: string }>;
+  performanceMetrics?: {
+    avgResponseTime: number;
+    maxResponseTime: number;
+    errorRate: number;
+  };
+  stackTrace?: string;
+  memoryUsage?: {
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+  };
+  dependencies?: string[];
+  complexity?: number;
+  [key: string]: unknown;
+}
+
+export interface SequentialThinkingClient {
+  analyze(params: { problem: string; context: AnalysisContext; steps: string[] }): Promise<{
+    success: boolean;
+    insights: string[];
+    recommendations: string[];
+    warnings?: string[];
+  }>;
+}
+
 export interface MCPClients {
-  sequentialThinking?: any; // Generic MCP client
+  sequentialThinking?: SequentialThinkingClient;
 }
 
 export class Analyzer {
@@ -18,10 +45,7 @@ export class Analyzer {
   /**
    * Analyze a complex problem using sequential thinking
    */
-  async analyzeComplexProblem(
-    problem: string,
-    context: Record<string, any>
-  ): Promise<AnalysisResult> {
+  async analyzeComplexProblem(problem: string, context: AnalysisContext): Promise<AnalysisResult> {
     try {
       // Try MCP sequential-thinking server first if available
       if (this.mcpClients?.sequentialThinking) {
@@ -34,27 +58,27 @@ export class Analyzer {
               'Identify key components',
               'Analyze dependencies',
               'Evaluate risks',
-              'Generate recommendations'
-            ]
+              'Generate recommendations',
+            ],
           });
-          
+
           return {
             success: true,
             insights: result.insights,
             recommendations: result.recommendations,
-            warnings: result.warnings
+            warnings: result.warnings,
           };
         } catch (mcpError) {
           console.warn('MCP sequential-thinking failed, falling back to local analysis:', mcpError);
         }
       }
-      
+
       // Fallback to local analysis
-      return this.localAnalysis(problem, context);
-    } catch (error: any) {
+      return Analyzer.localAnalysis(problem, context);
+    } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -65,7 +89,7 @@ export class Analyzer {
   async analyzeRootCause(
     issue: string,
     symptoms: string[],
-    context: Record<string, any>
+    context: AnalysisContext
   ): Promise<AnalysisResult> {
     try {
       // Try MCP sequential-thinking server first if available
@@ -75,34 +99,34 @@ export class Analyzer {
             problem: `Root cause analysis for: ${issue}`,
             context: {
               symptoms,
-              ...context
+              ...context,
             },
             steps: [
               'List all symptoms',
               'Identify common patterns',
               'Trace to potential causes',
               'Evaluate each cause',
-              'Determine most likely root cause'
-            ]
+              'Determine most likely root cause',
+            ],
           });
-          
+
           return {
             success: true,
             insights: result.insights,
             recommendations: result.recommendations,
-            warnings: result.warnings
+            warnings: result.warnings,
           };
         } catch (mcpError) {
           console.warn('MCP root cause analysis failed, falling back to local:', mcpError);
         }
       }
-      
+
       // Fallback to local root cause analysis
-      return this.localRootCauseAnalysis(issue, symptoms, context);
-    } catch (error: any) {
+      return Analyzer.localRootCauseAnalysis(issue, symptoms, context);
+    } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -113,7 +137,7 @@ export class Analyzer {
   async generateWBS(
     task: string,
     requirements: string[],
-    constraints: Record<string, any>
+    constraints: Record<string, unknown>
   ): Promise<AnalysisResult> {
     try {
       // Try MCP sequential-thinking server first if available
@@ -123,53 +147,53 @@ export class Analyzer {
             problem: `Generate WBS for: ${task}`,
             context: {
               requirements,
-              constraints
+              constraints,
             },
             steps: [
               'Understand task objectives',
               'Identify major deliverables',
               'Break down into work packages',
               'Estimate effort and dependencies',
-              'Create hierarchical structure'
-            ]
+              'Create hierarchical structure',
+            ],
           });
-          
+
           return {
             success: true,
             insights: result.insights,
             recommendations: result.recommendations,
-            warnings: result.warnings
+            warnings: result.warnings,
           };
         } catch (mcpError) {
           console.warn('MCP WBS generation failed, falling back to local:', mcpError);
         }
       }
-      
+
       // Fallback to local WBS generation
-      return this.localGenerateWBS(task, requirements, constraints);
-    } catch (error: any) {
+      return Analyzer.localGenerateWBS(task, requirements, constraints);
+    } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
 
   // Local fallback methods
-  private localAnalysis(problem: string, context: Record<string, any>): AnalysisResult {
+  private static localAnalysis(problem: string, context: AnalysisContext): AnalysisResult {
     const insights: string[] = [];
     const recommendations: string[] = [];
     const warnings: string[] = [];
 
     // Basic local analysis logic
     insights.push(`Problem identified: ${problem}`);
-    
-    if (context.complexity === 'high') {
+
+    if (typeof context.complexity === 'number' && context.complexity > 7) {
       recommendations.push('Consider breaking down into smaller tasks');
       warnings.push('High complexity may require additional review');
     }
 
-    if (context.dependencies?.length > 5) {
+    if (context.dependencies && context.dependencies.length > 5) {
       warnings.push('Multiple dependencies detected - ensure proper coordination');
     }
 
@@ -177,14 +201,14 @@ export class Analyzer {
       success: true,
       insights,
       recommendations,
-      warnings
+      warnings,
     };
   }
 
-  private localRootCauseAnalysis(
+  private static localRootCauseAnalysis(
     issue: string,
     symptoms: string[],
-    context: Record<string, any>
+    context: AnalysisContext
   ): AnalysisResult {
     const insights: string[] = [];
     const recommendations: string[] = [];
@@ -192,28 +216,63 @@ export class Analyzer {
     insights.push(`Issue: ${issue}`);
     insights.push(`Symptoms count: ${symptoms.length}`);
 
+    // Analyze context for additional insights
+    if (context.environment) {
+      insights.push(`Environment: ${context.environment}`);
+    }
+
+    if (context.recentChanges) {
+      insights.push(`Recent changes detected: ${context.recentChanges.length} modifications`);
+      recommendations.push('Review recent changes for potential regression');
+    }
+
+    if (context.errorLogs && context.errorLogs.length > 0) {
+      const uniqueErrors = new Set(context.errorLogs.map(log => log.type || 'unknown'));
+      insights.push(`Error types found: ${Array.from(uniqueErrors).join(', ')}`);
+    }
+
     // Simple pattern matching for common issues
     if (symptoms.some(s => s.includes('timeout') || s.includes('slow'))) {
       insights.push('Performance-related issue detected');
       recommendations.push('Check network latency and resource utilization');
+
+      if (context.performanceMetrics) {
+        const { avgResponseTime } = context.performanceMetrics;
+        if (avgResponseTime > 1000) {
+          recommendations.push(
+            `Average response time is ${avgResponseTime}ms - consider optimization`
+          );
+        }
+      }
     }
 
     if (symptoms.some(s => s.includes('error') || s.includes('fail'))) {
       insights.push('Error-related issue detected');
       recommendations.push('Review error logs and stack traces');
+
+      if (context.stackTrace) {
+        const [topFrame] = context.stackTrace.split('\n');
+        insights.push(`Error origin: ${topFrame}`);
+      }
+    }
+
+    // Check for memory-related issues
+    if (context.memoryUsage && context.memoryUsage.heapUsed > context.memoryUsage.heapTotal * 0.9) {
+      insights.push('High memory usage detected');
+      recommendations.push('Consider memory profiling and optimization');
     }
 
     return {
       success: true,
       insights,
-      recommendations
+      recommendations,
     };
   }
 
-  private localGenerateWBS(
+  private static localGenerateWBS(
     task: string,
     requirements: string[],
-    constraints: Record<string, any>
+    constraints: Record<string, unknown>
   ): AnalysisResult {
     const insights: string[] = [];
     const recommendations: string[] = [];
@@ -226,9 +285,9 @@ export class Analyzer {
     recommendations.push('  1.1 Requirements analysis');
     recommendations.push('  1.2 Design documentation');
     recommendations.push('2. Implementation Phase');
-    requirements.forEach((req, i) => {
+    for (const [i, req] of requirements.entries()) {
       recommendations.push(`  2.${i + 1} Implement: ${req}`);
-    });
+    }
     recommendations.push('3. Testing Phase');
     recommendations.push('  3.1 Unit testing');
     recommendations.push('  3.2 Integration testing');
@@ -241,7 +300,7 @@ export class Analyzer {
     return {
       success: true,
       insights,
-      recommendations
+      recommendations,
     };
   }
 }

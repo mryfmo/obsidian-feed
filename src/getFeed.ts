@@ -2,9 +2,10 @@ import { Notice, request as obsidianRequest } from 'obsidian';
 import { parseISO, isValid, formatISO } from 'date-fns';
 import Parser from 'rss-parser';
 import { RssFeedContent, RssFeedContentSchema, FeedInfo, RssFeedItemWithBlocks } from './types';
-import { NetworkService, NetworkError } from './networkService';
+import { NetworkService } from './networkService';
+import { NetworkError } from './network/NetworkError';
 import { ContentParserService } from './contentParserService';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
 import { AssetService } from './assetService';
 import { generateDeterministicItemId, generateRandomUUID } from './utils';
 
@@ -71,7 +72,7 @@ function sanitizeFeedNameForFolderName(feedName: string): string {
 }
 
 export async function getFeedItems(
-  plugin: FeedsReaderPlugin,
+  plugin: IFeedsReaderPlugin,
   feedInfo: FeedInfo,
   networkService: NetworkService,
   contentParserService: ContentParserService,
@@ -200,7 +201,7 @@ export async function getFeedItems(
     };
 
     if (!feedData.items || feedData.items.length === 0) {
-      console.log(`getFeedItems: No items found in feed "${feedName}".`);
+      // Debug: No items found in feed
       return feedObj; // Return feed metadata even if no items
     }
 

@@ -13,21 +13,21 @@ jobs:
     strategy:
       matrix:
         scenario:
-          - name: "Shallow Clone"
+          - name: 'Shallow Clone'
             fetch-depth: 1
-          - name: "Full Clone"
+          - name: 'Full Clone'
             fetch-depth: 0
-          - name: "No History"
+          - name: 'No History'
             fetch-depth: 1
-            
+
     name: Test - ${{ matrix.scenario.name }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ matrix.scenario.fetch-depth }}
-          
+
       - name: Setup test environment
         run: |
           echo "Testing scenario: ${{ matrix.scenario.name }}"
@@ -35,11 +35,11 @@ jobs:
           git log --oneline -5 || echo "Limited history available"
           echo "Tags:"
           git tag -l || echo "No tags found"
-          
+
       - name: Test path-guard logic
         run: |
           echo "Testing path guard git commands..."
-          
+
           # Simulate the git diff command from path-guard.yml
           # This should not fail even with shallow clone
           if [ "${{ matrix.scenario.name }}" = "Shallow Clone" ]; then
@@ -54,15 +54,15 @@ jobs:
             echo "Comparing $BASE_SHA...$HEAD_SHA"
             git diff --name-only "${BASE_SHA}...${HEAD_SHA}" || echo "Diff failed gracefully"
           fi
-          
+
       - name: Test release patch creation
         run: |
           echo "Testing release workflow git commands..."
-          
+
           # Test root commit detection
           ROOT_COMMIT=$(git rev-list --max-parents=0 HEAD 2>/dev/null || echo "none")
           echo "Root commit: $ROOT_COMMIT"
-          
+
           # Test tag detection
           if git describe --abbrev=0 --tags HEAD 2>/dev/null; then
             LAST_TAG=$(git describe --abbrev=0 --tags HEAD)
@@ -70,21 +70,21 @@ jobs:
           else
             echo "No tags found - would use root commit"
           fi
-          
+
           # Test patch creation (should not fail)
           if [ "${{ matrix.scenario.name }}" != "No History" ]; then
             git diff HEAD~1..HEAD 2>/dev/null > test.patch || touch test.patch
             echo "Patch size: $(wc -c < test.patch) bytes"
           fi
-          
+
       - name: Test turn_guard diff commands
         run: |
           echo "Testing turn_guard git commands..."
-          
+
           # Create a test file
           echo "test" > test.txt
           git add test.txt || true
-          
+
           # Test the diff size calculation
           if diff_output=$(git diff --cached --numstat 2>/dev/null); then
             added=$(echo "$diff_output" | awk '{a+=$1}END{print a}')
@@ -93,29 +93,29 @@ jobs:
           else
             echo "Diff calculation handled gracefully"
           fi
-          
+
           # Clean up
           git reset HEAD test.txt 2>/dev/null || true
           rm -f test.txt
-          
+
       - name: Validate error handling
         run: |
           echo "Testing error scenarios..."
-          
+
           # Test with invalid refs
           git diff invalid-ref-1...invalid-ref-2 2>/dev/null || echo "✓ Invalid ref handled"
-          
+
           # Test with empty diff
           git diff --name-only --cached 2>/dev/null | grep -q '^nonexistent/' || echo "✓ Empty grep handled"
-          
+
           # Test command chaining
           false || echo "✓ Error chaining works"
-          
+
   summary:
     needs: validate-git-robustness
     runs-on: ubuntu-latest
     if: always()
-    
+
     steps:
       - name: Summary
         run: |

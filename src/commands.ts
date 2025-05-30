@@ -2,14 +2,14 @@ import { Notice } from 'obsidian';
 import { FRAddFeedModal } from './addFeedModal';
 import { FRManageFeedsModal } from './manageFeedsModal';
 import { FRSearchModal } from './searchModal';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
 import { FeedsReaderView } from './view';
 
-export function registerCommands(plugin: FeedsReaderPlugin) {
+export function registerCommands(plugin: IFeedsReaderPlugin): void {
   plugin.addCommand({
     id: 'open-feeds-reader',
     name: 'Open Feeds Reader',
-    callback: async () => {
+    callback: async (): Promise<void> => {
       // Ensure activateView exists and call it
       if (typeof plugin.activateView === 'function') {
         await plugin.activateView();
@@ -23,7 +23,7 @@ export function registerCommands(plugin: FeedsReaderPlugin) {
   plugin.addCommand({
     id: 'add-new-feed',
     name: 'Add New Feed…',
-    callback: () => {
+    callback: (): void => {
       new FRAddFeedModal(plugin.app, plugin).open();
     },
   });
@@ -31,7 +31,7 @@ export function registerCommands(plugin: FeedsReaderPlugin) {
   plugin.addCommand({
     id: 'manage-feeds',
     name: 'Manage Subscriptions…',
-    callback: () => {
+    callback: (): void => {
       new FRManageFeedsModal(plugin.app, plugin).open();
     },
   });

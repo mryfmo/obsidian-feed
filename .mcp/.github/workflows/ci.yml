@@ -2,95 +2,95 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, dev ]
+    branches: [main, master, dev]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         node-version: [18.x, 20.x]
-    
+
     steps:
-    - uses: actions/checkout@v4
-      
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: .mcp/package-lock.json
-    
-    - name: Install dependencies
-      run: |
-        cd .mcp
-        npm ci
-    
-    - name: Run linter
-      run: |
-        cd .mcp
-        npm run lint
-      continue-on-error: true
-    
-    - name: Type check
-      run: |
-        cd .mcp
-        npm run typecheck
-    
-    - name: Run unit tests
-      run: |
-        cd .mcp
-        npm run test:unit
-    
-    - name: Run integration tests
-      run: |
-        cd .mcp
-        npm run test:integration
-    
-    - name: Generate coverage report
-      run: |
-        cd .mcp
-        npm run test:coverage
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        directory: .mcp/coverage
-        flags: mcp-tests
-        name: mcp-coverage
-      if: matrix.node-version == '20.x'
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: .mcp/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd .mcp
+          npm ci
+
+      - name: Run linter
+        run: |
+          cd .mcp
+          npm run lint
+        continue-on-error: true
+
+      - name: Type check
+        run: |
+          cd .mcp
+          npm run typecheck
+
+      - name: Run unit tests
+        run: |
+          cd .mcp
+          npm run test:unit
+
+      - name: Run integration tests
+        run: |
+          cd .mcp
+          npm run test:integration
+
+      - name: Generate coverage report
+        run: |
+          cd .mcp
+          npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: .mcp/coverage
+          flags: mcp-tests
+          name: mcp-coverage
+        if: matrix.node-version == '20.x'
 
   shell-compatibility:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Test turn_guard.sh
-      run: |
-        chmod +x tools/turn_guard.sh
-        # Test that shell script works without MCP
-        echo "FETCH: Test" > test.md
-        echo "<think>" >> test.md
-        echo "This is a test with enough words to pass validation" >> test.md
-        echo "</think>" >> test.md
-        tools/turn_guard.sh test.md || echo "Exit code: $?"
-    
-    - name: Test fetch_doc.sh
-      run: |
-        chmod +x tools/fetch_doc.sh
-        # Test file fetch
-        echo "Test content" > test.txt
-        tools/fetch_doc.sh test.txt output.txt
-        test -f output.txt && echo "File fetch successful"
-    
-    - name: Test with MCP bridge
-      run: |
-        cd .mcp
-        npm ci
-        cd ..
-        # Test with MCP bridge available
-        tools/turn_guard.sh test.md || echo "Exit code: $?"
+      - uses: actions/checkout@v4
+
+      - name: Test turn_guard.sh
+        run: |
+          chmod +x tools/turn_guard.sh
+          # Test that shell script works without MCP
+          echo "FETCH: Test" > test.md
+          echo "<think>" >> test.md
+          echo "This is a test with enough words to pass validation" >> test.md
+          echo "</think>" >> test.md
+          tools/turn_guard.sh test.md || echo "Exit code: $?"
+
+      - name: Test fetch_doc.sh
+        run: |
+          chmod +x tools/fetch_doc.sh
+          # Test file fetch
+          echo "Test content" > test.txt
+          tools/fetch_doc.sh test.txt output.txt
+          test -f output.txt && echo "File fetch successful"
+
+      - name: Test with MCP bridge
+        run: |
+          cd .mcp
+          npm ci
+          cd ..
+          # Test with MCP bridge available
+          tools/turn_guard.sh test.md || echo "Exit code: $?"

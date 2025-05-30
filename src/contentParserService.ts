@@ -58,7 +58,7 @@ export class ContentParserService {
     const root = this.pickRoot($);
     const blocks: ContentBlock[] = [];
 
-    const walk = async (el: Element) => {
+    const walk = async (el: Element): Promise<void> => {
       if (!el || el.type !== 'tag') return; // Ensure it's a tag element
 
       const tag = el.tagName.toLowerCase();

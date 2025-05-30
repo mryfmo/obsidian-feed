@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting, Notice, TextComponent } from 'obsidian';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
 import { FeedsReaderSettings } from './types';
 import { SAVED_SNIPPETS_FNAME } from './constants';
 
@@ -19,9 +19,9 @@ type BooleanSettingKey = keyof Pick<
 >;
 
 export class FeedReaderSettingTab extends PluginSettingTab {
-  plugin: FeedsReaderPlugin;
+  plugin: IFeedsReaderPlugin;
 
-  constructor(app: App, plugin: FeedsReaderPlugin) {
+  constructor(app: App, plugin: IFeedsReaderPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -43,7 +43,7 @@ export class FeedReaderSettingTab extends PluginSettingTab {
         text.onChange(async value => {
           // Add async for saveSettings
           const num = parseInt(value, 10);
-          if (!isNaN(num) && num > 0) {
+          if (!Number.isNaN(num) && num > 0) {
             this.plugin.settings.nItemPerPage = num;
             await this.plugin.saveSettings();
           } else {
@@ -130,8 +130,8 @@ export class FeedReaderSettingTab extends PluginSettingTab {
         text.inputEl.type = 'number';
         text.setValue(this.plugin.settings.latestNCount.toString());
         text.onChange(async value => {
-          const num = parseInt(value);
-          if (!isNaN(num) && num >= 0) {
+          const num = parseInt(value, 10);
+          if (!Number.isNaN(num) && num >= 0) {
             this.plugin.settings.latestNCount = num;
             await this.plugin.saveSettings();
           }
@@ -266,7 +266,7 @@ export class FeedReaderSettingTab extends PluginSettingTab {
         text.setValue((this.plugin.settings.htmlCacheDurationMinutes ?? 1440).toString());
         text.onChange(async value => {
           const num = parseInt(value, 10);
-          if (!isNaN(num) && num > 0) {
+          if (!Number.isNaN(num) && num > 0) {
             this.plugin.settings.htmlCacheDurationMinutes = num;
           } else {
             this.plugin.settings.htmlCacheDurationMinutes = 1440; // Fallback to default

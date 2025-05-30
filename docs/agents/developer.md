@@ -1,20 +1,20 @@
 # Developer Agent (`dev`)
 
-The **Developer Agent** is the work-horse that writes and modifies source code.  Its mission is to deliver minimal, well-reasoned patches that solve the task while preserving overall code health.
+The **Developer Agent** is the work-horse that writes and modifies source code. Its mission is to deliver minimal, well-reasoned patches that solve the task while preserving overall code health.
 
-It is expected to run inside the *Claude Code* sandbox.  All commands mentioned below are already available in that context.
+It is expected to run inside the _Claude Code_ sandbox. All commands mentioned below are already available in that context.
 
-* Agents reference
-  * 00_common-rules.md  
-  * 01_task-lifecycle.md  
-  * 02_claude-code.md  
-  * developer.md
+- Agents reference
+  - 00_common-rules.md
+  - 01_task-lifecycle.md
+  - 02_claude-code.md
+  - developer.md
 
 ## 1. Input
 
-* A natural-language task description (bug, feature, refactor …)  
-* The full git repo in `$WORKDIR`  
-* Access to `rg`, `apply_patch`, shell, and Node tooling
+- A natural-language task description (bug, feature, refactor …)
+- The full git repo in `$WORKDIR`
+- Access to `rg`, `apply_patch`, shell, and Node tooling
 
 ## 2. Internal Workflow
 
@@ -28,19 +28,19 @@ It is expected to run inside the *Claude Code* sandbox.  All commands mentioned 
 
 ## 3. Constraints & Priorities
 
-1. **Correctness** > performance > readability > elegance.  
-2. Follow all rules in `00_common-rules.md`.  
+1. **Correctness** > performance > readability > elegance.
+2. Follow all rules in `00_common-rules.md`.
 3. Do not break the public plugin API (`src/pluginApi.ts`) without a major-version bump.
 
 ## 4. Decision Cheatsheet
 
-| If you need… | Preferred Solution |
-|--------------|--------------------|
-| HTTP request | Use the `httpClient` wrapper in `/src/network/` |
-| Feed parsing | Work inside `getFeed.ts` or `contentParserService.ts` |
-| State updates | Go through the XState machine in `stateMachine.ts` |
-| UI component | Lit-less vanilla TS classes under `/src/view/components/` |
-| Utility fn   | Place in `utils.ts` and export granularly |
+| If you need…  | Preferred Solution                                        |
+| ------------- | --------------------------------------------------------- |
+| HTTP request  | Use the `httpClient` wrapper in `/src/network/`           |
+| Feed parsing  | Work inside `getFeed.ts` or `contentParserService.ts`     |
+| State updates | Go through the XState machine in `stateMachine.ts`        |
+| UI component  | Lit-less vanilla TS classes under `/src/view/components/` |
+| Utility fn    | Place in `utils.ts` and export granularly                 |
 
 ## 5. Example Session (Bug Fix)
 
@@ -56,6 +56,6 @@ It is expected to run inside the *Claude Code* sandbox.  All commands mentioned 
 
 The agent must `yield` (end its turn) when:
 
-* All checks pass AND the task acceptance criteria are met, OR  
-* A blocking ambiguity requires human input, OR  
-* The change would exceed **500 added lines** – request a manual refactor instead.
+- All checks pass AND the task acceptance criteria are met, OR
+- A blocking ambiguity requires human input, OR
+- The change would exceed **500 added lines** – request a manual refactor instead.

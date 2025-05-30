@@ -1,18 +1,18 @@
 import { App, Modal, sanitizeHTMLToDom } from 'obsidian';
-import FeedsReaderPlugin from './main';
+import { IFeedsReaderPlugin } from './pluginTypes';
 
 export class FRSearchModal extends Modal {
   private currentFeedName: string | null;
 
-  private plugin: FeedsReaderPlugin;
+  private plugin: IFeedsReaderPlugin;
 
-  constructor(app: App, currentFeedName: string | null, plugin: FeedsReaderPlugin) {
+  constructor(app: App, currentFeedName: string | null, plugin: IFeedsReaderPlugin) {
     super(app);
     this.currentFeedName = currentFeedName;
     this.plugin = plugin;
   }
 
-  onOpen() {
+  onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('fr-search-modal');
@@ -39,7 +39,7 @@ export class FRSearchModal extends Modal {
     resultsDiv.style.border = '1px solid var(--background-modifier-border)';
     resultsDiv.style.padding = '0.5em';
 
-    const doSearch = () => {
+    const doSearch = (): void => {
       const query = searchInput.value.trim();
       resultsDiv.empty();
       if (!query) {
@@ -79,7 +79,7 @@ export class FRSearchModal extends Modal {
           text: `${results.length} result(s) found for "${query}":`,
           cls: 'fr-search-summary',
         });
-        results.forEach(item => {
+        results.forEach((item): void => {
           const resItemContainer = resultsDiv.createEl('div', { cls: 'fr-search-result' });
           resItemContainer.createEl('b', { text: item.title || 'Untitled' });
           let contentSnippet = (sanitizeHTMLToDom(item.content || '').textContent || '').substring(
@@ -94,13 +94,13 @@ export class FRSearchModal extends Modal {
 
     const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
     const searchButton = buttonContainer.createEl('button', { text: 'Search', cls: 'mod-cta' });
-    searchButton.addEventListener('click', doSearch);
+    searchButton.addEventListener('click', (): void => doSearch());
 
     const closeButtonModal = buttonContainer.createEl('button', { text: 'Close' });
-    closeButtonModal.addEventListener('click', () => this.close());
+    closeButtonModal.addEventListener('click', (): void => this.close());
 
     searchInput.focus();
-    searchInput.addEventListener('keypress', e => {
+    searchInput.addEventListener('keypress', (e): void => {
       if (e.key === 'Enter') {
         e.preventDefault();
         doSearch();
@@ -108,7 +108,7 @@ export class FRSearchModal extends Modal {
     });
   }
 
-  onClose() {
+  onClose(): void {
     this.contentEl.empty();
   }
 }

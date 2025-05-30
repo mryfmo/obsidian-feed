@@ -4,6 +4,7 @@ import { FeedsReaderSettings } from './types';
 import { safeGetPluginFeedsReaderDir, safePathJoin } from './pathUtils';
 import { HTML_CACHE_DIR } from './constants';
 import { createHttpClient } from './network/httpClient';
+import { NetworkError } from './network/NetworkError';
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
@@ -11,16 +12,6 @@ const ACCEPT =
   'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
 const AXIOS_TIMEOUT = 15000; // 15 seconds timeout
 const http = createHttpClient();
-
-export class NetworkError extends Error {
-  constructor(
-    message: string,
-    public status?: number
-  ) {
-    super(message);
-    this.name = 'NetworkError';
-  }
-}
 
 /**
  * This service will be responsible for fetching HTML content from URLs
@@ -59,10 +50,10 @@ export class NetworkService {
         const stats = await this.adapter.stat(cachePath);
         const cacheAgeMinutes = (Date.now() - (stats?.mtime || 0)) / (1000 * 60);
         if (cacheAgeMinutes < (this.settings.htmlCacheDurationMinutes ?? 1440)) {
-          console.log(`NetworkService: Serving HTML from cache for ${url}`);
+          // Debug: Serving HTML from cache
           return await this.adapter.read(cachePath);
         }
-        console.log(`NetworkService: Cache expired for ${url}. Fetching fresh content.`);
+        // Debug: Cache expired, fetching fresh content
       }
     } catch (e) {
       console.warn(
@@ -75,7 +66,7 @@ export class NetworkService {
     if (html) {
       try {
         await this.adapter.write(cachePath, html);
-        console.log(`NetworkService: Cached HTML for ${url}`);
+        // Debug: Cached HTML
       } catch (e) {
         console.error(`NetworkService: Failed to write HTML to cache for ${url}. Error:`, e);
       }
@@ -90,7 +81,7 @@ export class NetworkService {
 
   async fetchBinary(url: string): Promise<ArrayBuffer | null> {
     try {
-      console.log(`NetworkService: Fetching binary with axios: ${url}`);
+      // Debug: Fetching binary with axios
       const response = await http.get<ArrayBuffer>(url, {
         headers: { 'User-Agent': USER_AGENT, Accept: ACCEPT }, // Keep it simple for binary files
         timeout: AXIOS_TIMEOUT * 2, // Allow longer timeout for potentially large assets
@@ -109,7 +100,7 @@ export class NetworkService {
   // Internal method using http client
   private async fetchWithHttp(url: string): Promise<string | null> {
     try {
-      console.log(`NetworkService: Fetching with http: ${url}`);
+      // Debug: Fetching with http
       const response = await http.get<string>(url, {
         headers: { 'User-Agent': USER_AGENT, Accept: ACCEPT },
         timeout: AXIOS_TIMEOUT,
@@ -126,11 +117,14 @@ export class NetworkService {
   }
 
   // Simple hash function (non-cryptographic)
+  // eslint-disable-next-line no-bitwise
   private simpleHash(str: string): string {
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
+    for (let i = 0; i < str.length; i += 1) {
       const char = str.charCodeAt(i);
+      // eslint-disable-next-line no-bitwise
       hash = (hash << 5) - hash + char;
+      // eslint-disable-next-line no-bitwise
       hash |= 0; // Convert to 32bit integer
     }
     return Math.abs(hash).toString(16);

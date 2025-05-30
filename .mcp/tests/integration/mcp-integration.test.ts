@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { MCPIntegration } from '../../index';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 import axios from 'axios';
+import { MCPIntegration } from '../../index';
 
 // Mock dependencies
 vi.mock('fs');
@@ -11,8 +11,8 @@ vi.mock('axios');
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: vi.fn().mockImplementation(() => ({
     connect: vi.fn().mockResolvedValue(undefined),
-    callTool: vi.fn()
-  }))
+    callTool: vi.fn(),
+  })),
 }));
 vi.mock('turndown', () => {
   return {
@@ -24,7 +24,7 @@ vi.mock('turndown', () => {
           .replace(/<h2>([^<]+)<\/h2>/g, '## $1')
           .replace(/<[^>]+>/g, ''); // Remove other HTML tags
       }
-    }
+    },
   };
 });
 vi.mock('../../context7', () => {
@@ -33,24 +33,24 @@ vi.mock('../../context7', () => {
       async initialize() {
         return undefined;
       }
-      
+
       async getDocumentation(libraryName: string) {
         if (libraryName === 'react') {
           return {
             content: '# React Documentation\n\nReact is a JavaScript library...',
             version: '18.2.0',
-            libraryId: 'react'
+            libraryId: 'react',
           };
         }
         throw new Error(`Library ${libraryName} not found`);
       }
-    }
+    },
   };
 });
 
 describe('MCPIntegration', () => {
   let integration: MCPIntegration;
-  
+
   beforeEach(() => {
     vi.resetAllMocks();
     integration = new MCPIntegration();
@@ -88,9 +88,9 @@ Next: Investigate the current implementation
 
       vi.mocked(fs.readFileSync).mockReturnValue(turnContent);
       vi.mocked(execSync).mockReturnValue(''); // No git changes
-      
+
       const result = await integration.validate('turn-001.md');
-      
+
       expect(result.valid).toBe(true);
       expect(result.phase).toBe('FETCH');
       expect(result.errors).toHaveLength(0);
@@ -105,9 +105,9 @@ https://api.example.com/data
 </act>`;
 
       vi.mocked(fs.readFileSync).mockReturnValue(invalidContent);
-      
+
       const result = await integration.validate('invalid-turn.md', { checkAllGuards: true });
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(1);
       expect(result.errors.some(e => e.includes('G-TOKEN'))).toBe(true); // Missing think
@@ -120,17 +120,17 @@ https://api.example.com/data
     it('should fetch and validate documentation sources', async () => {
       // Clear any previous mocks
       vi.clearAllMocks();
-      
+
       // Mock axios.get for successful fetches
       const axiosGet = vi.mocked(axios.get);
       axiosGet.mockResolvedValue({
         status: 200,
         data: '<html><body><h1>Documentation</h1></body></html>',
-        headers: { 'content-type': 'text/html' }
+        headers: { 'content-type': 'text/html' },
       });
-      
+
       // Mock file system operations for caching
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
+      vi.mocked(fs.existsSync).mockImplementation(path => {
         const pathStr = path.toString();
         // Cache directory exists
         if (pathStr.endsWith('.cache/fetch')) {
@@ -144,7 +144,7 @@ https://api.example.com/data
       });
       vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
-      vi.mocked(fs.readFileSync).mockImplementation((path) => {
+      vi.mocked(fs.readFileSync).mockImplementation(path => {
         const pathStr = path.toString();
         if (pathStr.includes('.cache/fetch/')) {
           throw new Error('No cache file');
@@ -152,9 +152,9 @@ https://api.example.com/data
         // Default behavior for other files
         throw new Error('File not found');
       });
-      
+
       const results = await integration.fetch(['https://example.com/docs', 'react']);
-      
+
       expect(results).toHaveLength(2);
       expect(results[0].success).toBe(true);
       expect(results[0].content).toContain('# Documentation');
@@ -164,26 +164,26 @@ https://api.example.com/data
 
     it('should handle mixed success and failure', async () => {
       vi.mocked(axios.get)
-        .mockResolvedValueOnce({ 
-          status: 200, 
+        .mockResolvedValueOnce({
+          status: 200,
           data: 'Success',
-          headers: { 'content-type': 'text/plain' }
+          headers: { 'content-type': 'text/plain' },
         })
         .mockRejectedValueOnce(new Error('Network error'));
-      
+
       // Ensure cache directory exists
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
+      vi.mocked(fs.existsSync).mockImplementation(path => {
         if (path.toString().includes('.cache/fetch')) {
           return path.toString().endsWith('.cache/fetch');
         }
         return false;
       });
-      
+
       const results = await integration.fetch([
         'https://example.com/success',
-        'https://example.com/fail'
+        'https://example.com/fail',
       ]);
-      
+
       expect(results[0].success).toBe(true);
       expect(results[0].content).toBe('Success');
       expect(results[1].success).toBe(false);
@@ -211,15 +211,13 @@ Investigating the current implementation
 State-Transition: INV→ANA
 </next>`;
 
-      vi.mocked(fs.readFileSync)
-        .mockReturnValueOnce(fetchContent)
-        .mockReturnValueOnce(invContent);
-      
+      vi.mocked(fs.readFileSync).mockReturnValueOnce(fetchContent).mockReturnValueOnce(invContent);
+
       // Validate FETCH phase
       const fetchResult = await integration.validate('fetch-turn.md');
       expect(fetchResult.valid).toBe(true);
       expect(fetchResult.phase).toBe('FETCH');
-      
+
       // Validate INV phase with transition
       const invResult = await integration.validate('inv-turn.md');
       expect(invResult.valid).toBe(true);
@@ -228,13 +226,13 @@ State-Transition: INV→ANA
 
     it('should manage GitHub labels through workflow', async () => {
       vi.mocked(execSync).mockReturnValue('');
-      
+
       const result = await integration.workflow('update-phase', {
         issueNumber: 123,
         fromPhase: 'BUILD',
-        toPhase: 'VERIF'
+        toPhase: 'VERIF',
       });
-      
+
       expect(result.success).toBe(true);
       expect(vi.mocked(execSync)).toHaveBeenCalledWith(
         expect.stringContaining('--remove-label "phase:BUILD"'),
@@ -257,45 +255,47 @@ ${Array(30).fill('word').join(' ')}
 
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockReturnValue('');
-      
+
       // Simulate shell script calling through bridge
       const result = await integration.validate(turnPath);
-      
+
       expect(result.valid).toBe(true);
-      
+
       // Verify exit code compatibility
-      const exitCode = result.valid ? 0 : (result.guardFailures?.[0]?.exitCode || 1);
+      const exitCode = result.valid ? 0 : result.guardFailures?.[0]?.exitCode || 1;
       expect(exitCode).toBe(0);
     });
 
     it('should return correct exit codes for specific guard failures', async () => {
       // Create fresh integration instance to avoid cache issues
       const freshIntegration = new MCPIntegration();
-      
+
       const scenarios = [
         {
           content: 'FETCH: Test\n<act>No think section at all</act>',
           expectedGuard: 'G-TOKEN',
-          expectedExitCode: 11
+          expectedExitCode: 11,
         },
         {
           content: `BUILD: Implementation\n<think>${Array(30).fill('word').join(' ')}</think>\n<act>https://example.com</act>`,
           expectedGuard: 'G-NET',
-          expectedExitCode: 13
-        }
+          expectedExitCode: 13,
+        },
       ];
-      
+
       for (const scenario of scenarios) {
         vi.clearAllMocks(); // Clear all mocks between scenarios
         vi.mocked(fs.readFileSync).mockReturnValue(scenario.content);
         vi.mocked(execSync).mockImplementation(() => ''); // Reset exec mock
-        
-        const result = await freshIntegration.validate(`test-${scenario.expectedGuard}.md`, { checkAllGuards: true });
-        
+
+        const result = await freshIntegration.validate(`test-${scenario.expectedGuard}.md`, {
+          checkAllGuards: true,
+        });
+
         expect(result.valid).toBe(false);
         expect(result.guardFailures).toBeDefined();
         expect(result.guardFailures!.length).toBeGreaterThan(0);
-        
+
         const guardFailure = result.guardFailures?.find(g => g.guard === scenario.expectedGuard);
         expect(guardFailure).toBeDefined();
         expect(guardFailure?.exitCode).toBe(scenario.expectedExitCode);
@@ -309,47 +309,47 @@ ${Array(30).fill('word').join(' ')}
       const mockClients = {
         filesystem: { callTool: vi.fn() },
         github: { callTool: vi.fn() },
-        memory: { callTool: vi.fn() }
+        memory: { callTool: vi.fn() },
       };
-      
+
       // Test with MCP clients
       new MCPIntegration(mockClients as any);
-      
+
       // Should use MCP filesystem for file operations
       mockClients.filesystem.callTool.mockResolvedValue({
-        content: 'File content from MCP'
+        content: 'File content from MCP',
       });
-      
+
       // Mock filesystem methods for fetcher
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      
+
       const mcpClientsWithMethods = {
         filesystem: {
           read_file: vi.fn().mockResolvedValue({
-            content: 'File content from MCP'
-          })
-        }
+            content: 'File content from MCP',
+          }),
+        },
       };
-      
+
       const mcpIntegrationWithMcp = new MCPIntegration(mcpClientsWithMethods as any);
       const result = await mcpIntegrationWithMcp.fetch(['/path/to/file.txt']);
-      
+
       expect(result[0].success).toBe(true);
       expect(result[0].content).toBe('File content from MCP');
       expect(mcpClientsWithMethods.filesystem.read_file).toHaveBeenCalledWith({
-        path: '/path/to/file.txt'
+        path: '/path/to/file.txt',
       });
     });
 
     it('should fallback to direct methods when MCP unavailable', async () => {
       // No MCP clients provided
-      const integration = new MCPIntegration();
-      
+      const fallbackIntegration = new MCPIntegration();
+
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('Direct file content');
-      
-      const result = await integration.fetch(['/path/to/file.txt']);
-      
+
+      const result = await fallbackIntegration.fetch(['/path/to/file.txt']);
+
       expect(result[0].success).toBe(true);
       expect(result[0].content).toBe('Direct file content');
       expect(vi.mocked(fs.readFileSync)).toHaveBeenCalled();
@@ -365,15 +365,15 @@ ${Array(30).fill('word').join(' ')}
 
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockReturnValue('');
-      
+
       // First call
       const result1 = await integration.validate('test.md');
       expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledTimes(1);
-      
+
       // Second call - should use cache
       const result2 = await integration.validate('test.md');
       expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledTimes(1); // Not called again
-      
+
       expect(result1).toEqual(result2);
     });
 
@@ -386,10 +386,10 @@ ${Array(30).fill('word').join(' ')}
 
       vi.mocked(fs.readFileSync).mockReturnValue(content);
       vi.mocked(execSync).mockReturnValue('');
-      
+
       const promises = files.map(file => integration.validate(file));
       const results = await Promise.all(promises);
-      
+
       expect(results).toHaveLength(3);
       results.forEach(result => {
         expect(result.valid).toBe(true);
@@ -416,12 +416,12 @@ Approach here
 </act>`;
 
       vi.mocked(fs.readFileSync).mockReturnValue(content);
-      
+
       const result = await integration.validate('rfc.md', { checkAllGuards: true });
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.includes('RFC missing required section'))).toBe(true);
-      
+
       // Should still extract valid information
       expect(result.phase).toBe('PLAN');
     });
@@ -430,9 +430,9 @@ Approach here
       vi.mocked(fs.readFileSync).mockImplementation(() => {
         throw new Error('EACCES: permission denied');
       });
-      
+
       const result = await integration.validate('/protected/file.md');
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('permission denied');
     });
@@ -475,10 +475,9 @@ Implement a new REST API with:
 
       vi.mocked(fs.readFileSync).mockReturnValue(rfcContent);
       vi.mocked(execSync).mockImplementation(() => ''); // No git changes
-      
+
       const result = await integration.validate('rfc-api.md');
-      
-      
+
       expect(result.valid).toBe(true);
       expect(result.phase).toBe('PLAN');
     });
@@ -490,7 +489,7 @@ ${Array(30).fill('word').join(' ')}
 </think>`;
 
       vi.mocked(fs.readFileSync).mockReturnValue(content);
-      vi.mocked(execSync).mockImplementation((cmd) => {
+      vi.mocked(execSync).mockImplementation(cmd => {
         if (cmd.includes('git rev-parse')) {
           return ''; // We are in a git repo
         }
@@ -499,10 +498,10 @@ ${Array(30).fill('word').join(' ')}
         }
         return '';
       });
-      
+
       // Doc writer trying to edit source
       const result = await integration.validate('build.md', { role: 'doc', checkAllGuards: true });
-      
+
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.includes('doc role not allowed to edit src/'))).toBe(true);
     });

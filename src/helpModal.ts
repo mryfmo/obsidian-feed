@@ -6,18 +6,19 @@ import { App, Modal } from 'obsidian';
  * without pulling in extra code.
  */
 export class FRHelpModal extends Modal {
+  // eslint-disable-next-line no-useless-constructor
   constructor(app: App) {
     super(app);
   }
 
-  onOpen() {
+  onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl('h2', { text: 'Feeds Reader – Keyboard Shortcuts' });
 
     const list = contentEl.createEl('ul');
 
-    const addItem = (kbd: string, desc: string) => {
+    const addItem = (kbd: string, desc: string): void => {
       const li = list.createEl('li');
       li.createEl('kbd', { text: kbd });
       li.appendText(`  ${desc}`);
@@ -38,7 +39,7 @@ export class FRHelpModal extends Modal {
     });
   }
 
-  onClose() {
+  onClose(): void {
     this.contentEl.empty();
   }
 }
