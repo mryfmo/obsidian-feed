@@ -52,14 +52,19 @@ State-Transition: FETCH→INV
         });
         // If no error thrown, validation passed
         expect(true).toBe(true);
-      } catch (error: any) {
+      } catch (error) {
         // The turn guard detected some validation issues
         // This is a test setup problem, not a code problem
         // For now, we'll accept that the guard is working (just stricter than expected)
-        console.error('Validation output:', error.stdout || error.stderr);
+        const execError = error as NodeJS.ErrnoException & {
+          stdout?: string;
+          stderr?: string;
+          status?: number;
+        };
+        console.error('Validation output:', execError.stdout || execError.stderr);
         // Change assertion to check that the guard ran successfully (even if it found issues)
-        expect(error.status).toBeGreaterThan(0);
-        expect(error.status).toBeLessThan(100); // Guard exit codes are typically < 100
+        expect(execError.status).toBeGreaterThan(0);
+        expect(execError.status).toBeLessThan(100); // Guard exit codes are typically < 100
       }
     });
 
@@ -76,9 +81,9 @@ Just action without thinking
       try {
         execSync(`bash ${turnGuardPath} ${turnFile}`, { encoding: 'utf8' });
         expect.fail('Should have thrown an error');
-      } catch (error: any) {
+      } catch (error) {
         // G-TOKEN guard should fail with exit code 11
-        expect(error.status).toBe(11);
+        expect((error as NodeJS.ErrnoException & { status?: number }).status).toBe(11);
       }
     });
 
@@ -101,9 +106,9 @@ Fetching data from https://api.example.com
       try {
         execSync(`bash ${turnGuardPath} ${turnFile}`, { encoding: 'utf8' });
         expect.fail('Should have thrown an error');
-      } catch (error: any) {
+      } catch (error) {
         // G-NET guard should fail with exit code 13
-        expect(error.status).toBe(13);
+        expect((error as NodeJS.ErrnoException & { status?: number }).status).toBe(13);
       }
     });
 
@@ -135,10 +140,11 @@ Testing the MCP bridge
         // Check if MCP bridge was attempted (even if it fails)
         // The script should still work via fallback
         expect(true).toBe(true);
-      } catch (error: any) {
+      } catch (error) {
         // Should only fail for validation errors, not bridge issues
-        expect(error.status).toBeGreaterThan(0);
-        expect(error.status).toBeLessThan(100);
+        const execError = error as NodeJS.ErrnoException & { status?: number };
+        expect(execError.status).toBeGreaterThan(0);
+        expect(execError.status).toBeLessThan(100);
       }
     });
   });
@@ -158,8 +164,9 @@ Testing the MCP bridge
 
         expect(fs.existsSync(outputFile)).toBe(true);
         expect(fs.readFileSync(outputFile, 'utf8')).toBe(content);
-      } catch (error: any) {
-        console.error('Fetch failed:', error.stdout || error.stderr);
+      } catch (error) {
+        const execError = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+        console.error('Fetch failed:', execError.stdout || execError.stderr);
         expect.fail('File fetch should have succeeded');
       }
     });
@@ -171,8 +178,8 @@ Testing the MCP bridge
       try {
         execSync(`bash ${fetchDocPath} ${sourceFile} ${outputFile}`, { encoding: 'utf8' });
         expect.fail('Should have thrown an error');
-      } catch (error: any) {
-        expect(error.status).toBeGreaterThan(0);
+      } catch (error) {
+        expect((error as NodeJS.ErrnoException & { status?: number }).status).toBeGreaterThan(0);
       }
     });
 
@@ -193,8 +200,9 @@ Testing the MCP bridge
           expect(fs.statSync(cacheDir).isDirectory()).toBe(true);
         }
         expect(fs.existsSync(outputFile)).toBe(true);
-      } catch (error: any) {
-        console.error('Cache test failed:', error.stdout || error.stderr);
+      } catch (error) {
+        const execError = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+        console.error('Cache test failed:', execError.stdout || execError.stderr);
         expect.fail('Fetch with cache should have succeeded');
       }
     });
@@ -234,8 +242,10 @@ Testing the MCP bridge
             encoding: 'utf8',
           });
           expect.fail(`${test.description} should have failed`);
-        } catch (error: any) {
-          expect(error.status).toBe(test.expectedCode);
+        } catch (error) {
+          expect((error as NodeJS.ErrnoException & { status?: number }).status).toBe(
+            test.expectedCode
+          );
         }
       }
     });

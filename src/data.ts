@@ -194,13 +194,15 @@ export async function saveFeedsData(
   const successSaved = new Set<string>();
   const feedNames = Array.isArray(names) ? names : Array.from(names);
 
-  console.info(`Saving data for feeds: ${feedNames.join(', ')}`);
+  // Debug: Saving data for feeds
 
   for (const name of feedNames) {
     const ctx = buildContext(plugin, name);
     if (!ctx) {
       console.warn(`buildContext: Feed "${name}" not found in feedList. Skipping save.`);
-      continue; // skip if feed meta info not found
+      // Skip if feed meta info not found
+      // eslint-disable-next-line no-continue
+      continue;
     }
 
     try {
@@ -214,7 +216,7 @@ export async function saveFeedsData(
       await swapIn(ctx);
       // Debug: Swapped in for feed
       successSaved.add(name);
-      console.info(`Successfully saved data for feed: ${name}`);
+      // Debug: Successfully saved data for feed
     } catch (err) {
       console.error(`Failed to save data for feed: ${name}`, err);
       await cleanupTmp(ctx);
@@ -558,7 +560,7 @@ export async function loadFeedsStoredData(
       const parsedMeta = JSON.parse(metaJson) as RssFeedMeta;
 
       const chunkFilePaths: string[] = [];
-      for (let i = 0; ; i++) {
+      for (let i = 0; ; i += 1) {
         const chunkFilePath = `${feedFolderPathAbsolute}/${FEEDS_ITEMS_CHUNK_FNAME_PREFIX}${i}${FEEDS_ITEMS_CHUNK_FNAME_SUFFIX}`;
         if (!(await vault.adapter.exists(chunkFilePath))) break;
         chunkFilePaths.push(chunkFilePath);

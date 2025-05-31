@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import axios from 'axios';
 import TurndownService from 'turndown';
 import { Fetcher } from '../fetcher';
+import { createNetworkError } from './types';
 
 // Mock modules
 vi.mock('fs');
@@ -58,8 +59,16 @@ describe('Fetcher', () => {
           .replace(/\n{3,}/g, '\n\n')
           .trim();
       }),
-    };
-    vi.mocked(TurndownService).mockImplementation(() => mockTurndown as any);
+      // Add required TurndownService methods as stubs
+      addRule: vi.fn(),
+      keep: vi.fn(),
+      remove: vi.fn(),
+      use: vi.fn(),
+      escape: vi.fn((text: string) => text),
+      options: {},
+      rules: { array: [] },
+    } as unknown as TurndownService;
+    vi.mocked(TurndownService).mockImplementation(() => mockTurndown);
 
     fetcher = new Fetcher();
   });
@@ -285,7 +294,7 @@ describe('Fetcher', () => {
       expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalled();
 
       // Verify cache file path includes URL hash
-      const writeCall = vi.mocked(fs.writeFileSync).mock.calls[0];
+      const [writeCall] = vi.mocked(fs.writeFileSync).mock.calls;
       expect(writeCall[0]).toMatch(/\.cache\/.*\.json$/);
     });
 
@@ -371,8 +380,7 @@ describe('Fetcher', () => {
 
   describe('Error Handling', () => {
     it('should handle timeout errors gracefully', async () => {
-      const timeoutError = new Error('timeout of 30000ms exceeded');
-      (timeoutError as any).code = 'ECONNABORTED';
+      const timeoutError = createNetworkError('timeout of 30000ms exceeded', 'ECONNABORTED');
 
       vi.mocked(axios.get).mockRejectedValue(timeoutError);
 
@@ -383,8 +391,7 @@ describe('Fetcher', () => {
     });
 
     it('should handle DNS resolution errors', async () => {
-      const dnsError = new Error('getaddrinfo ENOTFOUND');
-      (dnsError as any).code = 'ENOTFOUND';
+      const dnsError = createNetworkError('getaddrinfo ENOTFOUND', 'ENOTFOUND');
 
       vi.mocked(axios.get).mockRejectedValue(dnsError);
 

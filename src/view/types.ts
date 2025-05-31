@@ -15,7 +15,12 @@ export interface IFeedsReaderView extends ItemView {
   navSelectedIndex: number;
   currentFeed: string | null;
   itemsPerPage: number;
-  undoList: any[];
+  undoList: Array<{
+    action: string;
+    feedId?: string;
+    itemId?: string;
+    data?: Record<string, unknown> | string | boolean;
+  }>;
   contentAreaEl: HTMLElement;
   expandedItems: Set<string>;
   renderFeedList: () => void;
@@ -23,13 +28,18 @@ export interface IFeedsReaderView extends ItemView {
   createControlButtons: () => void;
   updateControlsBar?: () => void;
   isMixedViewEnabled: () => boolean;
-  dispatchEvent: (event: any) => void;
+  dispatchEvent: (event: unknown) => void;
   toggleTitleOnlyMode: () => void;
   toggleItemExpansion: (itemId: string) => void;
   handleUndo: () => void;
   refreshView: () => void;
   setSelectedItemById: (itemId: string) => void;
-  pushUndo: (action: any) => void;
+  pushUndo: (action: {
+    action: string;
+    feedId?: string;
+    itemId?: string;
+    data?: Record<string, unknown> | string | boolean;
+  }) => void;
   currentFilter?: FeedInfo;
   searchQuery?: string;
   items?: RssFeedItem[];

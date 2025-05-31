@@ -1,15 +1,20 @@
 import { App, Modal, sanitizeHTMLToDom } from 'obsidian';
 import { IFeedsReaderPlugin } from './pluginTypes';
+import { SearchService } from './services/searchService';
+import { debounce } from './utils/debounce';
 
 export class FRSearchModal extends Modal {
   private currentFeedName: string | null;
 
   private plugin: IFeedsReaderPlugin;
 
+  private searchService: SearchService;
+
   constructor(app: App, currentFeedName: string | null, plugin: IFeedsReaderPlugin) {
     super(app);
     this.currentFeedName = currentFeedName;
     this.plugin = plugin;
+    this.searchService = new SearchService();
   }
 
   onOpen(): void {
@@ -39,6 +44,12 @@ export class FRSearchModal extends Modal {
     resultsDiv.style.border = '1px solid var(--background-modifier-border)';
     resultsDiv.style.padding = '0.5em';
 
+    // Build search index when modal opens
+    const feedData = this.plugin.feedsStore[this.currentFeedName];
+    if (feedData?.items) {
+      this.searchService.buildIndex(feedData.items);
+    }
+
     const doSearch = (): void => {
       const query = searchInput.value.trim();
       resultsDiv.empty();
@@ -50,27 +61,15 @@ export class FRSearchModal extends Modal {
         resultsDiv.createEl('p', { text: 'Error: Feed data unavailable.' });
         return;
       }
-      const terms = query
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(term => term.length > 0);
-      if (terms.length === 0) {
-        resultsDiv.createEl('p', { text: 'Invalid keywords.' });
-        return;
-      }
 
-      const feedData = this.plugin.feedsStore[this.currentFeedName];
-      if (!feedData.items) {
+      const currentFeedData = this.plugin.feedsStore[this.currentFeedName];
+      if (!currentFeedData.items) {
         resultsDiv.createEl('p', { text: 'No items in feed.' });
         return;
       }
 
-      const results = feedData.items.filter(item => {
-        const titleText = (item.title || '').toLowerCase();
-        const contentText = (sanitizeHTMLToDom(item.content || '').textContent || '').toLowerCase();
-        const itemFullText = `${titleText} ${contentText}`;
-        return terms.every(term => itemFullText.includes(term));
-      });
+      // Use the search service for efficient searching
+      const results = this.searchService.searchInFeed(query, this.currentFeedName);
 
       if (results.length === 0) {
         resultsDiv.createEl('p', { text: `No results found for "${query}".` });
@@ -92,6 +91,9 @@ export class FRSearchModal extends Modal {
       }
     };
 
+    // Create debounced version of search
+    const debouncedSearch = debounce(doSearch, this.plugin.settings.searchDebounceMs ?? 300);
+
     const buttonContainer = contentEl.createDiv({ cls: 'modal-button-container' });
     const searchButton = buttonContainer.createEl('button', { text: 'Search', cls: 'mod-cta' });
     searchButton.addEventListener('click', (): void => doSearch());
@@ -100,6 +102,14 @@ export class FRSearchModal extends Modal {
     closeButtonModal.addEventListener('click', (): void => this.close());
 
     searchInput.focus();
+
+    // Add input event for real-time search with debounce
+    if (this.plugin.settings.enableSearchIndex) {
+      searchInput.addEventListener('input', (): void => {
+        debouncedSearch();
+      });
+    }
+
     searchInput.addEventListener('keypress', (e): void => {
       if (e.key === 'Enter') {
         e.preventDefault();

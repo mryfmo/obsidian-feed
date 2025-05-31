@@ -455,10 +455,12 @@ export class WorkflowAutomation {
     console.log(`Comment preview:\n${comment.substring(0, 200)}...`);
   }
 
-  private async updateMilestone(issueNumber: number, _phase: Phase): Promise<void> {
+  private async updateMilestone(issueNumber: number, phase: Phase): Promise<void> {
     // Update GitHub milestone based on phase
     console.log(`[GitHub] Updating milestone for issue #${issueNumber}`);
     // TODO: Map phase to milestone and update via GitHub API
+    // Phase parameter will be used when milestone mapping is implemented
+    void phase;
   }
 
   // Artifact generation methods

@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+// eslint-disable-next-line import/no-unresolved
 import tseslint from 'typescript-eslint';
 import { FlatCompat } from '@eslint/eslintrc';
 
@@ -224,6 +225,16 @@ export default tseslint.config(
     },
   },
 
+  // Build scripts
+  {
+    files: ['version-bump.mjs', 'scripts/**/*.mjs'],
+    rules: {
+      'no-console': 'off', // Build scripts need console output
+      'no-process-exit': 'off', // Build scripts can exit with error codes
+      'import/no-extraneous-dependencies': 'off',
+    },
+  },
+
   // Ignore patterns
   {
     ignores: [
@@ -235,6 +246,7 @@ export default tseslint.config(
       'coverage/',
       '.tmp/',
       '.cache/',
+      '.mcp/', // MCP directory has its own ESLint config
       'e2e/runtime/**/*.js', // E2E runtime stubs have special requirements
     ],
   }

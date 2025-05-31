@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { Context7Client } from '../context7';
+import { createNetworkError } from './types';
 
 // Define proper types for MCP calls
 interface MCPToolCall {
@@ -29,7 +30,7 @@ describe('Context7Client', () => {
       callTool: vi.fn(),
     };
 
-    vi.mocked(Client).mockImplementation(() => mockClient as any);
+    vi.mocked(Client).mockImplementation(() => mockClient as unknown as Client);
     context7 = new Context7Client();
   });
 
@@ -260,8 +261,7 @@ describe('Context7Client', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      const networkError = new Error('Network timeout');
-      (networkError as any).code = 'ETIMEDOUT';
+      const networkError = createNetworkError('Network timeout', 'ETIMEDOUT');
 
       mockClient.callTool.mockRejectedValue(networkError);
 

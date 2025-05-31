@@ -43,7 +43,7 @@ export function generateDeterministicItemId(input: string): string {
   // Using a try/catch on a static ESM import keeps tree-shaking simple.
   /* c8 ignore start */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
     const crypto = require('node:crypto');
     if (typeof crypto?.createHash === 'function') {
       return crypto.createHash('sha1').update(input).digest('hex');
@@ -54,7 +54,7 @@ export function generateDeterministicItemId(input: string): string {
   /* c8 ignore stop */
 
   // FNV-1a 32-bit fallback (deterministic, fast, non-crypto-secure)
-  // eslint-disable-next-line no-bitwise
+
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i += 1) {
     // eslint-disable-next-line no-bitwise

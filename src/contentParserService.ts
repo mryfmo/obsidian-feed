@@ -222,8 +222,10 @@ export class ContentParserService {
             return block.items.map(item => `${block.ordered ? '1.' : '-'} ${item}`).join('\n');
           case 'embed':
             return block.html; // Render embed HTML directly
+          default:
+            // Handle unknown block types
+            return '';
         }
-        // Add more block types as needed
         return '';
       })
       .join('\n\n');

@@ -164,10 +164,10 @@ export async function handleContentAreaClick(
           const newStateIsRead = item.read === '0';
           if (plugin.markItemReadState(view.currentFeed, itemId, newStateIsRead)) {
             view.pushUndo({
-              feedName: view.currentFeed,
+              feedId: view.currentFeed,
               itemId: item.id!,
               action: newStateIsRead ? 'unread' : 'read',
-              previousState: newStateIsRead ? '0' : item.read,
+              data: newStateIsRead ? '0' : item.read,
             });
             new Notice(
               `Item "${item.title?.substring(0, 20)}..." ${newStateIsRead ? 'read' : 'unread'}.`
@@ -183,10 +183,10 @@ export async function handleContentAreaClick(
           const newStateIsDeleted = item.deleted === '0';
           if (plugin.markItemDeletedState(view.currentFeed, itemId, newStateIsDeleted)) {
             view.pushUndo({
-              feedName: view.currentFeed,
+              feedId: view.currentFeed,
               itemId: item.id!,
               action: newStateIsDeleted ? 'deleted' : 'undeleted',
-              previousState: newStateIsDeleted ? '0' : item.deleted,
+              data: newStateIsDeleted ? '0' : item.deleted,
             });
             new Notice(
               `Item "${item.title?.substring(0, 20)}..." ${newStateIsDeleted ? 'deleted' : 'restored'}.`

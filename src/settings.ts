@@ -378,6 +378,79 @@ export class FeedReaderSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+
+    /* Performance Settings */
+    containerEl.createEl('h3', { text: 'Performance Settings' });
+
+    new Setting(containerEl)
+      .setName('Enable Virtual Scrolling')
+      .setDesc('Use virtual scrolling for better performance with large feed lists (experimental).')
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.enableVirtualScrolling ?? false);
+        toggle.onChange(async value => {
+          this.plugin.settings.enableVirtualScrolling = value;
+          await this.plugin.saveSettings();
+          new Notice('Virtual scrolling changes will take effect on next plugin reload.');
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Enable Search Indexing')
+      .setDesc(
+        'Build search index for faster searching (uses more memory but significantly faster).'
+      )
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.enableSearchIndex ?? true);
+        toggle.onChange(async value => {
+          this.plugin.settings.enableSearchIndex = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Enable Reading Progress')
+      .setDesc(
+        'Track reading progress using Intersection Observer (may impact performance on older devices).'
+      )
+      .addToggle(toggle => {
+        toggle.setValue(this.plugin.settings.enableReadingProgress ?? false);
+        toggle.onChange(async value => {
+          this.plugin.settings.enableReadingProgress = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Search Debounce (ms)')
+      .setDesc('Delay before executing search after typing stops. Default: 300ms.')
+      .addText(text => {
+        text.inputEl.type = 'number';
+        text.inputEl.min = '0';
+        text.setValue((this.plugin.settings.searchDebounceMs ?? 300).toString());
+        text.onChange(async value => {
+          const num = parseInt(value, 10);
+          if (!Number.isNaN(num) && num >= 0) {
+            this.plugin.settings.searchDebounceMs = num;
+            await this.plugin.saveSettings();
+          }
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Scroll Throttle (ms)')
+      .setDesc('Throttle scroll events for better performance. Default: 120ms.')
+      .addText(text => {
+        text.inputEl.type = 'number';
+        text.inputEl.min = '0';
+        text.setValue((this.plugin.settings.scrollThrottleMs ?? 120).toString());
+        text.onChange(async value => {
+          const num = parseInt(value, 10);
+          if (!Number.isNaN(num) && num >= 0) {
+            this.plugin.settings.scrollThrottleMs = num;
+            await this.plugin.saveSettings();
+          }
+        });
+      });
   }
 }
 

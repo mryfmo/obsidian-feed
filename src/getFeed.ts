@@ -164,6 +164,30 @@ export async function getFeedItems(
       }
     }
 
+    // Define PotentialItem type based on accessed properties
+    type PotentialItem = {
+      guid?: string;
+      id?: string;
+      link?: string;
+      title?: string;
+      content?: string;
+      contentSnippet?: string;
+      'content:encoded'?: string;
+      summary?: string;
+      description?: string;
+      creator?: string;
+      'dc:creator'?: string;
+      author?: string | { name?: string };
+      pubDate?: string;
+      isoDate?: string;
+      published?: string;
+      updated?: string;
+      categories?: string | string[];
+      image?: ImageShape;
+      'media:thumbnail'?: string | { url?: string } | Array<{ url?: string } | string>;
+      enclosure?: { url?: string };
+    };
+
     // Define a type for potential feed data properties
     type PotentialFeedData = {
       title?: string;
@@ -205,30 +229,6 @@ export async function getFeedItems(
       return feedObj; // Return feed metadata even if no items
     }
 
-    // Define PotentialItem type based on accessed properties
-    type PotentialItem = {
-      guid?: string;
-      id?: string;
-      link?: string;
-      title?: string;
-      content?: string;
-      contentSnippet?: string;
-      'content:encoded'?: string;
-      summary?: string;
-      description?: string;
-      creator?: string;
-      'dc:creator'?: string;
-      author?: string | { name?: string };
-      pubDate?: string;
-      isoDate?: string;
-      published?: string;
-      updated?: string;
-      categories?: string | string[];
-      image?: ImageShape;
-      'media:thumbnail'?: string | { url?: string } | Array<{ url?: string } | string>;
-      enclosure?: { url?: string };
-    };
-
     for (const rawItem of feedData.items) {
       const itemTitle = rawItem.title || 'Untitled Item';
       const itemLink = rawItem.link || rawItem.guid; // Prefer link, fallback to guid
@@ -237,6 +237,7 @@ export async function getFeedItems(
         console.warn(
           `getFeedItems: Item in "${feedName}" (title: "${itemTitle}") has no valid link or guid. Skipping.`
         );
+        // eslint-disable-next-line no-continue
         continue;
       }
 
@@ -259,11 +260,12 @@ export async function getFeedItems(
           rawItem.published ||
           (rawItem as PotentialItem).updated
       ); // Cast here if needed
-      const itemCategories = Array.isArray(rawItem.categories)
-        ? rawItem.categories.join(', ')
-        : typeof rawItem.categories === 'string'
-          ? rawItem.categories
-          : '';
+      let itemCategories = '';
+      if (Array.isArray(rawItem.categories)) {
+        itemCategories = rawItem.categories.join(', ');
+      } else if (typeof rawItem.categories === 'string') {
+        itemCategories = rawItem.categories;
+      }
       // Attempt to resolve thumbnail from various RSS extensions
       const potentialImage =
         rawItem.image ||

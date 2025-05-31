@@ -1,20 +1,5 @@
 import { Modal, App } from 'obsidian';
 
-/**
- * Show a confirmation dialog and return the user's choice
- */
-export async function showConfirmDialog(
-  app: App,
-  message: string,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel'
-): Promise<boolean> {
-  return new Promise(resolve => {
-    const modal = new ConfirmModal(app, message, confirmText, cancelText, resolve);
-    modal.open();
-  });
-}
-
 class ConfirmModal extends Modal {
   constructor(
     app: App,
@@ -52,4 +37,19 @@ class ConfirmModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
   }
+}
+
+/**
+ * Show a confirmation dialog and return the user's choice
+ */
+export async function showConfirmDialog(
+  app: App,
+  message: string,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel'
+): Promise<boolean> {
+  return new Promise(resolve => {
+    const modal = new ConfirmModal(app, message, confirmText, cancelText, resolve);
+    modal.open();
+  });
 }

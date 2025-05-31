@@ -19,6 +19,7 @@
 */
 
 // Store the original implementation once so we can restore it later if needed
+// eslint-disable-next-line no-console
 const originalConsoleLog: typeof console.log = console.log.bind(console);
 
 // Utility to determine whether debug logging should be enabled
@@ -47,8 +48,10 @@ function isDebugEnabled(): boolean {
 // Replace or restore `console.log` according to the current flag
 function updateConsolePatch(): void {
   if (isDebugEnabled()) {
+    // eslint-disable-next-line no-console
     console.log = originalConsoleLog;
   } else {
+    // eslint-disable-next-line no-console
     console.log = (): void => {
       /* noop when debug disabled */
     };

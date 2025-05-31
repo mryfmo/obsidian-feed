@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 import axios from 'axios';
-import { MCPIntegration } from '../../index';
+import { MCPIntegration, MCPClients } from '../../index';
 
 // Mock dependencies
 vi.mock('fs');
@@ -313,7 +313,7 @@ ${Array(30).fill('word').join(' ')}
       };
 
       // Test with MCP clients
-      new MCPIntegration(mockClients as any);
+      new MCPIntegration(mockClients as unknown as MCPClients);
 
       // Should use MCP filesystem for file operations
       mockClients.filesystem.callTool.mockResolvedValue({
@@ -331,7 +331,7 @@ ${Array(30).fill('word').join(' ')}
         },
       };
 
-      const mcpIntegrationWithMcp = new MCPIntegration(mcpClientsWithMethods as any);
+      const mcpIntegrationWithMcp = new MCPIntegration(mcpClientsWithMethods as MCPClients);
       const result = await mcpIntegrationWithMcp.fetch(['/path/to/file.txt']);
 
       expect(result[0].success).toBe(true);

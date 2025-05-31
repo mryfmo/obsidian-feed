@@ -1,6 +1,6 @@
 import { App, Modal, Notice } from 'obsidian';
 import { IFeedsReaderPlugin } from './pluginTypes';
-import { PluginOperationError, FeedValidationError } from './errors';
+import { FeedError, FeedErrorType, ErrorSeverity } from './errors';
 
 export class FRAddFeedModal extends Modal {
   private plugin: IFeedsReaderPlugin;
@@ -79,17 +79,17 @@ export class FRAddFeedModal extends Modal {
           'An unexpected error occurred while adding the feed. Please try again or check the console for details.';
         const consoleLogItems: string[] = ['FRAddFeedModal: Error during this.plugin.addNewFeed:'];
 
-        if (err instanceof PluginOperationError) {
+        if (err instanceof FeedError) {
           // Our custom error base class
-          userMessageForNotice = err.userFacingMessage; // Get user-friendly message from error
+          userMessageForNotice = err.getUserMessage(); // Get user-friendly message from error
           consoleLogItems.push(`(${err.name}) ${err.message}`); // Log internal message
 
-          if (!err.isOperational) {
-            consoleLogItems.push('This was marked as a non-operational (unexpected) error.');
+          if (err.severity === ErrorSeverity.CRITICAL) {
+            consoleLogItems.push('This was marked as a critical error.');
           }
 
           // Handle specific custom errors for UI adjustments (e.g., focus)
-          if (err instanceof FeedValidationError) {
+          if (err.type === FeedErrorType.FEED_VALIDATION) {
             if (err.message.toLowerCase().includes('name')) {
               nameInput.focus();
             } else if (err.message.toLowerCase().includes('url')) {
@@ -97,7 +97,7 @@ export class FRAddFeedModal extends Modal {
             }
           }
           // Add more 'else if' blocks here for other custom error types if needed
-          // e.g., else if (err instanceof FeedFetchError) { /* specific UI hints */ }
+          // e.g., else if (err.type === FeedErrorType.FEED_FETCH) { /* specific UI hints */ }
         } else if (err instanceof Error) {
           // Standard JavaScript Error
           console.error('Error adding new feed:', err.message, err.stack);

@@ -68,6 +68,13 @@ const DEFAULT_SETTINGS: FeedsReaderSettings = {
   latestNCount: 0,
   viewStyle: 'card',
   defaultTitleOnly: true,
+  // Performance settings
+  enableVirtualScrolling: false,
+  searchDebounceMs: 300,
+  scrollThrottleMs: 120,
+  maxItemsPerPage: 50,
+  enableSearchIndex: true,
+  enableReadingProgress: false,
 };
 
 export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlugin {
@@ -355,21 +362,16 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
   async addNewFeed(name: string, url: string): Promise<void> {
     if (this.feedList.find(f => f.name === name)) {
       throw new FeedValidationError(
-        `Feed name "${name}" already exists.`,
         `A feed named "${name}" already exists. Please choose a unique name.`
       );
     }
     if (!name || !url) {
-      throw new FeedValidationError(
-        'Feed name and URL are required.',
-        'Please provide both a name and a URL for the feed.'
-      );
+      throw new FeedValidationError('Please provide both a name and a URL for the feed.');
     }
     try {
       new URL(url);
     } catch {
       throw new FeedValidationError(
-        `The provided URL "${url}" is invalid.`,
         `The URL format is invalid. Please provide a valid URL (e.g., https://example.com/rss).`
       );
     }
@@ -392,7 +394,7 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
       const internalMsg = `Error during getFeedItems for feed "${name}" from URL "${url}": ${error instanceof Error ? error.message : String(error)}`;
       const userMsg = `Could not retrieve or understand the feed from the URL. Please check the URL or try again later.`;
       console.error(`FeedsReaderPlugin.addNewFeed: ${internalMsg}`, error);
-      throw new PluginOperationError(internalMsg, userMsg, false);
+      throw new PluginOperationError(userMsg);
     }
 
     const folderName =
@@ -424,7 +426,7 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
         const internalMsg = `Failed to create storage folder "${feedFolderPathAbsolute}" for feed "${name}": ${folderError instanceof Error ? folderError.message : String(folderError)}`;
         const userMsg = `Could not create a storage folder for the new feed. Please check plugin permissions or disk space.`;
         console.error(`FeedsReaderPlugin.addNewFeed: ${internalMsg}`, folderError);
-        throw new FeedStorageError(internalMsg, userMsg);
+        throw new FeedStorageError(userMsg);
       }
     }
 
@@ -473,9 +475,12 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
       }
 
       // Re-throw as FeedStorageError for consistent error handling by the caller (e.g. AddFeedModal)
-      const internalMsg = `Failed to save new feed "${name}" to persistent storage. ${saveError instanceof Error ? saveError.message : String(saveError)}`;
+      console.error(
+        `Failed to save new feed "${name}" to persistent storage.`,
+        saveError instanceof Error ? saveError.message : String(saveError)
+      );
       const userMsg = `Could not save the new feed "${name}" permanently. Changes may have been rolled back.`;
-      throw new FeedStorageError(internalMsg, userMsg);
+      throw new FeedStorageError(userMsg);
     }
   }
 
@@ -608,6 +613,12 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
     if (view && view instanceof FeedsReaderView) {
       (view as FeedsReaderView).refreshView();
     }
+  }
+
+  updateFeedData(feedName: string): void {
+    // Update feed data and trigger necessary UI updates
+    this.flagChangeAndSave(feedName);
+    this.refreshView();
   }
 
   /** Helper to flag a feed as changed and request a save */

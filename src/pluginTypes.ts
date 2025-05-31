@@ -42,5 +42,6 @@ export interface IFeedsReaderPlugin extends Plugin {
   saveItemAsMarkdown(feedName: string, itemId: string): Promise<string | null>;
   saveSnippet(item: RssFeedItem): Promise<void>;
   fetchFullContent(feedName: string, itemId: string): Promise<boolean>;
+  updateFeedData(feedName: string): void;
   // Additional methods can be added as needed
 }

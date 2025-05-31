@@ -115,7 +115,7 @@ describe('getFeedItems', () => {
   // `clearAllMocks` above).
   beforeEach(async () => {
     const mod = await import('../../src/getFeed');
-    getFeedItems = mod.getFeedItems;
+    ({ getFeedItems } = mod);
 
     // Obtain the mocked request function from the mocked obsidian module.
     request = (await import('obsidian')).request as unknown as ReturnType<typeof vi.fn>;
@@ -133,7 +133,7 @@ describe('getFeedItems', () => {
 
     // The item list should contain the single <item> from the XML.
     expect(feed.items.length).toBe(1);
-    const item = feed.items[0];
+    const [item] = feed.items;
     expect(item.title).toBe('Hello');
     expect(item.link).toBe('https://example.com/1');
     // Ensure a deterministic ID was assigned.
@@ -150,7 +150,7 @@ describe('getFeedItems', () => {
     expect(feed.title).toBe('Atom Sample');
     // Should carry at least one item (the single <entry>).
     expect(feed.items.length).toBe(1);
-    const item = feed.items[0];
+    const [item] = feed.items;
     expect(item.title).toBe('Entry');
     expect(item.link).toBe('https://example.com/entry');
   });

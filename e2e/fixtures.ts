@@ -4,14 +4,14 @@ import * as path from 'node:path';
 
 /**
  * Custom fixtures for Obsidian plugin E2E tests
- * 
+ *
  * This fixture boots the plugin inside a bare Electron process with the
  * obsidian module mocked by tests/__mocks__/obsidian.ts. This is for "light" E2E.
- * 
+ *
  * Environment variables:
  * - OBSIDIAN_FEED_DEBUG: Enable debug logging in the plugin (default: 'true' in tests)
  * - NODE_ENV: Set to 'test' to indicate test environment
- * 
+ *
  * Requirements:
  * - Node.js environment (uses process.platform for keyboard shortcuts)
  * - Obsidian desktop app mock environment
@@ -21,6 +21,7 @@ export const test = base.extend<{
   electronApp: ElectronApplication;
   win: Page;
 }>({
+  // eslint-disable-next-line no-empty-pattern
   electronApp: async ({}, use) => {
     const appPath = path.resolve('./e2e/runtime/bootstrap.js'); // custom bootstrap
     const vaultPath = path.resolve('./e2e-vault');

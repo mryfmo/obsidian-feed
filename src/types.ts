@@ -44,6 +44,16 @@ export interface FeedsReaderSettings {
    * preferred view automatically.
    */
   defaultTitleOnly?: boolean;
+
+  /**
+   * Performance settings
+   */
+  enableVirtualScrolling?: boolean;
+  searchDebounceMs?: number;
+  scrollThrottleMs?: number;
+  maxItemsPerPage?: number;
+  enableSearchIndex?: boolean;
+  enableReadingProgress?: boolean;
 }
 
 /** Schema for individual feed item entries. */

@@ -82,6 +82,7 @@ claude-code-instruction-*.md
 claude-context-*.md
 claude-output.md
 .claude-instructions
+claude_desktop_config.json
 # analysis-results.md # Removed during cleanup
 
 # Development notes with potential sensitive info

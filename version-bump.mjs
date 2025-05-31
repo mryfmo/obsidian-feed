@@ -1,11 +1,11 @@
 import process from 'process';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 
 const targetVersion = process.env.npm_package_version;
 
 if (!targetVersion) {
-	console.error('Error: npm_package_version not set. Run this script via npm/pnpm.');
-	process.exit(1);
+  console.error('Error: npm_package_version not set. Run this script via npm/pnpm.');
+  process.exit(1);
 }
 
 console.log(`Bumping version to ${targetVersion}...`);
@@ -28,12 +28,12 @@ console.log(`✓ Added ${targetVersion} to versions.json`);
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
 const versionPattern = new RegExp(`^## \\[?${targetVersion.replace(/\./g, '\\.')}\\]?`, 'm');
 if (!versionPattern.test(changelog)) {
-	console.warn(`⚠️  Warning: No entry for version ${targetVersion} found in CHANGELOG.md`);
-	console.warn('  Please add a changelog entry before releasing.');
-	
-	// Create a template entry
-	const date = new Date().toISOString().split('T')[0];
-	const template = `
+  console.warn(`⚠️  Warning: No entry for version ${targetVersion} found in CHANGELOG.md`);
+  console.warn('  Please add a changelog entry before releasing.');
+
+  // Create a template entry
+  const date = new Date().toISOString().split('T')[0];
+  const template = `
 ## [${targetVersion}] – ${date}
 
 ### Added
@@ -46,17 +46,19 @@ if (!versionPattern.test(changelog)) {
 - 
 
 `;
-	console.log('\nSuggested CHANGELOG entry:');
-	console.log('─'.repeat(50));
-	console.log(template);
-	console.log('─'.repeat(50));
+  console.log('\nSuggested CHANGELOG entry:');
+  console.log('─'.repeat(50));
+  console.log(template);
+  console.log('─'.repeat(50));
 }
 
 // Verify all versions match
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 if (pkg.version !== targetVersion) {
-	console.error(`❌ Error: package.json version (${pkg.version}) doesn't match target (${targetVersion})`);
-	process.exit(1);
+  console.error(
+    `❌ Error: package.json version (${pkg.version}) doesn't match target (${targetVersion})`
+  );
+  process.exit(1);
 }
 
 console.log('\n✅ Version bump complete!');
