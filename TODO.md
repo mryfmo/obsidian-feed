@@ -7,7 +7,15 @@ See LICENSE-MIT for details.
 
 ### In Progress
 
-**v0.0.5 (Post-MCP Integration & Future Enhancements)**
+**v0.0.5 (Stability & Enhancement Release)**
+
+- [ ] Complete resolution of remaining GitHub issues
+  - [ ] CSS redundancy and :has() selector compatibility (#17)
+  - [ ] E2E test stability improvements (#16)
+  - [ ] Performance optimizations (#15)
+  - [ ] Security and privacy enhancements (#13)
+
+**v0.0.6 (Post-MCP Integration & Future Enhancements)**
 
 - [ ] Support for summarization and translation functions using large language models (LLMs) (beyond existing Claude API).
 - [ ] Google Gemini Support for summarization/translation.

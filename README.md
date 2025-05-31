@@ -15,7 +15,7 @@ The plugin stores feed data in your vault so everything – including unread cou
 
 ## ✨ Key Features
 
-| Area                   | 0.0.3 Highlights                                                      |
+| Area                   | 0.0.4 Highlights                                                      |
 | ---------------------- | --------------------------------------------------------------------- |
 | **Reader UI**          | Collapsible nav-pane, per-item action bar, keyboard shortcuts         |
 | **Feed Management**    | Add / remove feeds, bulk refresh, unread counters                     |
@@ -49,8 +49,13 @@ The plugin stores feed data in your vault so everything – including unread cou
 2. Unzip to `<vault>/.obsidian/plugins/contents-feeds-reader/`.
 3. Reload Obsidian → _Settings ▸ Community Plugins_ → enable the plugin.
 
-> Upgrading from **0.0.2**?  
-> Rename the folder from `obsidian-feed` to `contents-feeds-reader` before copying, or Obsidian will think it’s a new plugin.
+#### Upgrading from Previous Versions
+1. Close Obsidian
+2. Navigate to your vault's `.obsidian/plugins/` directory
+3. Rename the plugin folder to `contents-feeds-reader` (regardless of current name)
+4. Restart Obsidian
+
+Note: The plugin ID has been standardized to `contents-feeds-reader` since v0.0.1
 
 ---
 
@@ -91,9 +96,9 @@ Explore the interactive DeepWiki instead ↓
 
 Planned work is tracked in [TODO.md](./TODO.md); major milestones:
 
-1. 0.0.4 – feed-group folders, keyboard-only triage
-2. 0.0.5 – text-to-speech playback, YouTube channel ingestion
-3. 0.0.6 – Podcast OPML import & in-app audio player
+1. ✅ 0.0.4 – MCP integration, type safety, circular dependency fixes (Released)
+2. 0.0.5 – Stability improvements, GitHub issue resolution
+3. 0.0.6 – LLM integration, YouTube/Podcast support, advanced features
 
 ---
 

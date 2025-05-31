@@ -1,0 +1,37 @@
+name: Version Consistency Check
+
+on: [push, pull_request]
+
+jobs:
+  check-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check version consistency
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          
+          echo "package.json version: $PKG_VERSION"
+          echo "manifest.json version: $MANIFEST_VERSION"
+          
+          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "❌ Version mismatch detected!"
+            echo "Please run 'npm run version-bump' to sync versions"
+            exit 1
+          fi
+          
+          # Check if version exists in versions.json
+          if ! node -p "require('./versions.json')['$PKG_VERSION']" > /dev/null; then
+            echo "❌ Version $PKG_VERSION not found in versions.json"
+            exit 1
+          fi
+          
+          # Check if version exists in CHANGELOG.md
+          if ! grep -qE "^## \\[?${PKG_VERSION//./\\.}\\]?" CHANGELOG.md; then
+            echo "⚠️  Warning: Version $PKG_VERSION not found in CHANGELOG.md"
+            echo "Please add a changelog entry for this version"
+          fi
+          
+          echo "✅ All version checks passed!"
