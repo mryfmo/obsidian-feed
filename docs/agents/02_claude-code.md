@@ -25,7 +25,7 @@ _Applicable to: Claude Code CLI and Claude Code Action (GitHub integration)_
 | WBS | Process              | Deliverables               | R (Responsible) | A/C/I      | Exit Gate                          |
 | --- | -------------------- | -------------------------- | --------------- | ---------- | ---------------------------------- |
 | 1.1 | Requirement review   | gaps.md                    | dev             | review     | gaps.md approval (review)          |
-| 1.2 | Specification design | draft_workflow.md          | dev             | review     | RFC format 👍                      |
+| 1.2 | Specification design | specification.md           | dev             | review     | RFC format 👍                      |
 | 1.3 | Archi agreement      | final_spec.md              | review          | dev/qa/rel | All roles OK mark                  |
 | 2.1 | Guard design         | guard.md                   | dev             | review     | mermaid diagram review             |
 | 2.2 | Guard implementation | tools/turn_guard.sh        | dev             | qa         | shellcheck + unit green            |
@@ -77,7 +77,7 @@ The remaining tasks follow the same tabular format. All 28 tasks are defined acr
 - VERIF: 5 tasks (V-1 to V-5)
 - REL: 3 tasks (R-1 to R-3)
 
-**For the complete task definitions, see: [`02_claude-code-complete-tasks.md`](./02_claude-code-complete-tasks.md)**
+**Complete task definitions are included in the sections below.**
 
 <details>
 <summary>View task summary</summary>
@@ -106,7 +106,7 @@ Guards are automated checks that enforce workflow rules and quality standards. T
 | G-EDGE   | New test Green              | B-2                |
 | G-COV    | Changed line coverage ≥90 % | V-1                |
 
-**For the complete guard map with all 25+ guards, see: [`02_claude-code-guard-map.md`](./02_claude-code-guard-map.md)**
+**Complete guard definitions are included in the guard map section below.**
 
 The guards are categorized as:
 

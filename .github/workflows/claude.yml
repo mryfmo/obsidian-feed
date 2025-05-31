@@ -1,5 +1,9 @@
 name: Claude Code Integration (Unified)
 
+env:
+  CLAUDE_RULES_ENFORCE: true
+  CLAUDE_SAFETY_LEVEL: strict
+
 on:
   issue_comment:
     types: [created]
@@ -323,6 +327,38 @@ jobs:
           cat instructions.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Initialize Safety System
+        run: |
+          echo "🛡️ Initializing Claude Safety System..."
+          
+          # Ensure safety wrapper is available
+          if [ -f ".github/scripts/claude-safety-wrapper.sh" ]; then
+            source .github/scripts/claude-safety-wrapper.sh
+            echo "✅ Safety wrapper loaded"
+          else
+            echo "⚠️ Safety wrapper not found, basic safety only"
+          fi
+          
+          # Verify claude-rules.json exists (check both locations for compatibility)
+          if [ ! -f ".claude/config/claude-rules.json" ] && [ ! -f "claude-rules.json" ]; then
+            echo "::error::claude-rules.json not found - Claude safety rules not configured"
+            exit 1
+          fi
+          
+          # Initialize audit directory
+          mkdir -p .claude/runtime
+          echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | INFO | GITHUB_ACTION | safety-init | STARTED | github-actions | Safety system initialized" >> .claude/runtime/audit.log
+          
+          # Check for destructive operation approval if needed
+          if [[ "${{ steps.phase.outputs.phase }}" == "BUILD" ]] || [[ "${{ steps.phase.outputs.phase }}" == "VERIF" ]]; then
+            echo "Phase ${{ steps.phase.outputs.phase }} may involve destructive operations"
+            echo "Checking for approval labels..."
+            
+            # This will be checked by the safety wrapper when needed
+          fi
+          
+          echo "✅ Safety system initialized"
+
       - name: Run Claude Code Action
         uses: mryfmo/claude-code-action@main
         with:
@@ -330,6 +366,9 @@ jobs:
           context_file: claude-context.md
           mcp_config: ${{ env.mode != 'shell' && '.github/claude/mcp-config.json' || '' }}
           tools_config: .github/claude/tools.json
+          claude_rules: claude-rules.json
+          safety_check: true
+          pre_operation_hook: .github/scripts/claude-safety-wrapper.sh
         env:
           CLAUDE_ACCESS_TOKEN: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
           CLAUDE_REFRESH_TOKEN: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
@@ -337,6 +376,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INTEGRATION_MODE: ${{ env.mode }}
           TURN_ROLE: ${{ steps.phase.outputs.phase }}
+          CLAUDE_RULES_ENFORCE: true
+          CLAUDE_SAFETY_LEVEL: strict
+          CLAUDE_OPERATION_GUARD: enabled
 
       - name: Setup MCP Dependencies
         run: |

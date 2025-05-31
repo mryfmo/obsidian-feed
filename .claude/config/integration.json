@@ -1,0 +1,50 @@
+{
+  "version": "1.0.0",
+  "safety_config": {
+    "require_approval_for_levels": [2, 3],
+    "auto_approve_levels": [0, 1],
+    "approval_timeout_minutes": 30,
+    "require_audit_trail": true
+  },
+  "operation_hooks": {
+    "pre_operation": [
+      {
+        "level": 2,
+        "action": "create_backup",
+        "condition": "file_exists"
+      },
+      {
+        "level": 3,
+        "action": "require_reviewer",
+        "condition": "always"
+      }
+    ],
+    "post_operation": [
+      {
+        "level": 2,
+        "action": "update_audit_log",
+        "condition": "always"
+      },
+      {
+        "level": 2,
+        "action": "update_rollback_registry",
+        "condition": "success"
+      }
+    ]
+  },
+  "github_integration": {
+    "require_pr_for_destructive": true,
+    "auto_create_safety_issue": true,
+    "safety_labels": {
+      "level_0": "safe-operation",
+      "level_1": "modify-operation",
+      "level_2": "destructive-operation",
+      "level_3": "system-operation"
+    }
+  },
+  "notification_settings": {
+    "notify_on_level_2": true,
+    "notify_on_level_3": true,
+    "notification_channels": ["github_comment", "audit_log"]
+  }
+}

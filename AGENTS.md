@@ -18,8 +18,6 @@ docs/
     00_common-rules.md    ── coding conventions & shared constraints
     01_task-lifecycle.md  ── task lifecycle for repository agents
     02_claude-code.md     ── Claude Code workflow（WBS・RACI・Guard Map） & guardrails
-    02_claude-code-complete-tasks.md ── Complete 28 task definitions for all phases
-    02_claude-code-guard-map.md ── Complete guard definitions with exit codes
     phase-transition-validation.md ── Phase dependencies and transition enforcement
     git-diff-robustness.md ── Git command improvements for CI/CD reliability
     stp-validation-guide.md ── Guide for STP marker validation in PRs

@@ -1,0 +1,17 @@
+# Runtime files (not tracked)
+runtime/
+tmp-docs/
+
+# Backup files
+*.backup
+*.bak
+
+# Session data
+session/
+
+# But track these
+!.gitignore
+!config/
+!docs/
+!scripts/
+!mcp/

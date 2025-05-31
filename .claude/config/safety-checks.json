@@ -1,0 +1,131 @@
+{
+  "version": "1.0.0",
+  "pre_operation_checks": {
+    "file_deletion": {
+      "level": 2,
+      "checks": [
+        {
+          "name": "git_status_check",
+          "description": "Check if file is tracked by git",
+          "action": "warn if tracked, require special confirmation"
+        },
+        {
+          "name": "file_size_check",
+          "description": "Warn if file is larger than 1MB",
+          "threshold": 1048576,
+          "action": "require confirmation with size warning"
+        },
+        {
+          "name": "backup_check",
+          "description": "Ensure backup exists for important files",
+          "patterns": ["*.config.*", "*.json", "*.md"],
+          "action": "create backup before deletion"
+        }
+      ]
+    },
+    "directory_deletion": {
+      "level": 2,
+      "checks": [
+        {
+          "name": "empty_check",
+          "description": "Verify if directory is empty",
+          "action": "if not empty, list contents and require double confirmation"
+        },
+        {
+          "name": "gitignore_check",
+          "description": "Check if directory is in .gitignore",
+          "action": "warn if gitignored directory contains files"
+        },
+        {
+          "name": "special_directory_check",
+          "description": "Prevent deletion of special directories",
+          "forbidden": [".git", "node_modules", ".github"],
+          "restricted": [".claude", ".tmp-docs", "docs"],
+          "action": "forbidden: block, restricted: require special approval"
+        }
+      ]
+    },
+    "config_modification": {
+      "level": 3,
+      "checks": [
+        {
+          "name": "backup_required",
+          "description": "Always backup config files before modification",
+          "action": "create timestamped backup"
+        },
+        {
+          "name": "syntax_validation",
+          "description": "Validate JSON/YAML syntax before save",
+          "action": "prevent save if syntax error detected"
+        },
+        {
+          "name": "dependency_check",
+          "description": "Check for dependency impacts",
+          "files": ["package.json", "tsconfig.json"],
+          "action": "warn about potential breaking changes"
+        }
+      ]
+    },
+    "bulk_operations": {
+      "level": 2,
+      "checks": [
+        {
+          "name": "scope_limit",
+          "description": "Limit bulk operations scope",
+          "max_files": 50,
+          "action": "require special approval for operations exceeding limit"
+        },
+        {
+          "name": "preview_required",
+          "description": "Show preview of changes",
+          "preview_count": 5,
+          "action": "display first N changes before proceeding"
+        },
+        {
+          "name": "incremental_execution",
+          "description": "Execute in batches with confirmation",
+          "batch_size": 10,
+          "action": "pause after each batch for confirmation"
+        }
+      ]
+    }
+  },
+  "forbidden_operations": [
+    {
+      "pattern": "rm -rf /",
+      "description": "System root deletion"
+    },
+    {
+      "pattern": "git push.*--force",
+      "description": "Force push without explicit approval"
+    },
+    {
+      "pattern": "npm publish",
+      "description": "Package publishing"
+    },
+    {
+      "pattern": ".*[>|]\\s*\\.env",
+      "description": "Direct modification of .env files"
+    },
+    {
+      "pattern": "curl.*\\|.*sh",
+      "description": "Piping curl to shell"
+    }
+  ],
+  "audit_settings": {
+    "log_retention_days": 30,
+    "log_level": "info",
+    "include_timestamps": true,
+    "include_rollback_info": true
+  },
+  "rollback_settings": {
+    "backup_retention_days": 7,
+    "compression": true,
+    "include_metadata": true
+  },
+  "escalation_rules": {
+    "uncertainty_handling": "escalate_one_level",
+    "error_handling": "stop_and_report",
+    "timeout_seconds": 300
+  }
+}

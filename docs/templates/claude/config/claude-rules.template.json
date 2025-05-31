@@ -1,0 +1,192 @@
+{
+  "$schema": "https://claude.ai/schemas/rules/v1",
+  "version": "1.0.0",
+  "enforce": true,
+  "projectInfo": {
+    "name": "{{PROJECT_NAME}}",
+    "type": "{{PROJECT_TYPE}}",
+    "description": "{{PROJECT_DESCRIPTION}}"
+  },
+  "rules": {
+    "operations": {
+      "delete": {
+        "files": {
+          "level": 2,
+          "require_confirmation": true,
+          "confirmation_template": "⚠️ DELETE FILE: {path}\\nReason: {reason}\\nApprove? (yes/no)",
+          "forbidden_patterns": [
+            "# === UNIVERSAL FORBIDDEN (DO NOT REMOVE) ===",
+            "*.env",
+            ".env.*",
+            "**/*secret*",
+            "**/*private*",
+            "**/node_modules/**",
+            "**/.git/**",
+            "# === PROJECT TYPE: WEB APPLICATION ===",
+            "# package-lock.json",
+            "# yarn.lock", 
+            "# database/migrations/**",
+            "# .next/**",
+            "# === PROJECT TYPE: CLI TOOL ===",
+            "# ~/.config/**",
+            "# ~/.ssh/**",
+            "# /etc/**",
+            "# === PROJECT TYPE: PLUGIN/EXTENSION ===",
+            "# manifest.json",
+            "# plugin.json",
+            "# extension.json",
+            "# === YOUR PROJECT SPECIFIC ===",
+            "{{PROJECT_FORBIDDEN_FILES}}"
+          ]
+        },
+        "directories": {
+          "level": 2,
+          "require_confirmation": true,
+          "require_empty_check": true,
+          "forbidden": [
+            ".git",
+            ".github",
+            "node_modules",
+            "{{PROJECT_FORBIDDEN_DIRS}}"
+          ],
+          "restricted": [
+            ".tmp-docs",
+            ".claude",
+            ".mcp",
+            "{{PROJECT_RESTRICTED_DIRS}}"
+          ]
+        }
+      },
+      "modify": {
+        "config_files": {
+          "level": 3,
+          "require_confirmation": true,
+          "require_backup": true,
+          "patterns": [
+            "*.json",
+            "*.yml",
+            "*.yaml",
+            "*.config.*",
+            "*.toml",
+            "{{PROJECT_CONFIG_PATTERNS}}"
+          ]
+        }
+      },
+      "create": {
+        "files": {
+          "level": 1,
+          "auto_approve": true,
+          "forbidden_patterns": [
+            ".env",
+            "*.pem",
+            "*.key",
+            "*.cert",
+            "{{PROJECT_FORBIDDEN_CREATE}}"
+          ]
+        }
+      },
+      "execute": {
+        "commands": {
+          "forbidden": [
+            "rm -rf /",
+            "rm -rf /*",
+            ":(){ :|:& };:",
+            "git push --force",
+            "# === PROJECT TYPE: WEB APPLICATION ===",
+            "# DROP DATABASE",
+            "# DELETE FROM users",
+            "# npm run deploy:prod",
+            "# === PROJECT TYPE: CLI TOOL ===",
+            "# sudo rm",
+            "# pkill -9",
+            "# systemctl stop",
+            "# === PROJECT TYPE: PLUGIN ===",
+            "# npm publish",
+            "# yarn publish",
+            "# pnpm publish",
+            "{{PROJECT_FORBIDDEN_COMMANDS}}"
+          ],
+          "require_confirmation": [
+            "git clean",
+            "git reset --hard",
+            "find * -exec rm",
+            "xargs rm",
+            "{{PROJECT_CONFIRM_COMMANDS}}"
+          ]
+        }
+      }
+    },
+    "behaviors": {
+      "explain_before_execute": {
+        "enabled": true,
+        "required_fields": [
+          "operation",
+          "reason",
+          "impact",
+          "rollback"
+        ]
+      },
+      "audit_trail": {
+        "enabled": true,
+        "log_file": ".claude/runtime/audit.log",
+        "include_timestamp": true,
+        "include_user": true
+      },
+      "rollback_registry": {
+        "enabled": true,
+        "registry_file": ".claude/runtime/rollback-registry.json",
+        "max_entries": 100
+      },
+      "todo_integration": {
+        "enabled": true,
+        "require_todo_for_destructive": true,
+        "status_tracking": true
+      }
+    },
+    "escalation": {
+      "uncertainty_action": "ask_user",
+      "error_action": "stop_and_report",
+      "timeout_seconds": 300
+    },
+    "enforcement": {
+      "pre_operation_hook": true,
+      "post_operation_hook": true,
+      "block_forbidden": true,
+      "log_violations": true
+    }
+  },
+  "directives": [
+    "NEVER delete files without explicit user approval",
+    "NEVER modify configuration files without showing diff first",
+    "ALWAYS create backup before destructive operations",
+    "ALWAYS log operations with level >= 2",
+    "STOP immediately if user types STOP, CANCEL, or ABORT",
+    "{{PROJECT_SPECIFIC_DIRECTIVES}}"
+  ],
+  "_template_instructions": {
+    "variables_to_replace": 8,
+    "required": [
+      "PROJECT_NAME",
+      "PROJECT_TYPE",
+      "PROJECT_DESCRIPTION"
+    ],
+    "optional": [
+      "PROJECT_FORBIDDEN_FILES",
+      "PROJECT_FORBIDDEN_DIRS",
+      "PROJECT_RESTRICTED_DIRS",
+      "PROJECT_CONFIG_PATTERNS",
+      "PROJECT_FORBIDDEN_CREATE",
+      "PROJECT_FORBIDDEN_COMMANDS",
+      "PROJECT_CONFIRM_COMMANDS",
+      "PROJECT_SPECIFIC_DIRECTIVES"
+    ],
+    "project_types": [
+      "web-app",
+      "cli-tool",
+      "plugin",
+      "library",
+      "api-service"
+    ],
+    "uncomment_relevant_sections": true
+  }
+}

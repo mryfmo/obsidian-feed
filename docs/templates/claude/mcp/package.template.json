@@ -1,0 +1,93 @@
+{
+  "name": "@{{PROJECT_SCOPE}}/{{PROJECT_NAME}}-mcp",
+  "version": "1.0.0",
+  "description": "MCP integration for {{PROJECT_NAME}} - {{PROJECT_DESCRIPTION}}",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "build": "tsc",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "check:all": "npm run typecheck && npm run lint && npm run test",
+    "bridge": "tsx bridge.ts",
+    "turn-guard": "tsx bridge.ts turn_guard"
+  },
+  "keywords": [
+    "mcp",
+    "claude",
+    "{{PROJECT_TYPE}}"
+  ],
+  "author": "{{AUTHOR_NAME}} <{{AUTHOR_EMAIL}}>",
+  "license": "{{LICENSE}}",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.0.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "index.js",
+    "index.d.ts",
+    "!**/*.test.*",
+    "!**/*.spec.*"
+  ],
+  "_templateInstructions": {
+    "requiredReplacements": [
+      "PROJECT_SCOPE - npm scope, e.g., 'mycompany'",
+      "PROJECT_NAME - package name",
+      "PROJECT_DESCRIPTION - one line description",
+      "PROJECT_TYPE - web-app|cli-tool|plugin|library|api-service",
+      "AUTHOR_NAME",
+      "AUTHOR_EMAIL",
+      "LICENSE - MIT|Apache-2.0|GPL-3.0|proprietary"
+    ],
+    "projectTypeDependencies": {
+      "web-app": {
+        "dependencies": {
+          "express": "^4.18.0",
+          "cors": "^2.8.5"
+        }
+      },
+      "cli-tool": {
+        "dependencies": {
+          "commander": "^11.0.0",
+          "chalk": "^5.3.0"
+        }
+      },
+      "plugin": {
+        "dependencies": {
+          "HOST_APP_SDK": "HOST_APP_VERSION"
+        }
+      },
+      "api-service": {
+        "dependencies": {
+          "fastify": "^4.0.0",
+          "@fastify/cors": "^8.0.0"
+        }
+      }
+    },
+    "instructions": [
+      "1. Replace all {{VARIABLES}} with your values",
+      "2. Add project-type specific dependencies based on _templateInstructions.projectTypeDependencies",
+      "3. Remove the _templateInstructions section before use",
+      "4. Run 'npm install' to verify",
+      "5. Update version as needed"
+    ]
+  }
+}

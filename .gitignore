@@ -85,6 +85,20 @@ claude-output.md
 claude_desktop_config.json
 # analysis-results.md # Removed during cleanup
 
+# Claude directory structure
+# Runtime and temporary files (ignored)
+.claude/runtime/
+.claude/tmp-docs/
+.claude/backups/
+.claude/session/
+# But track configuration and docs
+!.claude/config/
+!.claude/docs/
+!.claude/scripts/
+!.claude/mcp/
+!.claude/.gitignore
+!.claude/README.md
+
 # Development notes with potential sensitive info
 docs/qa/*-investigation.md
 docs/qa/*-analysis.md
@@ -138,10 +152,5 @@ secrets.json
 # MCP cache directory
 .mcp/.cache/
 
-# Temporary documentation directory
-.tmp-docs/
-# This directory contains:
-# - Work-in-progress documentation
-# - Integration reports
-# - Analysis results
-# - Any temporary documentation files
+# Temporary documentation directory (moved to .claude/tmp-docs/)
+claude-backup-*.tar.gz

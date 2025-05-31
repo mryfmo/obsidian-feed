@@ -1,0 +1,122 @@
+# Claude Integration .gitignore Template
+# Project: {{PROJECT_NAME}}
+# Type: {{PROJECT_TYPE}}
+
+# === RUNTIME FILES (ALWAYS IGNORE) ===
+# These files are generated during runtime and should never be committed
+
+# Audit and logging
+runtime/
+*.log
+audit.json
+rollback-registry.json
+
+# Temporary documentation
+tmp-docs/
+
+# Backup files
+backups/
+*.backup
+*.bak
+*.old
+*.orig
+
+# Session data
+session/
+.session
+*.session
+
+# Cache directories
+.cache/
+cache/
+*.cache
+
+# === PROJECT TYPE SPECIFIC ===
+
+# == WEB APPLICATION ==
+# build/
+# dist/
+# .next/
+# .nuxt/
+# public/uploads/
+# *.env.local
+
+# == CLI TOOL ==
+# bin/
+# *.exe
+# *.app
+# release/
+
+# == PLUGIN/EXTENSION ==
+# *.vsix
+# *.xpi
+# *.crx
+# package/
+
+# == LIBRARY ==
+# lib/
+# es/
+# umd/
+# coverage/
+
+# === YOUR PROJECT SPECIFIC ===
+{{PROJECT_IGNORE_PATTERNS}}
+
+# === BUT TRACK THESE (IMPORTANT) ===
+# Configuration and documentation should be tracked
+
+!.gitignore
+!config/
+!docs/
+!scripts/
+!mcp/
+!README.md
+
+# Even in ignored directories, track important files
+!config/*.json
+!config/*.md
+!docs/**/*.md
+!scripts/*.sh
+!scripts/*.ts
+!mcp/*.ts
+!mcp/*.json
+
+# === SECURITY (NEVER COMMIT) ===
+*.pem
+*.key
+*.cert
+*.crt
+.env
+.env.*
+secrets.json
+credentials.json
+{{PROJECT_SECRET_FILES}}
+
+# === OS SPECIFIC ===
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# === DEPENDENCY DIRECTORIES ===
+node_modules/
+vendor/
+.bundle/
+__pycache__/
+*.pyc
+
+# === TEST ARTIFACTS ===
+test-results/
+*.test-results/
+.nyc_output/
+coverage/
+*.lcov
+
+# Template Instructions:
+# 1. Replace {{PROJECT_NAME}} with your project name
+# 2. Replace {{PROJECT_TYPE}} with: web-app|cli-tool|plugin|library
+# 3. Uncomment relevant sections for your project type
+# 4. Add project-specific patterns to {{PROJECT_IGNORE_PATTERNS}}
+# 5. Add secret file patterns to {{PROJECT_SECRET_FILES}}
+# 6. Remove these instruction comments

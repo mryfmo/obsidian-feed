@@ -1,0 +1,164 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "{{PROJECT_NAME}}",
+    "type": "{{PROJECT_TYPE}}"
+  },
+  "checks": {
+    "pre_operation": {
+      "file_operations": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "forbidden_pattern_check",
+            "description": "Prevent operations on protected files",
+            "level": "error",
+            "patterns": [
+              "*.env",
+              "**/*secret*",
+              "**/*private*",
+              ".git/**"
+            ]
+          },
+          {
+            "name": "backup_check",
+            "description": "Ensure backups before destructive operations",
+            "level": "warning",
+            "operations": ["delete", "overwrite", "rename"]
+          },
+          {
+            "name": "permission_check",
+            "description": "Verify operation permission level",
+            "level": "error",
+            "config": "claude-rules.json"
+          }
+        ]
+      },
+      "command_execution": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "forbidden_command_check",
+            "description": "Block dangerous commands",
+            "level": "error",
+            "patterns": [
+              "rm -rf /",
+              ":(){ :|:& };:",
+              "git push --force",
+              "npm publish"
+            ]
+          },
+          {
+            "name": "sudo_check",
+            "description": "Prevent sudo usage",
+            "level": "error",
+            "pattern": "^sudo\\s+"
+          }
+        ]
+      },
+      "code_quality": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "console_log_check",
+            "description": "No console.log in production code",
+            "level": "warning",
+            "pattern": "console\\.(log|debug|info)",
+            "exclude": ["*.test.*", "*.spec.*", "tests/**"]
+          },
+          {
+            "name": "todo_check",
+            "description": "No TODO comments in production",
+            "level": "info",
+            "pattern": "(TODO|FIXME|XXX|HACK)",
+            "exclude": ["*.md"]
+          }
+        ]
+      }
+    },
+    "post_operation": {
+      "validation": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "syntax_check",
+            "description": "Verify code syntax",
+            "level": "error",
+            "command": "{{SYNTAX_CHECK_COMMAND}}"
+          },
+          {
+            "name": "type_check",
+            "description": "Verify TypeScript types",
+            "level": "error",
+            "command": "{{TYPECHECK_COMMAND}}",
+            "condition": "project_uses_typescript"
+          },
+          {
+            "name": "test_check",
+            "description": "Run affected tests",
+            "level": "warning",
+            "command": "{{TEST_COMMAND}}",
+            "condition": "files_have_tests"
+          }
+        ]
+      },
+      "security": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "dependency_audit",
+            "description": "Check for vulnerable dependencies",
+            "level": "warning",
+            "command": "npm audit --json",
+            "condition": "package_json_modified"
+          },
+          {
+            "name": "secrets_scan",
+            "description": "Scan for exposed secrets",
+            "level": "error",
+            "patterns": [
+              "-----BEGIN.*PRIVATE KEY-----",
+              "api[_-]?key.*=.*['\"][a-zA-Z0-9]{20,}",
+              "password.*=.*['\"][^'\"]{8,}"
+            ]
+          }
+        ]
+      }
+    },
+    "continuous": {
+      "monitoring": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "audit_trail",
+            "description": "Ensure audit logging",
+            "level": "error",
+            "verify": ".claude/runtime/audit.log"
+          },
+          {
+            "name": "rollback_registry",
+            "description": "Maintain rollback information",
+            "level": "warning",
+            "verify": ".claude/runtime/rollback-registry.json"
+          }
+        ]
+      }
+    }
+  },
+  "enforcement": {
+    "strict_mode": true,
+    "fail_on_error": true,
+    "fail_on_warning": false,
+    "skip_on_emergency": ["EMERGENCY_BYPASS", "FORCE_SKIP_CHECKS"],
+    "report_format": "json",
+    "report_location": ".claude/reports/"
+  },
+  "project_specific_checks": {
+    "{{CHECK_NAME}}": {
+      "enabled": false,
+      "description": "{{CHECK_DESCRIPTION}}",
+      "level": "{{CHECK_LEVEL}}",
+      "command": "{{CHECK_COMMAND}}"
+    }
+  }
+}

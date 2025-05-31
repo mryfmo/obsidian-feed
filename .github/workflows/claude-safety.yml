@@ -1,0 +1,138 @@
+name: Claude Safety Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  safety-check:
+    name: Validate Claude Operations
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '@claude') || github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check for destructive operations
+      id: check-operations
+      run: |
+        # Check for file deletions
+        if git diff --name-status origin/main..HEAD | grep -E '^D'; then
+          echo "::warning::Destructive operations detected - file deletions found"
+          echo "destructive=true" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check for bulk operations
+        if git diff origin/main..HEAD | grep -E 'find.*-exec|xargs.*rm|git clean'; then
+          echo "::warning::Bulk operations detected"
+          echo "bulk=true" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check for config modifications
+        if git diff --name-only origin/main..HEAD | grep -E 'package\.json|tsconfig\.json|\.github/'; then
+          echo "::warning::Configuration changes detected"
+          echo "config=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Verify permission levels
+      run: |
+        # Ensure PERMISSIONS.md exists
+        if [ ! -f "PERMISSIONS.md" ]; then
+          echo "::error::PERMISSIONS.md not found - Claude safety protocols not properly configured"
+          exit 1
+        fi
+        
+        # Ensure audit directory exists
+        if [ ! -d ".claude" ]; then
+          echo "::error::.claude directory not found - audit system not configured"
+          exit 1
+        fi
+    
+    - name: Check audit trail
+      if: steps.check-operations.outputs.destructive == 'true'
+      run: |
+        # Verify audit log exists and has entries for destructive operations
+        if [ -f ".claude/audit.log" ]; then
+          echo "Audit log found - checking for operation records"
+          tail -20 .claude/audit.log
+        else
+          echo "::warning::No audit log found for destructive operations"
+        fi
+    
+    - name: Generate safety report
+      if: always()
+      run: |
+        cat << EOF > safety-report.md
+        # Claude Safety Check Report
+        
+        ## Operation Analysis
+        - Destructive operations: ${{ steps.check-operations.outputs.destructive || 'false' }}
+        - Bulk operations: ${{ steps.check-operations.outputs.bulk || 'false' }}
+        - Config changes: ${{ steps.check-operations.outputs.config || 'false' }}
+        
+        ## Required Approvals
+        EOF
+        
+        if [ "${{ steps.check-operations.outputs.destructive }}" = "true" ]; then
+          echo "- ⚠️ LEVEL 2: Destructive operations require explicit approval" >> safety-report.md
+        fi
+        
+        if [ "${{ steps.check-operations.outputs.config }}" = "true" ]; then
+          echo "- 🚨 LEVEL 3: Configuration changes require review" >> safety-report.md
+        fi
+        
+        cat safety-report.md
+    
+    - name: Post safety comment
+      if: github.event_name == 'pull_request' && (steps.check-operations.outputs.destructive == 'true' || steps.check-operations.outputs.config == 'true')
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('safety-report.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: report + '\n\n@' + context.actor + ' Please review and confirm these operations.'
+          })
+
+  validate-protocols:
+    name: Validate Safety Protocols
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Validate required files
+      run: |
+        required_files=(
+          "PERMISSIONS.md"
+          "CLAUDE_OPERATIONAL_PROTOCOL.md"
+          "CLAUDE.md"
+          ".claude/checks.json"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "::error::Required safety file missing: $file"
+            exit 1
+          fi
+        done
+        
+        echo "✅ All safety protocol files present"
+    
+    - name: Validate JSON syntax
+      run: |
+        python3 -m json.tool .claude/checks.json > /dev/null
+        if [ $? -eq 0 ]; then
+          echo "✅ checks.json is valid"
+        else
+          echo "::error::Invalid JSON in .claude/checks.json"
+          exit 1
+        fi

@@ -7,14 +7,42 @@ See LICENSE-MIT for details.
 
 This file provides guidance to Claude Code (claude.ai/code) and Claude Code Action (GitHub integration) when working with code in this repository.
 
+## 🚨 CRITICAL SAFETY PROTOCOLS
+
+**MANDATORY READING BEFORE ANY OPERATION:**
+
+1. **claude-rules.json** - Machine-readable rules that MUST be enforced
+2. **PERMISSIONS.md** - Operation permission levels and confirmation requirements
+3. **CLAUDE_OPERATIONAL_PROTOCOL.md** - Detailed operation procedures and templates
+4. **.claude/checks.json** - Automated safety checks and forbidden operations
+5. **.mcp/operation-guard.ts** - Runtime operation validation
+
+**ALL DESTRUCTIVE OPERATIONS (LEVEL 2+) REQUIRE EXPLICIT USER APPROVAL**
+
+## ⚡ ENFORCEABLE DIRECTIVES
+
+Claude MUST:
+1. Check `claude-rules.json` before EVERY file system operation
+2. Log ALL operations with level >= 2 to `.claude/audit.log`
+3. Create backups before ANY destructive operation
+4. STOP immediately if user types: STOP, CANCEL, or ABORT
+5. NEVER execute forbidden operations listed in `claude-rules.json`
+
+Claude MUST NOT:
+1. Delete files without explicit approval (even if asked)
+2. Modify config files without showing diff first
+3. Execute commands containing: rm -rf /, git push --force, npm publish
+4. Create or modify: .env files, private keys, credentials
+5. Perform bulk operations without preview and confirmation
+
 ## 📚 Essential Documentation
 
 **IMPORTANT: Read these files to understand the workflow and constraints:**
 
 1. **AGENTS.md** - Overview of the multi-agent system and all available documentation
-2. **docs/agents/02_claude-code.md** - Detailed workflow, phases, and guardrails for Claude Code
-3. **docs/agents/01_task-lifecycle.md** - Standard Task Protocol (STP) that must be followed
-4. **docs/agents/00_common-rules.md** - Coding conventions and shared constraints
+2. **.claude/docs/workflows/DEVELOPMENT.md** - 7-phase development process and guardrails
+3. **.claude/docs/core/SAFETY.md** - Safety rules and security implementation
+4. **.claude/docs/core/PRINCIPLES.md** - Core integration principles
 
 ## 🛠️ MCP (Model Context Protocol) Integration
 
@@ -81,13 +109,21 @@ The following shell scripts are available:
 
 ### Implementation Status
 
-- ⚠️ **MCP Integration**: Planned but not yet implemented (see `.tmp-docs/IMPLEMENTATION_STATUS.md`)
+- ✅ **MCP Integration**: Basic implementation available in `.mcp/` directory
+  - OperationGuard for safety validation
+  - MCP server with tool definitions
+  - TypeScript-based implementation
 - ✅ Basic guard validation working (10 of 26 guards implemented)
 - ✅ Shell script compatibility for macOS
 - ⚠️ Phase transition validation not yet implemented
 - ⚠️ Role-based access control not enforced in CI
+- ⚠️ **Claude Configuration**: Not yet applied to main project (templates available in `docs/templates/claude/`)
 
-For detailed implementation status, see `.tmp-docs/IMPLEMENTATION_STATUS.md`
+To apply Claude integration to this project:
+```bash
+cd docs/templates/claude
+./generate-claude-setup-complete.sh obsidian-feed plugin "Your Name" "email@example.com" MIT --all
+```
 
 ## Essential Commands
 
@@ -201,7 +237,7 @@ When working with Claude Code Action:
 
 ### Temporary Documentation
 
-Use `.tmp-docs/` directory for all temporary documentation:
+Use `.claude/tmp-docs/` directory for all temporary documentation:
 
 - Work-in-progress guides
 - Analysis reports
@@ -221,3 +257,106 @@ As of 2025-01-30:
 - **Type Safety**: All explicit `any` types replaced with proper types
 
 Run `pnpm check:all` to verify all quality checks.
+
+## Operation Safety Guidelines
+
+### Destructive Operations (LEVEL 2+)
+
+The following operations ALWAYS require explicit user confirmation:
+- File deletion (`rm`, `git rm`)
+- Directory deletion (`rm -rf`)
+- File/directory renaming or moving (`mv`)
+- Bulk find/replace operations
+- Configuration file modifications
+
+### Safe Operations (LEVEL 0-1)
+
+The following can be performed without confirmation:
+- Reading files (Read, Grep, LS tools)
+- Creating new files (not overwriting)
+- Editing existing file contents
+- Running tests and builds
+- Git status and diff commands
+
+### Forbidden Operations
+
+NEVER execute without explicit instruction:
+- `rm -rf /` or any system directory deletion
+- `git push --force`
+- Direct `.env` file modifications
+- Private key operations
+- Package publishing commands
+
+### Audit Trail
+
+All operations are logged to:
+- `.claude/runtime/audit.log` - Human-readable audit trail
+- `.claude/runtime/rollback-registry.json` - Rollback information
+
+### Emergency Procedures
+
+If an operation goes wrong:
+1. Check `.claude/rollback-registry.json` for rollback commands
+2. Use git to restore files: `git checkout -- <file>`
+3. Check `.claude/backups/` for file backups
+4. Report the issue with operation ID from audit log
+
+## Best Practices
+
+1. **Always explain before executing** - Follow the EIA Protocol
+2. **Batch operations need planning** - Present full plan before starting
+3. **Uncertain means escalate** - When in doubt, ask for confirmation
+4. **Maintain audit trail** - All LEVEL 2+ operations must be logged
+5. **Test rollback plans** - Ensure recovery is possible before proceeding
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+
+## 🚨 CRITICAL SAFETY ENFORCEMENT
+
+**MANDATORY**: All operations MUST go through the OperationGuard validation:
+
+```typescript
+// ALL file operations MUST use these methods:
+const mcp = new MCPIntegration();
+
+// ✅ CORRECT - Uses guard validation
+await mcp.readFile('/path/to/file');
+await mcp.deleteFile('/path/to/file', 'Reason for deletion');
+
+// ❌ WRONG - Bypasses safety checks
+fs.unlinkSync('/path/to/file');  // NEVER do this
+```
+
+### Operation Levels (MUST respect):
+- **LEVEL 0**: Read-only operations (auto-approved)
+- **LEVEL 1**: Safe modifications (auto-approved)
+- **LEVEL 2**: Destructive operations (REQUIRES user confirmation)
+- **LEVEL 3**: System modifications (REQUIRES explicit approval)
+
+### FORBIDDEN Operations (WILL be blocked):
+- Deleting: `*.md`, `package.json`, `tsconfig.json`, `.gitignore`
+- Deleting directories: `.git`, `.github`, `node_modules`, `src`, `docs`
+- Executing: `rm -rf /`, `git push --force`, any publish commands
+
+### MANDATORY Behaviors:
+1. **EXPLAIN before destructive operations** with: operation, reason, impact, rollback
+2. **CREATE backup** before modifying config files
+3. **LOG all operations** with level >= 2 to audit trail
+4. **STOP immediately** if user types STOP, CANCEL, or ABORT
+5. **ASK for confirmation** for ANY operation marked as requiring confirmation
+
+## 📁 File Organization
+
+All Claude-specific files are organized under `.claude/`:
+
+- `.claude/config/` - Configuration and rules
+- `.claude/docs/` - Documentation and guides
+- `.claude/runtime/` - Runtime files (audit logs, etc.)
+- `.claude/tmp-docs/` - Temporary documentation
+- `.claude/scripts/` - Claude-specific scripts
+
+See `.claude/README.md` for details.

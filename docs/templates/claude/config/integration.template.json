@@ -1,0 +1,85 @@
+{
+  "version": "1.0.0",
+  "projectInfo": {
+    "name": "{{PROJECT_NAME}}",
+    "type": "{{PROJECT_TYPE}}",
+    "description": "{{PROJECT_DESCRIPTION}}"
+  },
+  "safety_config": {
+    "require_approval_for_levels": [2, 3],
+    "auto_approve_levels": [0, 1],
+    "approval_timeout_minutes": 30,
+    "require_audit_trail": true
+  },
+  "operation_hooks": {
+    "pre_operation": [
+      {
+        "level": 2,
+        "action": "create_backup",
+        "condition": "file_exists"
+      },
+      {
+        "level": 3,
+        "action": "require_reviewer",
+        "condition": "always"
+      }
+    ],
+    "post_operation": [
+      {
+        "level": 2,
+        "action": "update_audit_log",
+        "condition": "always"
+      },
+      {
+        "level": 2,
+        "action": "update_rollback_registry",
+        "condition": "success"
+      }
+    ]
+  },
+  "github_integration": {
+    "require_pr_for_destructive": true,
+    "auto_create_safety_issue": true,
+    "safety_labels": {
+      "level_0": "safe-operation",
+      "level_1": "modify-operation",
+      "level_2": "destructive-operation",
+      "level_3": "system-operation"
+    },
+    "workflow_triggers": {
+      "claude_mention": "@claude",
+      "mcp_mention": "@claude-mcp",
+      "emergency_stop": ["STOP", "CANCEL", "ABORT"]
+    }
+  },
+  "notification_settings": {
+    "notify_on_level_2": true,
+    "notify_on_level_3": true,
+    "notification_channels": ["github_comment", "audit_log"],
+    "email_notifications": {
+      "enabled": false,
+      "recipients": ["{{PROJECT_ADMIN_EMAIL}}"]
+    }
+  },
+  "mcp_settings": {
+    "enabled": true,
+    "default_mode": "hybrid",
+    "servers": {
+      "filesystem": true,
+      "github": true,
+      "memory": true,
+      "sequential_thinking": true,
+      "fetch": true
+    },
+    "custom_servers": {
+      "{{CUSTOM_SERVER_NAME}}": {
+        "enabled": false,
+        "command": "{{CUSTOM_SERVER_COMMAND}}",
+        "args": ["{{CUSTOM_SERVER_ARGS}}"]
+      }
+    }
+  },
+  "project_specific": {
+    "{{PROJECT_SETTING_KEY}}": "{{PROJECT_SETTING_VALUE}}"
+  }
+}

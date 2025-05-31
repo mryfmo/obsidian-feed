@@ -1,0 +1,154 @@
+{
+  "$schema": "https://claude.ai/schemas/rules/v1",
+  "version": "1.0.0",
+  "enforce": true,
+  "projectInfo": {
+    "name": "obsidian-feed",
+    "type": "plugin",
+    "description": "Obsidian plugin for reading RSS/Atom feeds"
+  },
+  "rules": {
+    "operations": {
+      "delete": {
+        "files": {
+          "level": 2,
+          "require_confirmation": true,
+          "confirmation_template": "⚠️ DELETE FILE: {path}\\nReason: {reason}\\nApprove? (yes/no)",
+          "forbidden_patterns": [
+            "*.env",
+            ".env.*",
+            "**/*secret*",
+            "**/*private*",
+            "**/node_modules/**",
+            "**/.git/**",
+            "package.json",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "manifest.json",
+            "*.md",
+            "LICENSE*",
+            "styles.css",
+            "main.js"
+          ]
+        },
+        "directories": {
+          "level": 2,
+          "require_confirmation": true,
+          "require_empty_check": true,
+          "forbidden": [
+            ".git",
+            ".github",
+            "node_modules",
+            "src",
+            "docs",
+            ".obsidian"
+          ],
+          "restricted": [
+            ".claude",
+            ".mcp",
+            "dist",
+            "tests"
+          ]
+        }
+      },
+      "modify": {
+        "config_files": {
+          "level": 3,
+          "require_confirmation": true,
+          "require_backup": true,
+          "patterns": [
+            "*.json",
+            "*.yml",
+            "*.yaml",
+            "*.config.*",
+            "*.toml",
+            "manifest.json",
+            "versions.json"
+          ]
+        }
+      },
+      "create": {
+        "files": {
+          "level": 1,
+          "auto_approve": true,
+          "forbidden_patterns": [
+            ".env",
+            "*.pem",
+            "*.key",
+            "*.cert",
+            "*secret*",
+            "*private*"
+          ]
+        }
+      },
+      "execute": {
+        "commands": {
+          "forbidden": [
+            "rm -rf /",
+            "rm -rf /*",
+            ":(){ :|:& };:",
+            "git push --force",
+            "npm publish",
+            "yarn publish",
+            "pnpm publish"
+          ],
+          "require_confirmation": [
+            "git clean",
+            "git reset --hard",
+            "find * -exec rm",
+            "xargs rm",
+            "npm install",
+            "pnpm install"
+          ]
+        }
+      }
+    },
+    "behaviors": {
+      "explain_before_execute": {
+        "enabled": true,
+        "required_fields": [
+          "operation",
+          "reason",
+          "impact",
+          "rollback"
+        ]
+      },
+      "audit_trail": {
+        "enabled": true,
+        "log_file": ".claude/runtime/audit.log",
+        "include_timestamp": true,
+        "include_user": true
+      },
+      "rollback_registry": {
+        "enabled": true,
+        "registry_file": ".claude/runtime/rollback-registry.json",
+        "max_entries": 100
+      },
+      "todo_integration": {
+        "enabled": true,
+        "require_todo_for_destructive": true,
+        "status_tracking": true
+      }
+    },
+    "escalation": {
+      "uncertainty_action": "ask_user",
+      "error_action": "stop_and_report",
+      "timeout_seconds": 300
+    },
+    "enforcement": {
+      "pre_operation_hook": true,
+      "post_operation_hook": true,
+      "block_forbidden": true,
+      "log_violations": true
+    }
+  },
+  "directives": [
+    "NEVER delete files without explicit user approval",
+    "NEVER modify configuration files without showing diff first",
+    "ALWAYS create backup before destructive operations",
+    "ALWAYS log operations with level >= 2",
+    "STOP immediately if user types STOP, CANCEL, or ABORT",
+    "PROTECT Obsidian plugin core files (manifest.json, main.js, styles.css)",
+    "PRESERVE user vault data at all costs"
+  ]
+}

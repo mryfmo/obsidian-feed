@@ -1,0 +1,305 @@
+name: Claude Code Integration
+# Template Version: 1.0.0
+# Project: {{PROJECT_NAME}}
+
+env:
+  CLAUDE_RULES_ENFORCE: true
+  CLAUDE_SAFETY_LEVEL: strict
+  PROJECT_NAME: {{PROJECT_NAME}}
+  PROJECT_TYPE: {{PROJECT_TYPE}} # web-app|cli-tool|plugin|library|api-service
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [opened, synchronize]
+  # === PROJECT SPECIFIC TRIGGERS ===
+  # workflow_dispatch:
+  #   inputs:
+  #     operation:
+  #       description: 'Operation to perform'
+  #       required: true
+  #       type: choice
+  #       options: {{PROJECT_OPERATIONS}}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  # === ADDITIONAL PERMISSIONS FOR PROJECT TYPE ===
+  # packages: write      # For npm packages
+  # deployments: write   # For deployment updates
+  # actions: write       # For workflow management
+
+jobs:
+  claude-integration:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
+      (github.event_name == 'pull_request')
+    runs-on: ubuntu-latest
+    # === PROJECT SPECIFIC RUNNER ===
+    # runs-on: {{PROJECT_RUNNER}} # self-hosted|macos-latest|windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # === PROJECT SPECIFIC CHECKOUT ===
+          # submodules: true              # If using git submodules
+          # lfs: true                     # If using Git LFS
+          # token: ${{ secrets.PAT }}     # If accessing private repos
+
+      - name: Setup Environment
+        run: |
+          echo "🔧 Setting up {{PROJECT_NAME}} environment..."
+          
+          # Detect integration mode
+          MODE="hybrid"  # Default to hybrid mode
+          
+          if [[ "${{ github.event_name }}" == "pull_request"* ]]; then
+            LABELS="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+            BODY="${{ github.event.pull_request.body }}"
+          else
+            LABELS="${{ join(github.event.issue.labels.*.name, ',') }}"
+            BODY="${{ github.event.issue.body || '' }}"
+          fi
+          
+          # Check for MCP mode indicators
+          if [[ "$LABELS" == *"mcp-only"* ]] || [[ "$BODY" == *"@claude-mcp"* ]]; then
+            MODE="mcp"
+          elif [[ "$LABELS" == *"shell-only"* ]]; then
+            MODE="shell"
+          fi
+          
+          echo "mode=$MODE" >> $GITHUB_ENV
+          echo "Integration mode: $MODE"
+
+      # === PROJECT TYPE: NODE.JS APPLICATION ===
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # node-version-file: '.nvmrc'  # If using .nvmrc
+          # cache: 'pnpm'                 # or npm|yarn
+
+      # === PROJECT TYPE: PYTHON APPLICATION ===
+      # - name: Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '{{PYTHON_VERSION}}'
+      #     cache: 'pip'
+
+      # === PROJECT TYPE: RUST APPLICATION ===
+      # - name: Setup Rust
+      #   uses: actions-rs/toolchain@v1
+      #   with:
+      #     toolchain: stable
+      #     profile: minimal
+      #     override: true
+
+      - name: Setup Python (for MCP servers)
+        if: env.mode != 'shell'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install UV (for Python MCP servers)
+        if: env.mode != 'shell'
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Initialize Safety System
+        run: |
+          echo "🛡️ Initializing Claude Safety System..."
+          
+          # Ensure safety wrapper is available
+          if [ -f ".github/scripts/claude-safety-wrapper.sh" ]; then
+            source .github/scripts/claude-safety-wrapper.sh
+            echo "✅ Safety wrapper loaded"
+          else
+            echo "⚠️ Safety wrapper not found, basic safety only"
+          fi
+          
+          # Verify claude-rules.json exists
+          if [ ! -f ".claude/config/claude-rules.json" ] && [ ! -f "claude-rules.json" ]; then
+            echo "::error::claude-rules.json not found - Claude safety rules not configured"
+            exit 1
+          fi
+          
+          # Initialize audit directory
+          mkdir -p .claude/runtime
+          echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | INFO | GITHUB_ACTION | safety-init | STARTED | github-actions | Safety system initialized" >> .claude/runtime/audit.log
+          
+          echo "✅ Safety system initialized"
+
+      # === PROJECT SPECIFIC SETUP ===
+      # - name: Install Dependencies
+      #   run: {{PROJECT_INSTALL_COMMAND}}
+      
+      # - name: Run Pre-checks
+      #   run: {{PROJECT_PRECHECK_COMMAND}}
+
+      - name: Create MCP Configuration
+        if: env.mode != 'shell'
+        run: |
+          mkdir -p .github/claude
+          
+          cat > .github/claude/mcp-config.json << EOF
+          {
+            "mcpServers": {
+              "filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", "$GITHUB_WORKSPACE"]
+              },
+              "github": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-github"],
+                "env": {
+                  "GITHUB_PERSONAL_ACCESS_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+                }
+              },
+              "memory": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-memory"]
+              },
+              "sequential-thinking": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+              }
+              {{PROJECT_MCP_SERVERS}}
+            }
+          }
+          EOF
+
+      - name: Prepare Context
+        id: context
+        run: |
+          # Create project-specific context
+          cat > claude-context.md << 'EOF'
+          # Context for {{PROJECT_NAME}}
+          
+          ## Project Type: {{PROJECT_TYPE}}
+          
+          ## Integration Mode: ${{ env.mode }}
+          
+          ### Project Description
+          {{PROJECT_DESCRIPTION}}
+          
+          ### Key Files
+          EOF
+          
+          # Add CLAUDE.md if exists
+          if [ -f "CLAUDE.md" ]; then
+            echo '```markdown' >> claude-context.md
+            cat CLAUDE.md >> claude-context.md
+            echo '```' >> claude-context.md
+          fi
+          
+          # === PROJECT SPECIFIC CONTEXT ===
+          # Add project-specific documentation
+          {{PROJECT_CONTEXT_ADDITIONS}}
+          
+          echo "context_created=true" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code Action
+        uses: anthropics/claude-code-action@main
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: ${{ env.mode }}
+          context_file: claude-context.md
+          mcp_config: ${{ env.mode != 'shell' && '.github/claude/mcp-config.json' || '' }}
+          # === PROJECT SPECIFIC PARAMETERS ===
+          # max_tokens: {{PROJECT_MAX_TOKENS}}
+          # temperature: {{PROJECT_TEMPERATURE}}
+          # custom_instructions: {{PROJECT_INSTRUCTIONS}}
+
+      - name: Validate Output
+        if: success()
+        run: |
+          echo "Validating Claude output..."
+          
+          # Set role for validation
+          export TURN_ROLE="${{ github.event.issue.title }}"
+          
+          # Run validation
+          if [ -f "claude-output.md" ]; then
+            # Try MCP validation first
+            if command -v tsx >/dev/null 2>&1 && [ -f ".mcp/bridge.ts" ]; then
+              echo "Using MCP validation"
+              npx tsx .mcp/bridge.ts turn_guard claude-output.md || exit 1
+            else
+              # Fallback to shell validation
+              echo "Using shell validation"
+              chmod +x tools/turn_guard.sh
+              tools/turn_guard.sh claude-output.md || exit 1
+            fi
+          fi
+
+      # === PROJECT SPECIFIC VALIDATION ===
+      # - name: Project Tests
+      #   run: {{PROJECT_TEST_COMMAND}}
+      
+      # - name: Security Scan
+      #   run: {{PROJECT_SECURITY_COMMAND}}
+
+      - name: Update Labels
+        if: github.event_name == 'pull_request' || contains(github.event_name, 'pull_request_')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = {{PROJECT_LABELS}};
+            const issue_number = context.issue?.number || context.payload.pull_request?.number;
+            
+            if (issue_number) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                labels: labels
+              });
+            }
+
+      - name: Post Summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mode = '${{ env.mode }}';
+            const projectName = '{{PROJECT_NAME}}';
+            const projectType = '{{PROJECT_TYPE}}';
+            
+            const comment = `## Claude Code Integration Summary
+            
+            - **Project**: ${projectName} (${projectType})
+            - **Integration Mode**: ${mode}
+            - **Status**: ${{ job.status }}
+            
+            Claude has completed the requested operation.`;
+            
+            if (context.issue && context.issue.number) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+# Template Instructions:
+# 1. Replace all {{VARIABLES}} with your project values
+# 2. Uncomment sections relevant to your project type
+# 3. Remove sections not applicable to your project
+# 4. Test the workflow in a feature branch first
+# 5. Required secrets: ANTHROPIC_API_KEY, GITHUB_TOKEN
