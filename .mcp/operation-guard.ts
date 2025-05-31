@@ -24,20 +24,66 @@ export class OperationGuard {
     // Look for claude-rules.json in parent directory (project root)
     const projectRoot = join(__dirname, '..');
     
-    // Check both new and old locations for compatibility
-    let rulesPath = join(projectRoot, '.claude', 'config', 'claude-rules.json');
-    if (!existsSync(rulesPath)) {
-      rulesPath = join(projectRoot, 'claude-rules.json');
-      if (!existsSync(rulesPath)) {
-        throw new Error('claude-rules.json not found - Claude safety rules not configured');
+    // Check multiple locations for compatibility
+    const possiblePaths = [
+      join(projectRoot, '.claude', 'config', 'claude-rules.json'),
+      join(projectRoot, 'claude-rules.json'),
+      // For testing environments
+      join(__dirname, 'tests', 'fixtures', 'claude-rules.json'),
+      join(projectRoot, '.mcp', 'tests', 'fixtures', 'claude-rules.json')
+    ];
+    
+    let rulesPath: string | undefined;
+    for (const path of possiblePaths) {
+      if (existsSync(path)) {
+        rulesPath = path;
+        break;
       }
     }
     
-    this.rules = JSON.parse(readFileSync(rulesPath, 'utf-8'));
+    if (!rulesPath) {
+      // In test environment, create a minimal config
+      if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+        this.rules = this.getDefaultTestRules();
+      } else {
+        throw new Error('claude-rules.json not found - Claude safety rules not configured');
+      }
+    } else {
+      this.rules = JSON.parse(readFileSync(rulesPath, 'utf-8'));
+    }
+    
     this.config = {
       rules: this.rules,
       auditLog: join(projectRoot, '.claude', 'runtime', 'audit.log'),
       rollbackRegistry: join(projectRoot, '.claude', 'runtime', 'rollback-registry.json')
+    };
+  }
+
+  private getDefaultTestRules() {
+    return {
+      rules: {
+        operations: {
+          delete: {
+            files: {
+              level: 2,
+              require_confirmation: true,
+              forbidden_patterns: ["*.env", "*.md", "package.json"]
+            }
+          },
+          create: {
+            files: {
+              level: 1,
+              auto_approve: true
+            }
+          }
+        },
+        behaviors: {
+          audit_trail: {
+            enabled: true,
+            log_file: ".claude/runtime/audit.log"
+          }
+        }
+      }
     };
   }
 
