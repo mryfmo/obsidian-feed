@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Reviewer Agent (`review`)
 
 The **Reviewer Agent** acts as an automated code-reviewer. It inspects patches proposed by the `dev` agent (or humans) and ensures that every change adheres to quality standards before merging.

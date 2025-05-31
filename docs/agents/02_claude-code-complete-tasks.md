@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Complete Task Definitions for Claude Code Workflow
 
 This document provides the complete 28 task definitions referenced in `02_claude-code.md`.

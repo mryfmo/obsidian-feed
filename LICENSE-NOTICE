@@ -1,0 +1,14 @@
+LICENSING NOTICE
+================
+
+This project uses a dual-license approach:
+
+1. Source Code (*.ts, *.js, *.css, etc.)
+   Licensed under GNU General Public License v3.0 or later
+   See LICENSE file
+
+2. Documentation (*.md files, docs/, AGENTS.md, etc.)
+   Licensed under MIT License
+   See LICENSE-MIT file
+
+For questions about licensing, please open an issue.

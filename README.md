@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Contents Feeds Reader - An Obsidian Plugin
 
 Read, search and triage RSS / Atom (and soon YouTube & Podcast) feeds **inside Obsidian**.  
@@ -141,6 +146,40 @@ This project features a complete Model Context Protocol (MCP) integration that e
 
 ---
 
+## 🔨 Development
+
+### Dependencies
+- **Obsidian**: 1.8.7+ (uses Electron ~26.x)
+- **Electron**: 34.3.0 in devDependencies for future compatibility testing
+- **Node.js**: 16.x or higher
+- **pnpm**: 8.x recommended
+
+### Build Instructions
+```bash
+# Install dependencies
+pnpm install
+
+# Development build with watch mode
+pnpm dev
+
+# Production build
+pnpm build
+
+# Run tests
+pnpm test
+
+# Type checking
+pnpm typecheck
+
+# Linting
+pnpm lint
+```
+
 ## 📝 License
 
-GNU GENERAL PUBLIC LICENSE Version 3 – see [`LICENSE`](./LICENSE).
+This project uses a dual-license approach:
+
+- **Source Code** (*.ts, *.js, *.css, etc.): GNU General Public License v3.0 or later - see [`LICENSE`](./LICENSE)
+- **Documentation** (*.md files, docs/, etc.): MIT License - see [`LICENSE-MIT`](./LICENSE-MIT)
+
+For details, see [`LICENSE-NOTICE`](./LICENSE-NOTICE).

@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Claude Code Action Integration Guide
 
 This guide explains how Claude Code Action integrates with the strict workflow system.

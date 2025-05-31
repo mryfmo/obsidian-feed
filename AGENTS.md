@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Agents Manifest for "Contents Feeds Reader" Repository
 
 This repository employs a **multi-agent workflow** to automate common maintenance tasks (bug-fixing, feature work, QA, documentation, release management, …) with Large Language Models (LLMs).

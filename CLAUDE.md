@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) and Claude Code Action (GitHub integration) when working with code in this repository.

@@ -1,4 +1,9 @@
 <!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
+<!--
 Claude Code Task Instruction – TEMPLATE
 
 Rename/Copy to `claude-code-instruction-<task-id>.md` **in your working tree**

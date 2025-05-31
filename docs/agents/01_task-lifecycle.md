@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # 01 – Task-Lifecycle Checklist 🚦
 
 > **Purpose** Provide a repeatable, auditable mini-SDLC that every agent – human

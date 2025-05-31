@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # STP Validation Guide
 
 This guide explains how the Standard Task Protocol (STP) validation works and how to ensure your PRs pass validation.

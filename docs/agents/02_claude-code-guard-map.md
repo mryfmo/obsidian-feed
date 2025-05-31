@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Complete Guard Map for Claude Code Workflow
 
 This document provides the complete guard definitions referenced in `02_claude-code.md`. All guards have been enhanced with MCP integration (Phase 2 Complete - 2025-01-29).

@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Final Specification
 
 CSV;Phase,Step,Task,ExitGate,GuardID,R,A,Status

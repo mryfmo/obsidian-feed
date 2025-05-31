@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Developer Agent (`dev`)
 
 The **Developer Agent** is the work-horse that writes and modifies source code. Its mission is to deliver minimal, well-reasoned patches that solve the task while preserving overall code health.

@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Security Guide for Obsidian Feed Plugin
 
 This guide provides comprehensive security guidelines for contributors and reviewers of the Obsidian Feed plugin.

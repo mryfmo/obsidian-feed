@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Phase Transition Validation and Constraint Enforcement
 
 This document defines the explicit phase dependencies, transition logic, and constraint validation for the Claude Code workflow.

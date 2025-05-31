@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 <!-- Copy to docs/qa/NNN-slug.md for every task -->
 
 # QA Sheet – Task NNN

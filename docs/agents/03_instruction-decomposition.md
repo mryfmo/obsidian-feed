@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # 03 – Instruction-Decomposition Protocol (IDP) 📝➡️🗂️
 
 > **Purpose** — To mechanically expand vague and highly granular user requests

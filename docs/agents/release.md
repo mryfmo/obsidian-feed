@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Release Agent (`rel`)
 
 The **Release Agent** orchestrates version bumps and publishes plugin binaries to GitHub releases plus the Obsidian BRAT feed.

@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Reviewer Checklist
 
 - [ ] **Artefacts present** – RFC, QA sheet, CHANGELOG entry

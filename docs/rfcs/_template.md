@@ -1,4 +1,9 @@
 <!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
+<!--
 Rename this file to `NNN-your-title.md` where **NNN is the next free integer**.
 Determine it via `ls docs/rfcs | sort`.  Remove guideline comments after use.
 This template belongs to the *process-documentation* set licensed under MIT

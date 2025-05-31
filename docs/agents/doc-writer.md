@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Documentation Agent (`doc`)
 
 The **Documentation Agent** ensures that code-level and user-facing documentation stays current.

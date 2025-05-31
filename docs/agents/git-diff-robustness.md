@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Git Diff Command Robustness Improvements
 
 This document outlines the improvements made to git diff commands throughout the codebase to handle edge cases more reliably.

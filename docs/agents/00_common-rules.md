@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Common Rules & Coding Guidelines
 
 All agents MUST comply with the rules below unless explicitly told otherwise in the task description. They are kept in a single file so that every agent can embed it in its prompt without blowing the token budget.

@@ -1,3 +1,8 @@
+<!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # docs/agents/02_claude-code.md
 
 # 02 – Claude Code Workflow & Guardrails ⚙️🤖

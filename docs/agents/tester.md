@@ -1,3 +1,8 @@
+<\!--
+This documentation is licensed under the MIT License.
+See LICENSE-MIT for details.
+-->
+
 # Tester Agent (`qa`)
 
 The **Tester Agent** complements the `dev` and `review` stages by expanding and hardening the test-suite.
