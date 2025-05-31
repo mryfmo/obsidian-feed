@@ -1,13 +1,21 @@
-import { execSync } from 'node:child_process';
+import { execSync, ExecException } from 'node:child_process';
 import { expect, test, describe } from 'vitest';
 import * as fs from 'node:fs';
 
-function run(file: string) {
+/**
+ * Run guard validation script and return exit code
+ */
+function run(file: string): number {
   try {
     execSync(`bash tools/turn_guard.sh ${file}`, { stdio: 'pipe' });
     return 0;
-  } catch (e) {
-    return (e as { status?: number }).status ?? 1;
+  } catch (error: unknown) {
+    // Properly handle exec errors with type safety
+    if (error && typeof error === 'object' && 'status' in error) {
+      const execError = error as ExecException & { status: number };
+      return execError.status;
+    }
+    return 1;
   }
 }
 

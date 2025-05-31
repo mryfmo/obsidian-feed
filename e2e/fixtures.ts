@@ -2,14 +2,26 @@ import { test as base, expect, type ElectronApplication, type Page } from '@play
 import { _electron as electron } from 'playwright';
 import * as path from 'node:path';
 
-// This fixture boots the plugin inside a bare Electron process with the
-// obsidian module mocked by tests/__mocks__/obsidian.ts. This is for "light" E2E.
+/**
+ * Custom fixtures for Obsidian plugin E2E tests
+ * 
+ * This fixture boots the plugin inside a bare Electron process with the
+ * obsidian module mocked by tests/__mocks__/obsidian.ts. This is for "light" E2E.
+ * 
+ * Environment variables:
+ * - OBSIDIAN_FEED_DEBUG: Enable debug logging in the plugin (default: 'true' in tests)
+ * - NODE_ENV: Set to 'test' to indicate test environment
+ * 
+ * Requirements:
+ * - Node.js environment (uses process.platform for keyboard shortcuts)
+ * - Obsidian desktop app mock environment
+ */
 
 export const test = base.extend<{
   electronApp: ElectronApplication;
   win: Page;
 }>({
-  electronApp: async (_, use) => {
+  electronApp: async ({}, use) => {
     const appPath = path.resolve('./e2e/runtime/bootstrap.js'); // custom bootstrap
     const vaultPath = path.resolve('./e2e-vault');
 
@@ -18,7 +30,7 @@ export const test = base.extend<{
       args: [appPath, vaultPath],
       env: {
         ...process.env,
-        OBSIDIAN_FEED_DEBUG: 'true', // Enable verbose debug logs inside plugin
+        OBSIDIAN_FEED_DEBUG: 'true', // Enable verbose debug logs for better test debugging
         NODE_ENV: 'test',
       },
     });
@@ -39,10 +51,12 @@ export const test = base.extend<{
 
     // Work around Playwright not accepting "Mod" alias in Electron context
     // by monkey-patching keyboard.press inside the page.
+    // Platform detection: Darwin (macOS) uses Meta key, others use Control key
     const originalPress = win.keyboard.press.bind(win.keyboard);
     win.keyboard.press = (key: string, options?: unknown) => {
       if (key.startsWith('Mod+')) {
-        const replacement = (process.platform === 'darwin' ? 'Meta+' : 'Control+') + key.slice(4);
+        const metaKey = process.platform === 'darwin' ? 'Meta' : 'Control';
+        const replacement = `${metaKey}+${key.slice(4)}`;
         return originalPress(replacement, options);
       }
       return originalPress(key, options);

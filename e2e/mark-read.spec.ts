@@ -1,19 +1,17 @@
 import { test, expect } from './fixtures';
+import { TestStability } from './test-helpers';
 
 test('Mark item as read', async ({ win }) => {
-  // Close the command-palette prompt automatically opened by the test
-  // bootstrap so it does not block subsequent clicks. It may open a few
-  // milliseconds after the page is ready, therefore we poll for its
-  // existence and remove it explicitly rather than relying on an Escape
-  // key-press (which might execute too early).
-  await win.waitForTimeout(100); // give preload script a moment
-  await win.evaluate(() => {
-    const el = document.querySelector('.prompt');
-    if (el) el.remove();
-  });
+  // Properly dismiss command palette if it appears
+  await TestStability.dismissModal(win, '.prompt');
 
-  await win.click('#fr-nav >> text=Test');
-  await win.click('.fr-item-title'); // expand first item
-  await win.click("button:text('Mark Read')");
+  // Click on Test feed with stability checks
+  await TestStability.clickElement(win, '#fr-nav >> text=Test');
+  
+  // Expand first item (use .first() to avoid multiple elements)
+  await TestStability.clickElement(win, '.fr-item-title >> nth=0');
+  
+  // Click Mark Read button (use .first() to target the first item's button)
+  await TestStability.clickElement(win, "button:text('Mark Read') >> nth=0");
   await expect(win.locator("button:text('Read')").first()).toBeVisible();
 });
