@@ -68,7 +68,8 @@ function createView() {
     itemsPerPage: 10,
     expandedItems: new Set<string>(),
     isMixedViewEnabled() {
-      return this.mixedView;
+      const self = this as { mixedView?: boolean };
+      return self.mixedView ?? false;
     },
     registerDomEvent: (el: Element, ev: string, cb: EventListener) => el.addEventListener(ev, cb),
   } as unknown as import('../../src/view').FeedsReaderView;

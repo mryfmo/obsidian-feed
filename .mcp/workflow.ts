@@ -258,9 +258,10 @@ export class WorkflowManager {
 
     if (phase === 'PLAN' && artifacts.rfc) {
       const requiredFields = ['problem', 'solution', 'risks', 'timeline'];
-      const missingFields = requiredFields.filter(
-        field => !artifacts.rfc![field as keyof typeof artifacts.rfc]
-      );
+      const missingFields = requiredFields.filter(field => {
+        const rfc = artifacts.rfc;
+        return rfc && !rfc[field as keyof typeof rfc];
+      });
 
       if (missingFields.length > 0) {
         errors.push(`RFC missing required fields: ${missingFields.join(', ')}`);

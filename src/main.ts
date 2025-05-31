@@ -489,11 +489,15 @@ export default class FeedsReaderPlugin extends Plugin implements IFeedsReaderPlu
     if (!feedData?.items) throw new Error(`Feed "${feedName}" not found or empty.`);
 
     let changed = false;
-    const affectedItemsPreviousStates: Array<{ itemId: string; readState: string }> = [];
+    const affectedItemsPreviousStates: Array<{
+      itemId: string;
+      readState: string;
+      feedName: string;
+    }> = [];
 
     feedData.items.forEach((item): void => {
       if (item.read === '0') {
-        affectedItemsPreviousStates.push({ itemId: item.id!, readState: item.read });
+        affectedItemsPreviousStates.push({ itemId: item.id!, readState: item.read, feedName });
         item.read = getCurrentIsoDateTime();
         changed = true;
       }

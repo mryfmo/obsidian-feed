@@ -54,7 +54,7 @@ export const test = base.extend<{
     // by monkey-patching keyboard.press inside the page.
     // Platform detection: Darwin (macOS) uses Meta key, others use Control key
     const originalPress = win.keyboard.press.bind(win.keyboard);
-    win.keyboard.press = (key: string, options?: unknown) => {
+    win.keyboard.press = (key: string, options?: { delay?: number }) => {
       if (key.startsWith('Mod+')) {
         const metaKey = process.platform === 'darwin' ? 'Meta' : 'Control';
         const replacement = `${metaKey}+${key.slice(4)}`;

@@ -5,6 +5,7 @@
 import { ItemView } from 'obsidian';
 import { RssFeedItem, FeedInfo } from '../types';
 import { IFeedsReaderPlugin } from '../pluginTypes';
+import { UndoAction } from '../globals';
 
 export interface IFeedsReaderView extends ItemView {
   plugin: IFeedsReaderPlugin;
@@ -15,12 +16,7 @@ export interface IFeedsReaderView extends ItemView {
   navSelectedIndex: number;
   currentFeed: string | null;
   itemsPerPage: number;
-  undoList: Array<{
-    action: string;
-    feedId?: string;
-    itemId?: string;
-    data?: Record<string, unknown> | string | boolean;
-  }>;
+  undoList: UndoAction[];
   contentAreaEl: HTMLElement;
   expandedItems: Set<string>;
   renderFeedList: () => void;
@@ -34,12 +30,7 @@ export interface IFeedsReaderView extends ItemView {
   handleUndo: () => void;
   refreshView: () => void;
   setSelectedItemById: (itemId: string) => void;
-  pushUndo: (action: {
-    action: string;
-    feedId?: string;
-    itemId?: string;
-    data?: Record<string, unknown> | string | boolean;
-  }) => void;
+  pushUndo: (action: UndoAction) => void;
   currentFilter?: FeedInfo;
   searchQuery?: string;
   items?: RssFeedItem[];

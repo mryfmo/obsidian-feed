@@ -71,6 +71,10 @@ export type View = Record<string, unknown>;
 
 export class WorkspaceLeaf {
   view: View;
+
+  constructor() {
+    this.view = {};
+  }
 }
 
 export class ItemView {

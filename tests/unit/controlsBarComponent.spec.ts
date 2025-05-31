@@ -66,7 +66,8 @@ function createView() {
     renderFeedContent: vi.fn(),
     toggleTitleOnlyMode() {
       // 'this' will be the view object
-      this.titleOnly = !this.titleOnly;
+      const self = this as { titleOnly?: boolean };
+      self.titleOnly = !self.titleOnly;
     },
     registerDomEvent: (el: Element, ev: string, cb: EventListener) => el.addEventListener(ev, cb),
   } as unknown as import('../../src/view').FeedsReaderView;

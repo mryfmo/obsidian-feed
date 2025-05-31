@@ -143,8 +143,8 @@ export class MCPIntegration {
   ): Promise<ValidationResult> {
     // Check cache
     const cacheKey = `${filePath}:${JSON.stringify(options)}`;
-    if (this.validationCache.has(cacheKey)) {
-      const cached = this.validationCache.get(cacheKey)!;
+    const cached = this.validationCache.get(cacheKey);
+    if (cached) {
       // Return cached result without timestamp for consistency
       const { timestamp, ...resultWithoutTimestamp } = cached;
       void timestamp; // Mark as intentionally unused

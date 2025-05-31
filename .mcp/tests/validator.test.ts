@@ -605,7 +605,7 @@ ${Array(30).fill('word').join(' ')}
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(1);
       expect(result.guardFailures).toBeDefined();
-      expect(result.guardFailures!.length).toBeGreaterThan(0);
+      expect(result.guardFailures?.length ?? 0).toBeGreaterThan(0);
     });
   });
 });

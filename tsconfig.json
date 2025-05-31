@@ -6,14 +6,15 @@
     "module": "ESNext",
     "target": "ES2024",
     "allowJs": true,
-    "noImplicitAny": true,
+    "strict": true,
     "moduleResolution": "node",
     "importHelpers": true,
     "isolatedModules": true,
-    "strictNullChecks": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
     "lib": ["dom", "esnext"]
   },
   "include": ["**/*.ts"]

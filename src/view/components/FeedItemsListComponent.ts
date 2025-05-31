@@ -145,13 +145,31 @@ export async function handleContentAreaClick(
 
     const { action } = actionButton.dataset;
     const { itemId } = actionButton.dataset;
-    if (!itemId || !view.currentFeed) {
-      new Notice('Action error: Missing context.');
+    if (!itemId) {
+      new Notice('Action error: Missing item ID.');
       return;
     }
 
-    const item = await plugin.getFeedItem(view.currentFeed, itemId);
-    if (!item) {
+    // In mixed view, we need to find the feed that contains this item
+    let feedName = view.currentFeed;
+    let item: RssFeedItem | null = null;
+
+    if (feedName) {
+      // Single feed view - use currentFeed
+      item = await plugin.getFeedItem(feedName, itemId);
+    } else if (view.isMixedViewEnabled()) {
+      // Mixed view - search all feeds to find the item
+      for (const [fname, feedContent] of Object.entries(plugin.feedsStore)) {
+        const found = feedContent.items.find((i: RssFeedItem) => i.id === itemId);
+        if (found) {
+          item = found;
+          feedName = fname;
+          break;
+        }
+      }
+    }
+
+    if (!item || !feedName) {
       new Notice(`Item "${itemId}" not found.`);
       return;
     }
@@ -162,12 +180,12 @@ export async function handleContentAreaClick(
       switch (action) {
         case 'markRead': {
           const newStateIsRead = item.read === '0';
-          if (plugin.markItemReadState(view.currentFeed, itemId, newStateIsRead)) {
+          if (plugin.markItemReadState(feedName, itemId, newStateIsRead)) {
             view.pushUndo({
-              feedId: view.currentFeed,
+              feedName,
               itemId: item.id!,
               action: newStateIsRead ? 'unread' : 'read',
-              data: newStateIsRead ? '0' : item.read,
+              previousState: newStateIsRead ? '0' : item.read,
             });
             new Notice(
               `Item "${item.title?.substring(0, 20)}..." ${newStateIsRead ? 'read' : 'unread'}.`
@@ -181,12 +199,12 @@ export async function handleContentAreaClick(
         }
         case 'delete': {
           const newStateIsDeleted = item.deleted === '0';
-          if (plugin.markItemDeletedState(view.currentFeed, itemId, newStateIsDeleted)) {
+          if (plugin.markItemDeletedState(feedName, itemId, newStateIsDeleted)) {
             view.pushUndo({
-              feedId: view.currentFeed,
+              feedName,
               itemId: item.id!,
               action: newStateIsDeleted ? 'deleted' : 'undeleted',
-              data: newStateIsDeleted ? '0' : item.deleted,
+              previousState: newStateIsDeleted ? '0' : item.deleted,
             });
             new Notice(
               `Item "${item.title?.substring(0, 20)}..." ${newStateIsDeleted ? 'deleted' : 'restored'}.`
@@ -201,8 +219,8 @@ export async function handleContentAreaClick(
         case 'save': {
           // Persist note via plugin method; it may update the `downloaded`
           // flag – verify only once afterwards to avoid redundant IO.
-          await plugin.saveItemAsMarkdown?.(view.currentFeed, itemId); // Perform save
-          const itemAfterSave = await plugin.getFeedItem(view.currentFeed, itemId);
+          await plugin.saveItemAsMarkdown?.(feedName, itemId); // Perform save
+          const itemAfterSave = await plugin.getFeedItem(feedName, itemId);
           if (itemAfterSave && item.downloaded !== itemAfterSave.downloaded) {
             stateChangedForRender = true;
           }
@@ -220,7 +238,7 @@ export async function handleContentAreaClick(
           break; // Notice in plugin method
         case 'fetch': {
           const fNotice = new Notice(`Fetching: "${item.title?.substring(0, 30)}..."`, 0);
-          if (await plugin.fetchFullContent(view.currentFeed, itemId)) {
+          if (await plugin.fetchFullContent(feedName, itemId)) {
             stateChangedForRender = true;
             refreshList = true;
           } // Full refresh if content changed
@@ -255,12 +273,11 @@ export async function handleContentAreaClick(
           console.warn('Unhandled action:', action);
       }
       if (stateChangedForRender) {
-        const currentFeedInfo = plugin.feedList.find(f => f.name === view.currentFeed);
-        if (currentFeedInfo && plugin.feedsStore[view.currentFeed!])
+        const currentFeedInfo = plugin.feedList.find(f => f.name === feedName);
+        if (currentFeedInfo && plugin.feedsStore[feedName])
           currentFeedInfo.unread =
-            plugin.feedsStore[view.currentFeed!].items.filter(
-              i => i.read === '0' && i.deleted === '0'
-            ).length ?? 0;
+            plugin.feedsStore[feedName].items.filter(i => i.read === '0' && i.deleted === '0')
+              .length ?? 0;
         view.renderFeedContent();
         if (refreshList) view.renderFeedList();
       }

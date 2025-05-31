@@ -65,14 +65,23 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
    * calculations and for actual rendering (via `renderFeedContent`).  Keeping
    * the logic in one place guarantees that the two stay in sync.
    */
-  private getVisibleItems(): Array<RssFeedItem & { __sourceFeed?: string }> {
-    let pool: Array<RssFeedItem & { __sourceFeed?: string }> = [];
+  private getVisibleItems(): Array<
+    RssFeedItem & { __sourceFeed?: string; __sourceFeedName?: string }
+  > {
+    let pool: Array<RssFeedItem & { __sourceFeed?: string; __sourceFeedName?: string }> = [];
 
     if (this.fsm.mixedView) {
-      for (const feed of Object.values(this.plugin.feedsStore) as RssFeedContent[]) {
-        const title = feed.title || '(unknown)';
+      for (const [feedName, feedContent] of Object.entries(this.plugin.feedsStore) as [
+        string,
+        RssFeedContent,
+      ][]) {
+        const title = feedContent.title || '(unknown)';
         pool = pool.concat(
-          feed.items.map((item: RssFeedItem) => ({ ...item, __sourceFeed: title }))
+          feedContent.items.map((item: RssFeedItem) => ({
+            ...item,
+            __sourceFeed: title,
+            __sourceFeedName: feedName,
+          }))
         );
       }
     } else {
@@ -320,8 +329,8 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
   }
 
   // Expose a safe wrapper for external components (ControlsBar, etc.)
-  public dispatchEvent(event: ViewEvent): void {
-    this.dispatch(event);
+  public dispatchEvent(event: unknown): void {
+    this.dispatch(event as ViewEvent);
   }
 
   /** Bridges old public fields ↔新 FSM.  Call after every dispatch. */
@@ -686,16 +695,42 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
       return;
     }
 
-    // The remaining actions operate on item metadata and therefore need a
-    // concrete feed context.  Abort gracefully when none is available.
-    if (!itemId || !this.currentFeed) return;
+    // The remaining actions operate on item metadata and need feed context
+    if (!itemId) return;
+
+    // Find which feed contains this item
+    let feedName = this.currentFeed;
+    let item: RssFeedItem | undefined;
+
+    if (feedName) {
+      // Single feed view
+      item = this.plugin.feedsStore[feedName]?.items.find((i: RssFeedItem) => i.id === itemId);
+    } else if (this.fsm.mixedView) {
+      // Mixed view - search all feeds
+      for (const [fname, feedContent] of Object.entries(this.plugin.feedsStore) as [
+        string,
+        RssFeedContent,
+      ][]) {
+        const found = feedContent.items.find((i: RssFeedItem) => i.id === itemId);
+        if (found) {
+          item = found;
+          feedName = fname;
+          break;
+        }
+      }
+    }
+
+    if (!item || !feedName) return;
 
     if (markKey) {
-      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(
-        (i: RssFeedItem) => i.id === itemId
-      );
-      if (item) {
-        this.plugin.markItemReadState(this.currentFeed, itemId, item.read === '0');
+      const newReadState = item.read === '0';
+      if (this.plugin.markItemReadState(feedName, itemId, newReadState)) {
+        this.pushUndo({
+          feedName,
+          itemId: item.id!,
+          action: newReadState ? 'unread' : 'read',
+          previousState: newReadState ? '0' : item.read,
+        });
         this.renderFeedContent();
         this.highlightSelected();
       }
@@ -703,11 +738,14 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
     }
 
     if (delKey) {
-      const item = this.plugin.feedsStore[this.currentFeed]?.items.find(
-        (i: RssFeedItem) => i.id === itemId
-      );
-      if (item) {
-        this.plugin.markItemDeletedState(this.currentFeed, itemId, item.deleted === '0');
+      const newDeletedState = item.deleted === '0';
+      if (this.plugin.markItemDeletedState(feedName, itemId, newDeletedState)) {
+        this.pushUndo({
+          feedName,
+          itemId: item.id!,
+          action: newDeletedState ? 'deleted' : 'undeleted',
+          previousState: newDeletedState ? '0' : item.deleted,
+        });
         this.renderFeedContent();
         this.highlightSelected();
       }
@@ -828,35 +866,69 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
     }
     const lastAction = this.undoList.pop();
     this.updateUndoButtonState();
-    if (!lastAction || !this.currentFeed || this.currentFeed !== lastAction.feedName) {
+
+    // In mixed view, we don't have a single currentFeed context
+    const isMixedView = this.fsm.mixedView;
+
+    // For single feed view, validate feed context
+    if (!isMixedView && lastAction?.feedName && this.currentFeed !== lastAction.feedName) {
       if (lastAction) this.pushUndo(lastAction); // Put it back if context is wrong
-      new Notice('Cannot undo: Action is for a different feed or context is invalid.');
+      new Notice('Cannot undo: Action is for a different feed.');
+      return;
+    }
+
+    if (!lastAction) {
+      new Notice('Cannot undo: Invalid action.');
       return;
     }
 
     let actionUndone = false;
     let noticeMessage = '';
+    const affectedFeeds = new Set<string>();
 
     if (lastAction.action === 'markAllRead' && lastAction.previousStates) {
+      // Handle markAllRead with enhanced previousStates that include feedName
       lastAction.previousStates.forEach(prevState => {
-        const itemToUndo = this.plugin.feedsStore[this.currentFeed!]?.items.find(
+        const feedName = prevState.feedName || lastAction.feedName;
+        if (!feedName) return;
+
+        const itemToUndo = this.plugin.feedsStore[feedName]?.items.find(
           (i: RssFeedItem) => i.id === prevState.itemId
         );
         if (itemToUndo) {
           itemToUndo.read = prevState.readState;
           actionUndone = true;
+          affectedFeeds.add(feedName);
         }
       });
       if (actionUndone) {
         noticeMessage = `Reverted "mark all read" for ${lastAction.previousStates.length} items.`;
-        this.plugin.flagChangeAndSave(this.currentFeed);
       }
     } else if (lastAction.itemId) {
-      // Single item undo
-      const itemToUndo = this.plugin.feedsStore[this.currentFeed]?.items.find(
-        (i: RssFeedItem) => i.id === lastAction.itemId
-      );
-      if (itemToUndo && lastAction.previousState !== undefined) {
+      // Single item undo - need to find which feed contains this item
+      let targetFeedName = lastAction.feedName;
+      let itemToUndo: RssFeedItem | undefined;
+
+      if (targetFeedName && this.plugin.feedsStore[targetFeedName]) {
+        // Try the specified feed first
+        itemToUndo = this.plugin.feedsStore[targetFeedName].items.find(
+          (i: RssFeedItem) => i.id === lastAction.itemId
+        );
+      }
+
+      // If not found and we're in mixed view, search all feeds
+      if (!itemToUndo && isMixedView) {
+        for (const [feedName, feedContent] of Object.entries(this.plugin.feedsStore)) {
+          const found = feedContent.items.find((i: RssFeedItem) => i.id === lastAction.itemId);
+          if (found) {
+            itemToUndo = found;
+            targetFeedName = feedName;
+            break;
+          }
+        }
+      }
+
+      if (itemToUndo && targetFeedName && lastAction.previousState !== undefined) {
         if (lastAction.action === 'read' || lastAction.action === 'unread') {
           itemToUndo.read = lastAction.previousState;
           noticeMessage = `Item "${itemToUndo.title?.substring(0, 20)}..." read state reverted.`;
@@ -866,15 +938,20 @@ export class FeedsReaderView extends ItemView implements IFeedsReaderView {
           noticeMessage = `Item "${itemToUndo.title?.substring(0, 20)}..." delete state reverted.`;
           actionUndone = true;
         }
-        if (actionUndone) this.plugin.flagChangeAndSave(this.currentFeed);
+        if (actionUndone) {
+          affectedFeeds.add(targetFeedName);
+        }
       }
     }
+
     if (actionUndone) {
+      // Flag changes for all affected feeds
+      affectedFeeds.forEach(feedName => this.plugin.flagChangeAndSave(feedName));
       this.refreshView();
       new Notice(noticeMessage || 'Action undone.');
     } else {
       if (lastAction) this.pushUndo(lastAction);
-      new Notice('Could not undo: Item state or context issue.');
+      new Notice('Could not undo: Item not found or context issue.');
     }
   }
 

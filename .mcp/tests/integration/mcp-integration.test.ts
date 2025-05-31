@@ -294,7 +294,7 @@ ${Array(30).fill('word').join(' ')}
 
         expect(result.valid).toBe(false);
         expect(result.guardFailures).toBeDefined();
-        expect(result.guardFailures!.length).toBeGreaterThan(0);
+        expect(result.guardFailures?.length ?? 0).toBeGreaterThan(0);
 
         const guardFailure = result.guardFailures?.find(g => g.guard === scenario.expectedGuard);
         expect(guardFailure).toBeDefined();
