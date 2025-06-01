@@ -229,7 +229,8 @@ echo -e "  ✅ Created: $PROJECT_NAME/.claude/README.md"
 
 # Create placeholder files
 touch "$PROJECT_NAME/.claude/runtime/.gitkeep"
-touch "$PROJECT_NAME/.claude/tmp-docs/.gitkeep"
+mkdir -p "$PROJECT_NAME/.claude/workspace/projects"
+touch "$PROJECT_NAME/.claude/workspace/.gitkeep"
 
 # Summary
 echo ""

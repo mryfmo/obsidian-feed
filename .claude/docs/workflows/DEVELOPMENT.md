@@ -7,7 +7,21 @@ This documentation is licensed under the MIT License.
 See LICENSE-MIT for details.
 -->
 
-# 01 – Task-Lifecycle Checklist 🚦
+## Overview
+
+The development process follows 7 mandatory phases:
+
+1. **FETCH** - Document/resource retrieval
+2. **INV** - Investigation and reproduction
+3. **ANA** - Root cause analysis
+4. **PLAN** - RFC creation and planning
+5. **BUILD** - Implementation
+6. **VERIF** - Testing and validation
+7. **REL** - Release preparation
+
+For workspace organization, see: `.claude/docs/standards/WORKSPACE-HIERARCHY.md`
+
+## Task-Lifecycle Process
 
 > **Purpose** Provide a repeatable, auditable mini-SDLC that every agent – human
 > or LLM – must follow for _each_ work item (issue, PR, CI failure, etc.). It
@@ -25,11 +39,11 @@ forces explicit _state transitions_ so that omissions are caught early.
 
 | State                      | Required Artefacts                                                                                                                                                                    | Exit Gate                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **INV**<br>(Investigation) | • Reproduction steps / failing test<br>• Logs, stack trace, screenshots                                                                                                               | Maintainer (or reporter) acknowledges reproduction is valid |
-| **ANA**<br>(Analysis)      | • Root-cause description (1-2 para)<br>• Impacted files / modules list                                                                                                                | Reviewer agrees the analysis matches evidence               |
-| **PLAN**                   | • RFC-style note (`docs/rfcs/NNN-*.md`) containing:<br> – Scope & out-of-scope<br> – Risk list & mitigations<br> – Test strategy (unit / int / e2e)<br> – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval                    |
-| **BUILD**                  | • Code, docs, migration scripts, test fixtures                                                                                                                                        | CI ‑ lint + type-check + tests green                        |
-| **VERIF**                  | • Test results attached<br>• Manual QA notes (if UI)<br>• CHANGELOG entry                                                                                                             | Reviewer & QA sign-off                                      |
+| **INV** (Investigation) | • Reproduction steps / failing test • Logs, stack trace, screenshots | Maintainer (or reporter) acknowledges reproduction is valid |
+| **ANA** (Analysis) | • Root-cause description (1-2 para) • Impacted files / modules list | Reviewer agrees the analysis matches evidence |
+| **PLAN** | • RFC-style note (`docs/rfcs/NNN-*.md`) containing: – Scope & out-of-scope – Risk list & mitigations – Test strategy (unit / int / e2e) – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval |
+| **BUILD** | • Code, docs, migration scripts, test fixtures | CI ‑ lint + type-check + tests green |
+| **VERIF** | • Test results attached • Manual QA notes (if UI) • CHANGELOG entry | Reviewer & QA sign-off |
 
 After **VERIF** the task is considered _done_ and can be merged ➜ release train.
 
@@ -102,18 +116,14 @@ The indirection keeps the root tidy and lets GitHub render diffs nicely.
 _This document itself is MIT-licensed so you can copy-paste it into other
 projects._
 
-
 ---
-
 
 <!--
 This documentation is licensed under the MIT License.
 See LICENSE-MIT for details.
 -->
 
-# docs/agents/02_claude-code.md
-
-# 02 – Claude Code Workflow & Guardrails ⚙️🤖
+## Claude Code Workflow & Guardrails
 
 **Purpose** — **Complete workflow + guardrail definition** for Claude Code to autonomously execute "requirements → implementation → test → release" without runaway in multiple roles (dev / review / qa / rel ...).
 _Applicable to: Claude Code CLI and Claude Code Action (GitHub integration)_
@@ -187,8 +197,7 @@ The remaining tasks follow the same tabular format. All 28 tasks are defined acr
 
 **For the complete task definitions, see: [`02_claude-code-complete-tasks.md`](./02_claude-code-complete-tasks.md)**
 
-<details>
-<summary>View task summary</summary>
+**Task Summary:**
 
 | Phase     | Tasks                                                                                | Key Deliverables                             |
 | --------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
@@ -197,8 +206,6 @@ The remaining tasks follow the same tabular format. All 28 tasks are defined acr
 | **BUILD** | Code modification, Unit tests, Lint & format, Type check, Integration, Documentation | src/ diff, test/ diff, docs/ diff            |
 | **VERIF** | Coverage check, Manual QA, Performance, Security scan, Changelog                     | coverage.html, qa-results.md, CHANGELOG diff |
 | **REL**   | Version bump, Release notes, Tag & publish                                           | package.json, RELEASE.md, Git tag            |
-
-</details>
 
 ---
 
@@ -263,16 +270,12 @@ Save the same content in `final_spec.md` as CSV.
 
 ---
 
-
----
-
-
 <\!--
 This documentation is licensed under the MIT License.
 See LICENSE-MIT for details.
 -->
 
-# Phase Transition Validation and Constraint Enforcement
+## Phase Transition Validation and Constraint Enforcement
 
 This document defines the explicit phase dependencies, transition logic, and constraint validation for the Claude Code workflow.
 
@@ -480,27 +483,36 @@ validation:
 
 ### 1. Phase Completion Artifacts
 
-Each phase must generate a completion artifact before transition:
+Each phase must update its status file before transition:
 
 ```bash
-# Example completion artifact format
-cat > .phase/VERIF-complete.json << EOF
-{
-  "phase": "VERIF",
-  "completed_at": "2024-01-15T10:30:00Z",
-  "artifacts": {
-    "coverage": "92.5%",
-    "qa_signoff": true,
-    "perf_regression": false,
-    "security_issues": 0
-  },
-  "validation": {
-    "G-COV": "PASS",
-    "G-PERF": "PASS",
-    "G-SEC": "PASS"
-  },
-  "next_allowed": ["REL"]
-}
+# Example phase status update
+cat > .claude/workspace/projects/issue-13-cors-proxy/VERIF/.phase-status.yml << EOF
+phase: "VERIF"
+entered: "2024-01-15T09:00:00Z"
+completed: "2024-01-15T10:30:00Z"
+status: "completed"
+
+tasks:
+  V-1-coverage:
+    status: "completed"
+    coverage: "92.5%"
+  V-2-qa:
+    status: "completed"
+    qa_signoff: true
+  V-3-performance:
+    status: "completed"
+    perf_regression: false
+
+exit_criteria:
+  coverage_met: true
+  qa_signoff: true
+  no_regressions: true
+
+artifacts:
+  - "coverage.html"
+  - "qa-results.md"
+  - "performance-report.md"
 EOF
 ```
 
@@ -509,10 +521,23 @@ EOF
 Add to `tools/turn_guard.sh`:
 
 ```bash
+# Helper function to check phase status
+check_phase_status() {
+  local status_file="$1"
+  local expected_status="$2"
+  
+  if [[ ! -f "$status_file" ]]; then
+    return 1
+  fi
+  
+  grep -q "status: \"$expected_status\"" "$status_file"
+}
+
 # Phase transition validation
 validate_phase_transition() {
   local current_phase="$1"
   local next_phase="$2"
+  local project_dir="$3"  # Add project directory parameter
 
   # Check if previous phase completed
   case "$next_phase" in
@@ -522,32 +547,35 @@ validate_phase_transition() {
         die "INV requires FETCH completion or new task"
       ;;
     ANA)
-      [[ -f ".phase/INV-complete.json" ]] || \
-        die "ANA requires INV completion artifact"
+      # Check if INV phase is completed
+      check_phase_status "$project_dir/INV/.phase-status.yml" "completed" || \
+        die "ANA requires INV phase completion"
       ;;
     PLAN)
-      [[ -f ".phase/ANA-complete.json" ]] || \
-        die "PLAN requires ANA completion artifact"
+      # Check if ANA phase is completed
+      check_phase_status "$project_dir/ANA/.phase-status.yml" "completed" || \
+        die "PLAN requires ANA phase completion"
       ;;
     BUILD)
-      [[ -f ".phase/PLAN-complete.json" ]] || \
-        die "BUILD requires PLAN completion artifact"
+      # Check if PLAN phase is completed
+      check_phase_status "$project_dir/PLAN/.phase-status.yml" "completed" || \
+        die "BUILD requires PLAN phase completion"
       # Check for approved RFC
-      grep -q "Status=✅" docs/rfcs/*.md || \
+      [[ -f "$project_dir/PLAN/.phase-status.yml" ]] && \
+        grep -q "rfc_approved: true" "$project_dir/PLAN/.phase-status.yml" || \
         die "BUILD requires approved RFC"
       ;;
     VERIF)
-      [[ -f ".phase/BUILD-complete.json" ]] || \
-        die "VERIF requires BUILD completion artifact"
-      # Check CI status
-      [[ "$(cat .phase/BUILD-complete.json | jq -r .validation.CI)" == "GREEN" ]] || \
-        die "VERIF requires green CI from BUILD"
+      # Check if BUILD phase is completed
+      check_phase_status "$project_dir/BUILD/.phase-status.yml" "completed" || \
+        die "VERIF requires BUILD phase completion"
       ;;
     REL)
-      [[ -f ".phase/VERIF-complete.json" ]] || \
-        die "REL requires VERIF completion artifact"
+      # Check if VERIF phase is completed
+      check_phase_status "$project_dir/VERIF/.phase-status.yml" "completed" || \
+        die "REL requires VERIF phase completion"
       # Check QA signoff
-      [[ "$(cat .phase/VERIF-complete.json | jq -r .artifacts.qa_signoff)" == "true" ]] || \
+      grep -q "qa_signoff: true" "$project_dir/VERIF/.phase-status.yml" || \
         die "REL requires QA sign-off from VERIF"
       ;;
   esac

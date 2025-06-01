@@ -1,5 +1,10 @@
 # Runtime files (not tracked)
 runtime/
+
+# Workspace - all project work in progress
+workspace/
+
+# Legacy tmp-docs (to be migrated)
 tmp-docs/
 
 # Backup files

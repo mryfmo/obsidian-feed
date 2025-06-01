@@ -40,7 +40,7 @@
           "name": "special_directory_check",
           "description": "Prevent deletion of special directories",
           "forbidden": [".git", "node_modules", ".github"],
-          "restricted": [".claude", ".tmp-docs", "docs"],
+          "restricted": [".claude", ".claude/workspace", "docs"],
           "action": "forbidden: block, restricted: require special approval"
         }
       ]

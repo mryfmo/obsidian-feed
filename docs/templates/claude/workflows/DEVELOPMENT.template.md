@@ -35,7 +35,7 @@ graph LR
 - [ ] All relevant documentation downloaded
 - [ ] API references cached
 - [ ] Dependencies documented
-- [ ] Context saved to `.claude/tmp-docs/`
+- [ ] Context saved to `.claude/workspace/projects/{{PROJECT_NAME}}/FETCH/`
 ```
 
 #### Commands
@@ -44,7 +44,7 @@ graph LR
 tools/fetch_doc.sh "{{DOCUMENTATION_URL}}"
 
 # Using MCP
-mcp fetch --url "{{API_DOCS_URL}}" --output .claude/tmp-docs/
+mcp fetch --url "{{API_DOCS_URL}}" --output .claude/workspace/projects/{{PROJECT_NAME}}/FETCH/
 ```
 
 ### 2️⃣ INV - Investigation

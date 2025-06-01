@@ -88,7 +88,7 @@ claude_desktop_config.json
 # Claude directory structure
 # Runtime and temporary files (ignored)
 .claude/runtime/
-.claude/tmp-docs/
+.claude/workspace/
 .claude/backups/
 .claude/session/
 # But track configuration and docs
@@ -106,7 +106,7 @@ docs/qa/*-analysis.md
 !docs/qa/_template.md
 !docs/rfcs/_template.md
 
-# Temporary development files (use .tmp-docs/ instead)
+# Temporary development files (use .claude/tmp-docs/ instead)
 # docs/dev-notes/tmp-*
 # docs/dev-notes/draft-*
 

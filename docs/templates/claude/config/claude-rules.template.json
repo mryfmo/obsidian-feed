@@ -50,7 +50,7 @@
             "{{PROJECT_FORBIDDEN_DIRS}}"
           ],
           "restricted": [
-            ".tmp-docs",
+            ".claude/workspace",
             ".claude",
             ".mcp",
             "{{PROJECT_RESTRICTED_DIRS}}"

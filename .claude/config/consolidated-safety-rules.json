@@ -1,0 +1,99 @@
+{
+  "operation_levels": {
+    "level_0": {
+      "name": "Safe Read Operations",
+      "auto_approve": true,
+      "operations": [
+        "file_read",
+        "list_files",
+        "search_content",
+        "git_status",
+        "git_diff",
+        "test_execution",
+        "lint_check"
+      ]
+    },
+    "level_1": {
+      "name": "Safe Modifications",
+      "auto_approve": true,
+      "operations": [
+        "file_create_new",
+        "file_edit_content",
+        "git_add",
+        "git_commit",
+        "workspace_operations",
+        "doc_generation"
+      ]
+    },
+    "level_2": {
+      "name": "Destructive Operations",
+      "requires_confirmation": true,
+      "operations": [
+        "file_delete",
+        "file_rename",
+        "file_move",
+        "directory_delete",
+        "bulk_operations",
+        "git_reset",
+        "git_clean"
+      ]
+    },
+    "level_3": {
+      "name": "System Changes",
+      "requires_explicit_approval": true,
+      "operations": [
+        "config_modification",
+        "dependency_changes",
+        "security_settings",
+        "git_push_force",
+        "production_deployment"
+      ]
+    }
+  },
+  
+  "protected_paths": {
+    "forbidden": [
+      ".git/**",
+      "node_modules/**",
+      ".github/workflows/*.yml",
+      "**/*.key",
+      "**/*.pem",
+      "**/.env*"
+    ],
+    "restricted": [
+      ".claude/**",
+      "docs/**",
+      "*.json",
+      "*.yml",
+      "*.yaml",
+      "manifest.json",
+      "main.js",
+      "styles.css"
+    ],
+    "workspace_only": [
+      ".claude/workspace/**"
+    ]
+  },
+  
+  "validation_rules": {
+    "workspace_hierarchy": {
+      "project_pattern": "^[a-z]+-[0-9]+-[a-z-]+$",
+      "phase_values": ["FETCH", "INV", "ANA", "PLAN", "BUILD", "VERIF", "REL"],
+      "task_pattern": "^[A-Z]-[0-9]+-[a-z-]+$",
+      "process_dirs": ["01-investigation", "02-planning", "03-execution", "04-results"],
+      "required_metadata": [".metadata.yml", ".phase-status.yml", ".task-meta.yml"]
+    },
+    
+    "file_naming": {
+      "workspace_files": "^[0-9]{8}-[0-9]{6}-[A-Z]+-[A-Z0-9]+-[a-z]+-[a-z-]+\\.[a-z]+$",
+      "rfc_files": "^[0-9]{3}-[a-z-]+\\.md$",
+      "test_files": ".*\\.spec\\.(ts|js)$"
+    }
+  },
+  
+  "audit_requirements": {
+    "log_operations": ["level_2", "level_3"],
+    "require_rollback_plan": ["file_delete", "directory_delete", "config_modification"],
+    "recommend_backup": ["*.json", "*.yml", "*.yaml", "manifest.json"]
+  }
+}

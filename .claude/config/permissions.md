@@ -78,7 +78,7 @@ Additional confirmation required for:
 - `.git/` - Git management directory
 - `node_modules/` - Dependencies (usually no operation needed)
 - `.github/` - GitHub Actions configuration
-- `.tmp-docs/` - Temporary documentation (gitignored)
+- `.claude/workspace/` - Project workspace (gitignored)
 - `.claude/` - Claude-specific configuration
 
 ## Escalation Rules

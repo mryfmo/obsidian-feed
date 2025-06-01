@@ -36,7 +36,9 @@
     "clean": "rimraf dist",
     "prebuild": "pnpm run clean",
     "check-deps": "depcheck",
-    "check:all": "pnpm typecheck && pnpm lint && pnpm test && cd .mcp && pnpm typecheck && pnpm lint && pnpm test"
+    "check:all": "pnpm typecheck && pnpm lint && pnpm test",
+    "check:mcp": "cd .mcp && pnpm typecheck && pnpm lint && pnpm test",
+    "check:workspace": "bash .claude/scripts/validate-workspace.sh"
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
