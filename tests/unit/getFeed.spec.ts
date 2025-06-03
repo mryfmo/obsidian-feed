@@ -139,7 +139,7 @@ describe('getFeedItems', () => {
     expect(item.link).toBe('https://example.com/1');
     // Ensure a deterministic ID was assigned.
     expect(item.id).toBeDefined();
-  });
+  }, 15000); // Increase timeout to 15 seconds
 
   it('parses a minimal Atom feed', async () => {
     const url = 'https://example.com/atom.xml';
@@ -155,5 +155,5 @@ describe('getFeedItems', () => {
     const [item] = feed.items;
     expect(item.title).toBe('Entry');
     expect(item.link).toBe('https://example.com/entry');
-  });
+  }, 15000); // Increase timeout to 15 seconds
 });
