@@ -1,9 +1,9 @@
 <think>
 FETCH: duplicate
-# step-plan: !tools/fetch_doc.sh
+# step-plan: !.claude/validation/fetch-doc.sh
 </think>
 <act>
-!tools/fetch_doc.sh https://example.com/api.json
+!.claude/validation/fetch-doc.sh https://example.com/api.json
 </act>
 <verify></verify>
 <next></next>

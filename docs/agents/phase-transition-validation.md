@@ -44,8 +44,8 @@ constraints:
   - Malicious URL blocking
   - Max download size: 10MB
 validation:
-  - tools/fetch_doc.sh --validate-url
-  - tools/turn_guard.sh (G-DUP check)
+  - .claude/validation/fetch-doc.sh --validate-url
+  - .claude/validation/turn-guard.sh (G-DUP check)
 ```
 
 ### INV Phase
@@ -237,7 +237,7 @@ EOF
 
 ### 2. Transition Validation Function
 
-Add to `tools/turn_guard.sh`:
+Add to `.claude/validation/turn-guard.sh`:
 
 ```bash
 # Phase transition validation
@@ -387,7 +387,7 @@ jobs:
 
       - name: Run phase-specific validation
         run: |
-          ./tools/turn_guard.sh validate-phase-transition \
+          ./.claude/validation/turn-guard.sh validate-phase-transition \
             "${{ steps.phase.outputs.previous }}" \
             "${{ steps.phase.outputs.phase }}"
 ```

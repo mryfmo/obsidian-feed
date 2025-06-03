@@ -309,23 +309,23 @@ You can validate STP markers locally before pushing:
 
 ```bash
 # Check current branch
-./tools/validate-stp-markers.sh
+./.claude/validation/validate-stp-markers.sh
 
 # Check with PR body
-./tools/validate-stp-markers.sh "Your PR description here"
+./.claude/validation/validate-stp-markers.sh "Your PR description here"
 
 # Check specific commit range
-./tools/validate-stp-markers.sh "" origin/main feature-branch
+./.claude/validation/validate-stp-markers.sh "" origin/main feature-branch
 ```
 
 ### MCP-Enhanced Execution
 
 ```bash
 # Check with MCP bridge (intelligent fallback)
-npx tsx .mcp/bridge.ts validate_stp_markers
+npx tsx .claude/mcp-integration/bridge.ts validate_stp_markers
 
 # With PR body
-npx tsx .mcp/bridge.ts validate_stp_markers "Your PR description"
+npx tsx .claude/mcp-integration/bridge.ts validate_stp_markers "Your PR description"
 ```
 
 **Note**: The MCP integration provides enhanced validation with caching and performance optimization. It automatically falls back to the shell script if MCP servers are unavailable.
@@ -418,7 +418,7 @@ Co-authored-by: @teammate
 ## Related Documentation
 
 - [`01_task-lifecycle.md`](./01_task-lifecycle.md) - Full STP specification
-- [`validate-stp-markers.sh`](../../tools/validate-stp-markers.sh) - Validation script (MCP-enhanced)
+- [`validate-stp-markers.sh`](../../.claude/validation/validate-stp-markers.sh) - Validation script (MCP-enhanced)
 - [`.github/workflows/stp-guard.yml`](../../.github/workflows/stp-guard.yml) - CI workflow
 - [`MCP_DOCUMENTATION.md`](../../MCP_DOCUMENTATION.md) - Complete MCP integration details
-- [`.mcp/bridge.ts`](../../.mcp/bridge.ts) - MCP bridge implementation
+- [`.claude/mcp-integration/bridge.ts`](../../.claude/mcp-integration/bridge.ts) - MCP bridge implementation

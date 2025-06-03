@@ -18,7 +18,7 @@ A major stage in the development lifecycle. Phases are denoted in UPPERCASE (FET
 - **Definition**: Resource and documentation gathering phase
 - **Purpose**: Collect all necessary information before starting work
 - **Activities**: Download docs, read specifications, gather requirements
-- **Example**: `tools/fetch_doc.sh URL` to download external documentation
+- **Example**: `.claude/validation/fetch-doc.sh URL` to download external documentation
 - **Duration**: Typically 1-2 hours
 - **Exit Gate**: All required resources are available locally
 

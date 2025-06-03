@@ -41,7 +41,7 @@ graph LR
 #### Commands
 ```bash
 # Using shell tools
-tools/fetch_doc.sh "{{DOCUMENTATION_URL}}"
+.claude/validation/fetch-doc.sh "{{DOCUMENTATION_URL}}"
 
 # Using MCP
 mcp fetch --url "{{API_DOCS_URL}}" --output .claude/workspace/projects/{{PROJECT_NAME}}/FETCH/

@@ -68,8 +68,6 @@ e2e-results/
 .cache/
 .parcel-cache/
 .turbo/
-# MCP cache directory
-.mcp/.cache/
 
 # Log files
 *.log
@@ -136,25 +134,25 @@ core.*
 secrets.json
 
 # MCP-specific files to ignore
-.mcp/node_modules/
-.mcp/dist/
-.mcp/coverage/
-.mcp/*.log
-.mcp/.env
-.mcp/.env.local
+.claude/mcp-integration/node_modules/
+.claude/mcp-integration/dist/
+.claude/mcp-integration/coverage/
+.claude/mcp-integration/*.log
+.claude/mcp-integration/.env
+.claude/mcp-integration/.env.local
 # MCP test outputs
-.mcp/test-results/
-.mcp/*.test-results/
+.claude/mcp-integration/test-results/
+.claude/mcp-integration/*.test-results/
 # MCP temporary files
-.mcp/*.tmp
-.mcp/*.temp
+.claude/mcp-integration/*.tmp
+.claude/mcp-integration/*.temp
 # Keep important MCP files
-!.mcp/package.json
-!.mcp/tsconfig.json
-!.mcp/vitest.config.ts
-!.mcp/*.ts
+!.claude/mcp-integration/package.json
+!.claude/mcp-integration/tsconfig.json
+!.claude/mcp-integration/vitest.config.ts
+!.claude/mcp-integration/*.ts
 # MCP cache directory
-.mcp/.cache/
+.claude/mcp-integration/.cache/
 
 # Temporary documentation directory (moved to .claude/tmp-docs/)
 claude-backup-*.tar.gz

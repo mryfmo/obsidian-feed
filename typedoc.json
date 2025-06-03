@@ -13,7 +13,6 @@
     "e2e/**",
     "docs/templates/**",
     ".claude/**",
-    ".mcp/**",
     "*.template.ts"
   ],
   "tsconfig": "./tsconfig.json",

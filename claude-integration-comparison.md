@@ -28,11 +28,15 @@ project/
 ├── .github/
 │   └── workflows/
 │       └── claude.yml             # GitHub Action
-├── .mcp/
+├── .claude/mcp-integration/       # MCP implementation (moved from .mcp/)
 │   ├── index.ts                   # MCP server
 │   ├── operation-guard.ts         # Safety enforcer
 │   └── package.json               # MCP dependencies
-├── tools/                         # Shell tools
+├── .claude/validation/            # Claude-specific validation tools
+│   ├── turn-guard.sh             # Output format validation
+│   ├── validate-stp-markers.sh   # STP compliance check
+│   └── fetch-doc.sh              # Document fetching
+├── tools/                         # General-purpose shell tools
 └── CLAUDE.md                      # Main guidance file
 ```
 
@@ -46,8 +50,9 @@ The actual structure shows:
 - `.claude/docs/` with comprehensive documentation
 - `.claude/runtime/` with audit.log and rollback-registry.json
 - `.github/workflows/` with multiple Claude-related workflows
-- `.mcp/` directory with TypeScript files
-- `tools/` directory with shell scripts
+- `.claude/mcp-integration/` directory with TypeScript files (reorganized from .mcp/)
+- `.claude/validation/` directory with Claude-specific validation scripts
+- `tools/` directory with general-purpose shell scripts
 - `CLAUDE.md` main guidance file
 
 ❌ **Missing or Different:**

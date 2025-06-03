@@ -149,7 +149,7 @@ _Applicable to: Claude Code CLI and Claude Code Action (GitHub integration)_
 | 1.3 | Archi agreement      | final_spec.md              | review          | dev/qa/rel | All roles OK mark                  |
 | 2.1 | Guard design         | guard.md                   | dev             | review     | mermaid diagram review             |
 | 2.2 | Guard implementation | .claude/validation/turn-guard.sh        | dev             | qa         | shellcheck + unit green            |
-| 2.3 | fetch implementation | .claude/validation/fetch-doc.sh         | dev             | qa         | Same as above                      |
+| 2.3 | fetch implementation | tools/fetch_doc.sh         | dev             | qa         | Same as above                      |
 | 2.4 | CI implementation    | claude.yml, label-sync.yml | dev             | qa         | GH Action green                    |
 | 3.1 | Test design          | tests/spec.yml             | qa              | dev        | reviewer 👍                        |
 | 3.2 | Test implementation  | guard.spec.ts              | qa              | dev        | pnpm test green                    |
@@ -175,7 +175,7 @@ Detailed tasks are listed in §2.
 | Step | Task                | Purpose             | Procedure                   | Input           | Output      | Exit Gate                    |
 | ---- | ------------------- | ------------------- | --------------------------- | --------------- | ----------- | ---------------------------- |
 | F-1  | Retrieval plan      | List required URLs  | Markdown table in `<think>` | Assignment text | doc-list.md | ―                            |
-| F-2  | Retrieval execution | File DL & cache     | `$ .claude/validation/fetch-doc.sh URL`  | doc-list.md     | .cache/...  | G-DUP                        |
+| F-2  | Retrieval execution | File DL & cache     | `$ tools/fetch_doc.sh URL`  | doc-list.md     | .cache/...  | G-DUP                        |
 | F-3  | Commit              | Add retrieved items | `apply_patch`               | .cache          | Git tree    | diff is retrieved items only |
 
 ### INV
@@ -318,7 +318,7 @@ constraints:
   - Malicious URL blocking
   - Max download size: 10MB
 validation:
-  - .claude/validation/fetch-doc.sh --validate-url
+  - tools/fetch_doc.sh --validate-url
   - .claude/validation/turn-guard.sh (G-DUP check)
 ```
 

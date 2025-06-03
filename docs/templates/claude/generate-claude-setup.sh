@@ -39,7 +39,7 @@ echo ""
 echo -e "${GREEN}📁 Creating directory structure...${NC}"
 mkdir -p "$PROJECT_NAME"/.claude/{config,docs/{core,workflows,integration,reference},scripts,runtime,tmp-docs/{analysis,experiments,drafts,sandbox},backups}
 mkdir -p "$PROJECT_NAME"/.github/{scripts,workflows}
-mkdir -p "$PROJECT_NAME"/.mcp/{tests,scripts}
+mkdir -p "$PROJECT_NAME"/.claude/mcp-integration/{tests,scripts}
 mkdir -p "$PROJECT_NAME"/tools
 
 # Function to process template
@@ -98,9 +98,9 @@ if [ -f "$TEMPLATE_DIR/github/scripts/claude-safety-wrapper.template.sh" ]; then
 fi
 
 # MCP setup
-process_template "$TEMPLATE_DIR/mcp/package.template.json" "$PROJECT_NAME/.mcp/package.json"
-process_template "$TEMPLATE_DIR/mcp/index.template.ts" "$PROJECT_NAME/.mcp/index.ts"
-process_template "$TEMPLATE_DIR/mcp/operation-guard.template.ts" "$PROJECT_NAME/.mcp/operation-guard.ts"
+process_template "$TEMPLATE_DIR/mcp/package.template.json" "$PROJECT_NAME/.claude/mcp-integration/package.json"
+process_template "$TEMPLATE_DIR/mcp/index.template.ts" "$PROJECT_NAME/.claude/mcp-integration/index.ts"
+process_template "$TEMPLATE_DIR/mcp/operation-guard.template.ts" "$PROJECT_NAME/.claude/mcp-integration/operation-guard.ts"
 
 # Scripts
 process_template "$TEMPLATE_DIR/scripts/test-setup.template.sh" "$PROJECT_NAME/.claude/scripts/test-setup.sh"
@@ -110,12 +110,12 @@ chmod +x "$PROJECT_NAME/.claude/scripts/test-setup.sh"
 process_template "$TEMPLATE_DIR/config/safety-checks.template.json" "$PROJECT_NAME/.claude/config/safety-checks.json"
 
 # MCP configuration
-process_template "$TEMPLATE_DIR/mcp/tsconfig.template.json" "$PROJECT_NAME/.mcp/tsconfig.json"
+process_template "$TEMPLATE_DIR/mcp/tsconfig.template.json" "$PROJECT_NAME/.claude/mcp-integration/tsconfig.json"
 
 # Shell tools
 if [ -f "$TEMPLATE_DIR/tools/turn_guard.template.sh" ]; then
-    process_template "$TEMPLATE_DIR/tools/turn_guard.template.sh" "$PROJECT_NAME/tools/turn_guard.sh"
-    chmod +x "$PROJECT_NAME/tools/turn_guard.sh"
+    process_template "$TEMPLATE_DIR/tools/turn_guard.template.sh" "$PROJECT_NAME/.claude/validation/turn-guard.sh"
+    chmod +x "$PROJECT_NAME/.claude/validation/turn-guard.sh"
 fi
 
 # Create additional required files
@@ -133,7 +133,7 @@ EOF
 echo -e "  ✅ Created: $PROJECT_NAME/.github/claude-integration.json"
 
 # Create MCP test file
-cat > "$PROJECT_NAME/.mcp/test-operation-guard.ts" << 'EOF'
+cat > "$PROJECT_NAME/.claude/mcp-integration/test-operation-guard.ts" << 'EOF'
 #!/usr/bin/env tsx
 import { OperationGuard } from './operation-guard.js';
 
@@ -189,7 +189,7 @@ npm run dev
 npm test
 
 # Validate safety
-npx tsx .mcp/test-operation-guard.ts
+npx tsx .claude/mcp-integration/test-operation-guard.ts
 \`\`\`
 EOF
 echo -e "  ✅ Created: $PROJECT_NAME/CLAUDE.md"

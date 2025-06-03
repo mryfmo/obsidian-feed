@@ -236,14 +236,14 @@ jobs:
           # Run validation
           if [ -f "claude-output.md" ]; then
             # Try MCP validation first
-            if command -v tsx >/dev/null 2>&1 && [ -f ".mcp/bridge.ts" ]; then
+            if command -v tsx >/dev/null 2>&1 && [ -f ".claude/mcp-integration/bridge.ts" ]; then
               echo "Using MCP validation"
-              npx tsx .mcp/bridge.ts turn_guard claude-output.md || exit 1
+              npx tsx .claude/mcp-integration/bridge.ts turn_guard claude-output.md || exit 1
             else
               # Fallback to shell validation
               echo "Using shell validation"
-              chmod +x tools/turn_guard.sh
-              tools/turn_guard.sh claude-output.md || exit 1
+              chmod +x .claude/validation/turn-guard.sh
+              .claude/validation/turn-guard.sh claude-output.md || exit 1
             fi
           fi
 

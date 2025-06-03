@@ -23,6 +23,6 @@
     "dist",
     "docs/templates/**/*.template.ts",
     ".claude/scripts/**",
-    ".mcp/**"
+    ".claude/mcp-integration/**"
   ]
 }

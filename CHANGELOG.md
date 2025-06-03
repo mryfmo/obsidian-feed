@@ -58,9 +58,9 @@ See LICENSE-MIT for details.
 ### Technical Details
 
 - **New Directory Structure**
-  - `.mcp/` - Complete MCP integration layer
-  - `.mcp/tests/` - Comprehensive test suite
-  - `.mcp/CLAUDE_CODE_BEST_PRACTICES.md` - Developer guidelines
+  - `.claude/mcp-integration/` - Complete MCP integration layer
+  - `.claude/mcp-integration/tests/` - Comprehensive test suite
+  - `.claude/mcp-integration/CLAUDE_CODE_BEST_PRACTICES.md` - Developer guidelines
   - `src/view/types.ts` - New interface definitions for view components
 
 - **Cleanup**

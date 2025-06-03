@@ -26,7 +26,6 @@ export default defineConfig({
         'e2e/',
         '*.config.*',
         'docs/templates/**',
-        '.mcp/',
         '.claude/',
         'dist/',
         '**/*.d.ts',

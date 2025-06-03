@@ -95,7 +95,7 @@ fi
 - Provides diagnostic output
 - Shows patch statistics on success
 
-### 3. Turn Guard Script (`tools/turn_guard.sh`)
+### 3. Turn Guard Script (`.claude/validation/turn-guard.sh`)
 
 #### Diff Size Check
 
