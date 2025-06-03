@@ -3,14 +3,16 @@ name: MCP Validation
 on:
   pull_request:
     paths:
-      - '.mcp/**'
+      - '.claude/mcp-integration/**'
+      - '.claude/validation/**'
       - 'tools/*.sh'
   push:
     branches:
       - main
       - master
     paths:
-      - '.mcp/**'
+      - '.claude/mcp-integration/**'
+      - '.claude/validation/**'
       - 'tools/*.sh'
 
 jobs:
@@ -40,13 +42,13 @@ jobs:
 
       - name: Run MCP tests
         run: |
-          cd .mcp
+          cd .claude/mcp-integration
           pnpm test
 
       - name: Test MCP bridge fallback
         run: |
           # Test that bridge falls back to shell scripts when MCP unavailable
-          cd .mcp
+          cd .claude/mcp-integration
           NODE_ENV=test npx tsx bridge.ts list_guards
 
       - name: Validate shell script compatibility
@@ -56,5 +58,5 @@ jobs:
           echo "FETCH: Test" > test-turn.md
           echo "<think>This is a test with enough words to pass validation</think>" >> test-turn.md
           echo "<act>Test action</act>" >> test-turn.md
-          ./tools/turn_guard.sh test-turn.md || true
+          ./.claude/validation/turn-guard.sh test-turn.md || true
           rm -f test-turn.md
