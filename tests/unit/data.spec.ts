@@ -95,11 +95,13 @@ describe('Data Management', () => {
       (mockVault.adapter.exists as Mock).mockResolvedValue(true);
       (mockVault.adapter.read as Mock).mockResolvedValue('{ this is not valid json }');
 
-      const consoleSpy = vi.spyOn(console, 'error');
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const list = await loadSubscriptions(mockApp, SUBS_PATH, 'feeds-store');
 
       expect(list).toEqual([]);
       expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
   });
 });

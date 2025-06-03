@@ -16,11 +16,13 @@ AGENTS.md               ── you are here (high-level overview & table of cont
 docs/
   agents/
     00_common-rules.md    ── coding conventions & shared constraints
-    01_task-lifecycle.md  ── task lifecycle for repository agents
+    01_task-lifecycle.md  ── task lifecycle for repository agents (7-phase STP model)
     02_claude-code.md     ── Claude Code workflow（WBS・RACI・Guard Map） & guardrails
     phase-transition-validation.md ── Phase dependencies and transition enforcement
     git-diff-robustness.md ── Git command improvements for CI/CD reliability
     stp-validation-guide.md ── Guide for STP marker validation in PRs
+    claude-code-action-guide.md ── Integration guide for Claude Code Action with GitHub
+    security-guide.md     ── Comprehensive security guidelines for the plugin
     03_instruction-decomposition.md ── **IDP: Ambiguous request ⇒ WBS expansion procedure**
     developer.md          ── implementation-focused agent (a.k.a. "dev")
     reviewer.md           ── sanity/quality gatekeeper (a.k.a. "review")
@@ -28,6 +30,7 @@ docs/
     doc-writer.md         ── documentation agent (a.k.a. "doc")
     release.md            ── version bump, changelog & GitHub release helper (a.k.a. "rel")
     reviewer-checklist.md ── tick-box list used during VERIF gate
+    glossary.md           ── Official definitions for STP terms and 7-phase model
 ```
 
 ### Licensing split
@@ -63,34 +66,30 @@ code itself retains strong-copyleft protection.
 ## Standard Task Protocol (STP)
 
 To guarantee **repeatable, gap-free execution**, every agent MUST follow the
-"STP ✧ Invest-Plan-Build-Verify" loop defined in
+"STP ✧ 7-Phase Development Process" defined in
 [`docs/agents/01_task-lifecycle.md`](./docs/agents/01_task-lifecycle.md). A task
 cannot move to the next stage until the previous one has been **explicitly
 checked-off** in the issue / PR conversation (or in the agent's commit
 message). Continuous integration enforces the verification gates.
 
-High-level summary:
+High-level summary (7-Phase STP Model):
 
-```text
-┌────────┐ 1. Investigation   – reproduce, collect evidence
-│ INV    │
-└────────┘
-     │
-┌────────┐ 2. Analysis        – root-cause, break into sub-work
-│ ANA    │
-└────────┘
-     │
-┌────────┐ 3. Plan            – RFC-style doc: scope, risks, tests, timeline
-│ PLAN  │
-└────────┘
-     │ (review / approve)
-┌────────┐ 4. Build           – code + docs + tests implemented
-│ BUILD │
-└────────┘
-     │
-┌────────┐ 5. Verify          – lint ▸ test ▸ e2e ▸ review ▸ QA sign-off
-│ VERIF │
-└────────┘
+```mermaid
+graph TD
+    FETCH[1. FETCH<br/>Gather external resources, documentation]
+    INV[2. INV<br/>Investigation - reproduce, collect evidence]
+    ANA[3. ANA<br/>Analysis - root-cause, break into sub-work]
+    PLAN[4. PLAN<br/>RFC-style doc: scope, risks, tests, timeline]
+    BUILD[5. BUILD<br/>Code + docs + tests implemented<br/>≤1000 LOC, ≤10 files]
+    VERIF[6. VERIF<br/>Verify - lint ▸ test ▸ e2e ▸ review ▸ QA sign-off]
+    REL[7. REL<br/>Release - version bump, changelog, GitHub release]
+    
+    FETCH --> INV
+    INV --> ANA
+    ANA --> PLAN
+    PLAN -->|review / approve| BUILD
+    BUILD --> VERIF
+    VERIF --> REL
 ```
 
 The full checklist, acceptance criteria and required artifacts live in the

@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "title": "7-Step Cycle Enforcement Configuration",
+  "description": "Mandatory execution cycle configuration for all Claude operations",
+  
+  "cycle_definition": {
+    "steps": [
+      {
+        "id": 1,
+        "name": "BACKUP",
+        "description": "Create backups of all files that will be modified",
+        "required_for_levels": [1, 2, 3],
+        "script": ".claude/scripts/create-task-backup.sh",
+        "validation": {
+          "check_backup_exists": true,
+          "verify_backup_integrity": true
+        }
+      },
+      {
+        "id": 2,
+        "name": "CONFIRM",
+        "description": "Get explicit user approval for the operation",
+        "required_for_levels": [2, 3],
+        "script": ".claude/scripts/request-confirmation.sh",
+        "validation": {
+          "require_explicit_approval": true,
+          "log_confirmation": true
+        }
+      },
+      {
+        "id": 3,
+        "name": "EXECUTE",
+        "description": "Perform the actual operation",
+        "required_for_levels": [0, 1, 2, 3],
+        "script": null,
+        "validation": {
+          "log_start_time": true,
+          "log_end_time": true,
+          "capture_output": true
+        }
+      },
+      {
+        "id": 4,
+        "name": "VERIFY",
+        "description": "Check that the operation completed successfully",
+        "required_for_levels": [0, 1, 2, 3],
+        "script": ".claude/scripts/verify-task.sh",
+        "validation": {
+          "check_expected_results": true,
+          "verify_no_errors": true
+        }
+      },
+      {
+        "id": 5,
+        "name": "EVALUATE",
+        "description": "Assess the overall success/failure",
+        "required_for_levels": [1, 2, 3],
+        "script": ".claude/scripts/evaluate-task.sh",
+        "validation": {
+          "determine_status": true,
+          "log_evaluation": true
+        }
+      },
+      {
+        "id": 6,
+        "name": "UPDATE",
+        "description": "Update progress tracking and status",
+        "required_for_levels": [1, 2, 3],
+        "script": ".claude/scripts/update-progress.sh",
+        "validation": {
+          "update_progress_log": true,
+          "update_phase_status": true
+        }
+      },
+      {
+        "id": 7,
+        "name": "CLEANUP",
+        "description": "Clean up temporary files and resources",
+        "required_for_levels": [2, 3],
+        "script": ".claude/scripts/cleanup-task.sh",
+        "validation": {
+          "remove_temp_files": true,
+          "free_resources": true
+        }
+      }
+    ]
+  },
+  
+  "enforcement_rules": {
+    "strict_mode": true,
+    "allow_bypass": false,
+    "bypass_requires": "IMPOSSIBLE",
+    
+    "operation_levels": {
+      "0": {
+        "name": "READ_ONLY",
+        "required_steps": [3, 4],
+        "auto_approve": true
+      },
+      "1": {
+        "name": "SAFE_MODIFICATION",
+        "required_steps": [1, 3, 4, 5, 6],
+        "auto_approve": true
+      },
+      "2": {
+        "name": "DESTRUCTIVE",
+        "required_steps": [1, 2, 3, 4, 5, 6, 7],
+        "auto_approve": false
+      },
+      "3": {
+        "name": "SYSTEM",
+        "required_steps": [1, 2, 3, 4, 5, 6, 7],
+        "auto_approve": false,
+        "additional_review": true
+      }
+    }
+  },
+  
+  "violation_handling": {
+    "on_skip_attempt": "ABORT_OPERATION",
+    "on_bypass_attempt": "ABORT_AND_LOG",
+    "on_validation_failure": "ROLLBACK",
+    
+    "logging": {
+      "violations_log": ".claude/runtime/violations.log",
+      "compliance_log": ".claude/runtime/cycle-compliance.log",
+      "audit_log": ".claude/runtime/audit.log"
+    },
+    
+    "consequences": [
+      "Immediate operation termination",
+      "Violation logged with timestamp and context",
+      "Automatic rollback initiated",
+      "User notification sent",
+      "Further operations blocked until resolved"
+    ]
+  },
+  
+  "automation": {
+    "main_script": ".claude/scripts/execute-task-with-cycle.sh",
+    "validation_script": ".claude/scripts/validate-cycle-compliance.sh",
+    "test_script": ".claude/scripts/test-cycle-non-interactive.sh",
+    
+    "script_requirements": {
+      "must_be_executable": true,
+      "must_log_actions": true,
+      "must_handle_errors": true,
+      "must_support_rollback": true
+    }
+  },
+  
+  "audit_requirements": {
+    "log_all_steps": true,
+    "include_timestamps": true,
+    "include_operation_context": true,
+    "include_user_identity": true,
+    "include_cycle_status": true,
+    
+    "retention": {
+      "audit_logs": "90_days",
+      "violation_logs": "indefinite",
+      "compliance_logs": "30_days"
+    }
+  },
+  
+  "integration_points": {
+    "operation_guard": {
+      "validate_before": true,
+      "validate_during": true,
+      "validate_after": true
+    },
+    
+    "github_workflows": {
+      "check_on_pr": true,
+      "block_on_violation": true,
+      "report_compliance": true
+    },
+    
+    "mcp_server": {
+      "enforce_on_all_tools": true,
+      "validate_tool_calls": true,
+      "audit_tool_usage": true
+    }
+  }
+}

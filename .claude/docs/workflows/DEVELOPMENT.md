@@ -39,13 +39,15 @@ forces explicit _state transitions_ so that omissions are caught early.
 
 | State                      | Required Artefacts                                                                                                                                                                    | Exit Gate                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **FETCH** (Resource Gathering) | • Downloaded docs, specs, references • Cached resources in workspace • Summary of gathered materials | All necessary resources available locally |
 | **INV** (Investigation) | • Reproduction steps / failing test • Logs, stack trace, screenshots | Maintainer (or reporter) acknowledges reproduction is valid |
 | **ANA** (Analysis) | • Root-cause description (1-2 para) • Impacted files / modules list | Reviewer agrees the analysis matches evidence |
 | **PLAN** | • RFC-style note (`docs/rfcs/NNN-*.md`) containing: – Scope & out-of-scope – Risk list & mitigations – Test strategy (unit / int / e2e) – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval |
 | **BUILD** | • Code, docs, migration scripts, test fixtures | CI ‑ lint + type-check + tests green |
 | **VERIF** | • Test results attached • Manual QA notes (if UI) • CHANGELOG entry | Reviewer & QA sign-off |
+| **REL** (Release) | • PR created/updated • Release notes • Version bump (if applicable) | PR merged or release published |
 
-After **VERIF** the task is considered _done_ and can be merged ➜ release train.
+After **REL** the task is considered _complete_ with all work merged and released.
 
 ### Same flow in Claude Code sessions
 

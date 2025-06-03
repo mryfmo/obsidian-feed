@@ -8,6 +8,27 @@ const compat = new FlatCompat({
 });
 
 export default tseslint.config(
+  // Ignore patterns - MUST be first
+  {
+    ignores: [
+      'node_modules/**',
+      'build/**',
+      'dist/**',
+      'main.js',
+      '*.min.js',
+      'coverage/**',
+      '.tmp/**',
+      '.cache/**',
+      'docs/templates/**/*.template.ts',
+      '.claude/scripts/**',
+      '*.template.ts',
+      'docs/api/**',
+      'docs/api-md/**',
+      '.mcp/**',
+      'e2e/runtime/**/*.js',
+    ],
+  },
+
   // Base configurations
   js.configs.recommended,
   ...compat.config({
@@ -22,7 +43,7 @@ export default tseslint.config(
   // Global settings for all files
   {
     languageOptions: {
-      ecmaVersion: 2020,
+      ecmaVersion: 2024,
       globals: {
         globalThis: 'readonly',
       },
@@ -36,7 +57,7 @@ export default tseslint.config(
       parser: tseslint.parser,
       parserOptions: {
         project: './tsconfig.json',
-        ecmaVersion: 2020,
+        ecmaVersion: 2024,
       },
       globals: {
         globalThis: 'readonly',
@@ -63,6 +84,8 @@ export default tseslint.config(
     rules: {
       // TypeScript specific
       '@typescript-eslint/no-explicit-any': 'error',
+      'no-use-before-define': 'off',
+      '@typescript-eslint/no-use-before-define': ['error', { classes: false }],
       '@typescript-eslint/explicit-function-return-type': [
         'error',
         {
@@ -113,43 +136,19 @@ export default tseslint.config(
       'max-classes-per-file': ['error', 1],
       'no-lonely-if': 'error',
       'prefer-destructuring': ['error', { object: true, array: true }],
-      'no-use-before-define': ['error', { functions: false, classes: true, variables: true }],
 
       // Obsidian specific
       'no-new': 'off', // new Notice() is a pattern
       'class-methods-use-this': 'off', // Plugin methods often don't use this
-    },
-  },
 
-  // MCP module configuration
-  {
-    files: ['.mcp/**/*.ts'],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        project: './.mcp/tsconfig.json',
-        ecmaVersion: 2020,
-      },
-      globals: {
-        globalThis: 'readonly',
-      },
-    },
-    rules: {
-      // CLI tools can use console
-      'no-console': 'off',
-
-      // ES modules with .js extensions
-      'import/extensions': [
+      // Obsidian plugins bundle their dependencies
+      'import/no-extraneous-dependencies': [
         'error',
-        'always',
         {
-          ts: 'never',
-          js: 'always',
+          devDependencies: true,
+          packageDir: '.',
         },
       ],
-
-      // Allow process.exit in CLI
-      'no-process-exit': 'off',
     },
   },
 
@@ -233,21 +232,5 @@ export default tseslint.config(
       'no-process-exit': 'off', // Build scripts can exit with error codes
       'import/no-extraneous-dependencies': 'off',
     },
-  },
-
-  // Ignore patterns
-  {
-    ignores: [
-      'node_modules/',
-      'build/',
-      'dist/',
-      'main.js',
-      '*.min.js',
-      'coverage/',
-      '.tmp/',
-      '.cache/',
-      '.mcp/', // MCP directory has its own ESLint config
-      'e2e/runtime/**/*.js', // E2E runtime stubs have special requirements
-    ],
   }
 );

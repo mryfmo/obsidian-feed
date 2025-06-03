@@ -1,0 +1,54 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/main.ts"],
+  "out": "docs/api",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "exclude": [
+    "**/node_modules/**",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "tests/**",
+    "e2e/**",
+    "docs/templates/**",
+    ".claude/**",
+    ".mcp/**",
+    "*.template.ts"
+  ],
+  "tsconfig": "./tsconfig.json",
+  "theme": "default",
+  "readme": "README.md",
+  "navigationLinks": {
+    "GitHub": "https://github.com/mryfmo/obsidian-feed",
+    "Issues": "https://github.com/mryfmo/obsidian-feed/issues"
+  },
+  "plugin": [],
+  "name": "Contents Feeds Reader API",
+  "includeVersion": true,
+  "categoryOrder": [
+    "Core",
+    "Services",
+    "Components",
+    "Types",
+    "Utilities",
+    "*"
+  ],
+  "groupOrder": [
+    "Functions",
+    "Classes",
+    "Interfaces",
+    "Type Aliases",
+    "Variables",
+    "*"
+  ],
+  "hideGenerator": false,
+  "cleanOutputDir": true,
+  "skipErrorChecking": false,
+  "treatWarningsAsErrors": false,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

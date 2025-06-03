@@ -17,5 +17,12 @@
     "resolveJsonModule": true,
     "lib": ["dom", "esnext"]
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "docs/templates/**/*.template.ts",
+    ".claude/scripts/**",
+    ".mcp/**"
+  ]
 }

@@ -1,0 +1,67 @@
+{
+  "rules": {
+    "typescript": {
+      "no-any": {
+        "severity": "error",
+        "action": "NEVER use 'any' type. NO EXCEPTIONS.",
+        "alternatives": [
+          "Use specific types when known",
+          "Use generic types for flexibility",
+          "Use interfaces to break circular dependencies"
+        ],
+        "forbidden": [
+          "as any",
+          ": any",
+          "<any>",
+          "as unknown as"
+        ]
+      },
+      "promise-executor": {
+        "severity": "error",
+        "action": "Promise executors must not return values",
+        "solution": "Wrap setTimeout in braces: new Promise<void>(resolve => { setTimeout(resolve, ms); })"
+      },
+      "type-assertions": {
+        "severity": "warning",
+        "action": "Avoid type assertions. Fix the root cause instead.",
+        "exception": "Only use when interfacing with mocked functions in tests"
+      }
+    },
+    "testing": {
+      "async-waiting": {
+        "severity": "info",
+        "preferred": "Use queueMicrotask or Promise.resolve() for microtasks",
+        "acceptable": "setTimeout with proper Promise<void> typing for macrotasks"
+      },
+      "mock-types": {
+        "severity": "error",
+        "action": "All mocked functions must be properly typed with vi.fn() from the start"
+      }
+    },
+    "general": {
+      "unused-code": {
+        "severity": "error",
+        "action": "DELETE unused code immediately. Do not keep dead code."
+      },
+      "eslint-errors": {
+        "severity": "error",
+        "action": "FIX all ESLint errors. Do not disable rules without explicit user approval."
+      }
+    }
+  },
+  "enforcement": {
+    "before-commit": [
+      "Must have 0 ESLint errors",
+      "Must have 0 TypeScript errors",
+      "Must pass all tests"
+    ],
+    "decision-tree": {
+      "when-eslint-complains": {
+        "1": "Understand why the rule exists",
+        "2": "Fix the root cause, not symptoms",
+        "3": "If truly exceptional case, document why and get approval",
+        "4": "NEVER auto-disable without approval"
+      }
+    }
+  }
+}

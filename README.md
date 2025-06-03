@@ -173,11 +173,20 @@ pnpm build
 # Run tests
 pnpm test
 
+# Run tests with coverage
+pnpm test:coverage
+
+# Generate API documentation
+pnpm docs:api
+
 # Type checking
 pnpm typecheck
 
 # Linting
 pnpm lint
+
+# Run all checks (typecheck + lint + test + coverage)
+pnpm check:all
 ```
 
 ## 📝 License

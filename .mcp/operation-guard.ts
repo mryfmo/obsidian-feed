@@ -10,6 +10,24 @@ interface OperationGuardConfig {
   rules: any;
   auditLog: string;
   rollbackRegistry: string;
+  cycleEnforcement?: any;
+  cycleComplianceLog?: string;
+  violationsLog?: string;
+}
+
+interface CycleStep {
+  id: number;
+  name: string;
+  completed: boolean;
+  timestamp?: string;
+}
+
+interface CycleState {
+  operationId: string;
+  level: number;
+  requiredSteps: string[];
+  completedSteps: CycleStep[];
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
 /**
@@ -19,6 +37,7 @@ interface OperationGuardConfig {
 export class OperationGuard {
   private config: OperationGuardConfig;
   private rules: any;
+  private cycleStates: Map<string, CycleState> = new Map();
 
   constructor() {
     // Look for claude-rules.json in parent directory (project root)
@@ -55,8 +74,16 @@ export class OperationGuard {
     this.config = {
       rules: this.rules,
       auditLog: join(projectRoot, '.claude', 'runtime', 'audit.log'),
-      rollbackRegistry: join(projectRoot, '.claude', 'runtime', 'rollback-registry.json')
+      rollbackRegistry: join(projectRoot, '.claude', 'runtime', 'rollback-registry.json'),
+      cycleComplianceLog: join(projectRoot, '.claude', 'runtime', 'cycle-compliance.log'),
+      violationsLog: join(projectRoot, '.claude', 'runtime', 'violations.log')
     };
+    
+    // Load cycle enforcement config if available
+    const cycleConfigPath = join(projectRoot, '.claude', 'config', 'cycle-enforcement.json');
+    if (existsSync(cycleConfigPath)) {
+      this.config.cycleEnforcement = JSON.parse(readFileSync(cycleConfigPath, 'utf-8'));
+    }
   }
 
   private getDefaultTestRules() {
@@ -95,15 +122,22 @@ export class OperationGuard {
     level: number;
     requiresConfirmation: boolean;
     message?: string;
+    cycleRequired?: boolean;
+    operationId?: string;
   }> {
+    // Generate operation ID for cycle tracking
+    const operationId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     // Check forbidden patterns
     const forbidden = this.checkForbiddenPatterns(operation, target);
     if (forbidden) {
+      await this.reportViolation(operationId, `Forbidden pattern: ${forbidden}`, { operation, target });
       return {
         allowed: false,
         level: 99,
         requiresConfirmation: false,
-        message: `Operation forbidden: ${forbidden}`
+        message: `Operation forbidden: ${forbidden}`,
+        operationId
       };
     }
 
@@ -113,11 +147,21 @@ export class OperationGuard {
     // Check if confirmation required
     const requiresConfirmation = level >= 2;
 
+    // Check if cycle is required
+    const cycleRequired = this.config.cycleEnforcement?.enforcement_rules.strict_mode && level >= 0;
+
+    if (cycleRequired) {
+      // Initialize cycle for this operation
+      await this.initializeCycle(operationId, operation, target);
+    }
+
     return {
       allowed: true,
       level,
       requiresConfirmation,
-      message: requiresConfirmation ? this.getConfirmationMessage(operation, target, context) : undefined
+      message: requiresConfirmation ? this.getConfirmationMessage(operation, target, context) : undefined,
+      cycleRequired,
+      operationId
     };
   }
 
@@ -234,6 +278,198 @@ export class OperationGuard {
     
     await fs.appendFile(
       this.config.auditLog,
+      `${JSON.stringify(entry)}\\n`
+    );
+  }
+
+  /**
+   * Validate 7-step cycle compliance
+   */
+  async validateCycleCompliance(operationId: string, operation: string, target: string): Promise<{
+    compliant: boolean;
+    message?: string;
+    requiredSteps?: string[];
+    missingSteps?: string[];
+  }> {
+    if (!this.config.cycleEnforcement || !this.config.cycleEnforcement.enforcement_rules.strict_mode) {
+      return { compliant: true };
+    }
+
+    const level = this.getOperationLevel(operation, target);
+    const requiredSteps = this.getRequiredCycleSteps(level);
+    
+    const cycleState = this.cycleStates.get(operationId);
+    if (!cycleState) {
+      return {
+        compliant: false,
+        message: `No cycle state found for operation ${operationId}. Must initialize cycle first.`,
+        requiredSteps
+      };
+    }
+
+    const completedStepNames = cycleState.completedSteps.map(s => s.name);
+    const missingSteps = requiredSteps.filter(step => !completedStepNames.includes(step));
+
+    if (missingSteps.length > 0) {
+      return {
+        compliant: false,
+        message: `Operation requires completion of all cycle steps. Missing: ${missingSteps.join(', ')}`,
+        requiredSteps,
+        missingSteps
+      };
+    }
+
+    return { compliant: true, requiredSteps };
+  }
+
+  /**
+   * Initialize cycle for operation
+   */
+  async initializeCycle(operationId: string, operation: string, target: string): Promise<void> {
+    const level = this.getOperationLevel(operation, target);
+    const requiredSteps = this.getRequiredCycleSteps(level);
+
+    const cycleState: CycleState = {
+      operationId,
+      level,
+      requiredSteps,
+      completedSteps: [],
+      status: 'pending'
+    };
+
+    this.cycleStates.set(operationId, cycleState);
+    await this.logCycleEvent(operationId, 'INITIALIZED', { level, requiredSteps });
+  }
+
+  /**
+   * Record cycle step completion
+   */
+  async recordCycleStep(operationId: string, stepName: string): Promise<void> {
+    const cycleState = this.cycleStates.get(operationId);
+    if (!cycleState) {
+      throw new Error(`No cycle state found for operation ${operationId}`);
+    }
+
+    // Check if step is required for this operation
+    if (!cycleState.requiredSteps.includes(stepName)) {
+      return; // Skip non-required steps
+    }
+
+    // Check if step already completed
+    if (cycleState.completedSteps.some(s => s.name === stepName)) {
+      return; // Already completed
+    }
+
+    const stepId = this.getStepId(stepName);
+    cycleState.completedSteps.push({
+      id: stepId,
+      name: stepName,
+      completed: true,
+      timestamp: new Date().toISOString()
+    });
+
+    cycleState.status = 'in_progress';
+    await this.logCycleEvent(operationId, 'STEP_COMPLETED', { step: stepName });
+  }
+
+  /**
+   * Complete cycle for operation
+   */
+  async completeCycle(operationId: string): Promise<void> {
+    const cycleState = this.cycleStates.get(operationId);
+    if (!cycleState) {
+      throw new Error(`No cycle state found for operation ${operationId}`);
+    }
+
+    cycleState.status = 'completed';
+    await this.logCycleEvent(operationId, 'COMPLETED', { 
+      completedSteps: cycleState.completedSteps.map(s => s.name) 
+    });
+    
+    // Clean up after a delay
+    setTimeout(() => this.cycleStates.delete(operationId), 300000); // 5 minutes
+  }
+
+  /**
+   * Report cycle violation
+   */
+  async reportViolation(operationId: string, violation: string, context?: any): Promise<void> {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      operationId,
+      violation,
+      context,
+      consequence: 'OPERATION_BLOCKED'
+    };
+
+    const fs = await import('fs/promises');
+    await fs.mkdir(dirname(this.config.violationsLog!), { recursive: true });
+    await fs.appendFile(
+      this.config.violationsLog!,
+      `${JSON.stringify(entry)}\\n`
+    );
+  }
+
+  /**
+   * Get required cycle steps for operation level
+   */
+  private getRequiredCycleSteps(level: number): string[] {
+    if (!this.config.cycleEnforcement) {
+      return [];
+    }
+
+    const levelKey = `level_${level}`;
+    return this.config.cycleEnforcement.enforcement_rules.operation_levels[levelKey]?.required_steps
+      .map((stepNum: number) => this.getStepName(stepNum)) || [];
+  }
+
+  /**
+   * Get step name from ID
+   */
+  private getStepName(stepId: number): string {
+    const stepMap: { [key: number]: string } = {
+      1: 'BACKUP',
+      2: 'CONFIRM',
+      3: 'EXECUTE',
+      4: 'VERIFY',
+      5: 'EVALUATE',
+      6: 'UPDATE',
+      7: 'CLEANUP'
+    };
+    return stepMap[stepId] || `STEP_${stepId}`;
+  }
+
+  /**
+   * Get step ID from name
+   */
+  private getStepId(stepName: string): number {
+    const stepMap: { [key: string]: number } = {
+      'BACKUP': 1,
+      'CONFIRM': 2,
+      'EXECUTE': 3,
+      'VERIFY': 4,
+      'EVALUATE': 5,
+      'UPDATE': 6,
+      'CLEANUP': 7
+    };
+    return stepMap[stepName] || 0;
+  }
+
+  /**
+   * Log cycle event
+   */
+  private async logCycleEvent(operationId: string, event: string, details?: any): Promise<void> {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      operationId,
+      event,
+      details
+    };
+
+    const fs = await import('fs/promises');
+    await fs.mkdir(dirname(this.config.cycleComplianceLog!), { recursive: true });
+    await fs.appendFile(
+      this.config.cycleComplianceLog!,
       `${JSON.stringify(entry)}\\n`
     );
   }

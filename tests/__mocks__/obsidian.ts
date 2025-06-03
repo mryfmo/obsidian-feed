@@ -10,6 +10,55 @@
  * Reference: https://github.com/obsidianmd/obsidian-api/blob/master/obsidian.d.ts
  */
 
+// ---------- HTMLElement extensions ----------
+// Extend HTMLElement prototype with Obsidian-specific methods
+declare global {
+  interface HTMLElement {
+    empty(): this;
+    createEl<K extends keyof HTMLElementTagNameMap>(
+      tag: K,
+      options?: { text?: string; cls?: string; attr?: Record<string, string> }
+    ): HTMLElementTagNameMap[K];
+    createDiv(options?: { cls?: string; text?: string }): HTMLDivElement;
+    appendText(text: string): this;
+  }
+}
+
+// Add the methods to HTMLElement prototype
+if (typeof HTMLElement !== 'undefined') {
+  HTMLElement.prototype.empty = function() {
+    while (this.firstChild) {
+      this.removeChild(this.firstChild);
+    }
+    return this;
+  };
+
+  HTMLElement.prototype.createEl = function<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    options?: { text?: string; cls?: string; attr?: Record<string, string> }
+  ): HTMLElementTagNameMap[K] {
+    const el = document.createElement(tag);
+    if (options?.text) el.textContent = options.text;
+    if (options?.cls) el.className = options.cls;
+    if (options?.attr) {
+      Object.entries(options.attr).forEach(([key, value]) => {
+        el.setAttribute(key, value);
+      });
+    }
+    this.appendChild(el);
+    return el;
+  };
+
+  HTMLElement.prototype.createDiv = function(options?: { cls?: string; text?: string }): HTMLDivElement {
+    return this.createEl('div', options);
+  };
+
+  HTMLElement.prototype.appendText = function(text: string): HTMLElement {
+    this.appendChild(document.createTextNode(text));
+    return this;
+  };
+}
+
 // ---------- DOM helpers ----------
 export function sanitizeHTMLToDom(html: string): DocumentFragment {
   const frag = document.createDocumentFragment();
@@ -19,8 +68,9 @@ export function sanitizeHTMLToDom(html: string): DocumentFragment {
   return frag;
 }
 
-export function setIcon(_el: HTMLElement, _name: string): void {
-  /* no-op in unit tests */
+export function setIcon(element: HTMLElement, iconName: string): void {
+  // In a real implementation, this would add an icon to the element
+  element.setAttribute('data-icon', iconName);
 }
 
 // ---------- Request (network) ----------
@@ -32,36 +82,224 @@ export interface RequestUrlParam {
   timeout?: number;
 }
 
-export async function requestUrl(_param: RequestUrlParam): Promise<{
+export async function requestUrl(param: RequestUrlParam): Promise<{
   text: string;
   status: number;
   headers: Record<string, string>;
   arrayBuffer: ArrayBuffer;
 }> {
+  // Mock implementation returns successful response
   return {
-    text: '',
+    text: `Response for ${param.url}`,
     status: 200,
-    headers: {},
+    headers: { 'content-type': 'text/plain' },
     arrayBuffer: new ArrayBuffer(0),
   };
 }
 
 // ---------- UI helpers ----------
-export class Notice {
-  constructor(
-    public message?: string,
-    _duration?: number
-  ) {
-    if (message) console.log(`[Notice] ${message}`);
+
+// Extend HTMLElement with Obsidian's custom methods
+interface ObsidianHTMLElement extends HTMLElement {
+  empty(): ObsidianHTMLElement;
+  createEl<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    options?: {
+      text?: string;
+      cls?: string;
+      attr?: Record<string, string>;
+      type?: string;
+    }
+  ): HTMLElementTagNameMap[K];
+  createDiv(options?: { text?: string; cls?: string }): HTMLDivElement;
+}
+
+function createObsidianElement(): ObsidianHTMLElement {
+  const el = document.createElement('div');
+
+  // Type-safe extension of HTMLElement
+  const obsidianEl = el as HTMLDivElement & ObsidianHTMLElement;
+
+  obsidianEl.empty = function () {
+    this.innerHTML = '';
+    return this;
+  };
+
+  obsidianEl.createEl = function <K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    options?: {
+      text?: string;
+      cls?: string;
+      attr?: Record<string, string>;
+      type?: string;
+    }
+  ): HTMLElementTagNameMap[K] {
+    const element = document.createElement(tag);
+    if (options?.text) element.textContent = options.text;
+    if (options?.cls) element.className = options.cls;
+    if (options?.attr) {
+      Object.entries(options.attr).forEach(([key, value]) => {
+        element.setAttribute(key, value);
+      });
+    }
+    if (options?.type && 'type' in element) {
+      (element as HTMLInputElement).type = options.type;
+    }
+
+    // Add Obsidian methods to created elements
+    const extendedElement = element as typeof element & ObsidianHTMLElement;
+    extendedElement.empty = this.empty;
+    extendedElement.createEl = this.createEl;
+    extendedElement.createDiv = this.createDiv;
+
+    this.appendChild(element);
+    return element as HTMLElementTagNameMap[K];
+  };
+
+  obsidianEl.createDiv = function (options?: { text?: string; cls?: string }): HTMLDivElement {
+    return this.createEl('div', options);
+  };
+
+  return obsidianEl;
+}
+
+// ---------- Scope for keymaps ----------
+export interface KeymapEventHandler {
+  modifiers: string[] | null;
+  key: string;
+  func: () => void;
+}
+
+export class Scope {
+  constructor(public parent?: Scope) {}
+
+  register(modifiers: string[] | null, key: string, func: () => void): void {
+    // Store the key binding for potential verification in tests
+    console.log('Registering key binding:', { modifiers, key, func });
+    // In real implementation, this would register the keyboard shortcut
+  }
+
+  unregister(handler: unknown): void {
+    // In real implementation, this would remove the registered handler
+    if (handler) {
+      // Placeholder for unregistration logic
+    }
   }
 }
 
-// Minimal App type placeholder for a more specific type if available from Obsidian API
-export type App = Record<string, unknown>;
+// ---------- Keymap ----------
+export class Keymap {
+  private scopes: Scope[] = [];
 
-export class MarkdownRenderer {
-  static async render(_app: App, markdown: string, el: HTMLElement): Promise<void> {
-    el.textContent = markdown; // simplistic – strips formatting
+  pushScope(scope: Scope): void {
+    this.scopes.push(scope);
+  }
+
+  popScope(scope: Scope): void {
+    const index = this.scopes.indexOf(scope);
+    if (index >= 0) {
+      this.scopes.splice(index, 1);
+    }
+  }
+}
+
+// ---------- Classes without dependencies ----------
+
+export class Notice {
+  constructor(
+    public message?: string,
+    duration?: number
+  ) {
+    if (message) {
+      console.log(`[Notice] ${message}`);
+      // In real implementation, duration controls how long the notice is shown
+      if (duration) {
+        setTimeout(() => {}, duration);
+      }
+    }
+  }
+}
+
+export class TextComponent {
+  inputEl: HTMLInputElement;
+
+  constructor() {
+    this.inputEl = document.createElement('input');
+  }
+
+  setValue(value: string): TextComponent {
+    this.inputEl.value = value;
+    return this;
+  }
+
+  onChange(callback: (value: string) => void): TextComponent {
+    // Store callback for input changes
+    const input = this.inputEl;
+    input.addEventListener?.('change', () => callback(input.value));
+    return this;
+  }
+}
+
+// Placeholder for DropdownComponent type
+export interface DropdownComponent {
+  addOption(value: string, display: string): this;
+  setValue(value: string): this;
+  onChange(callback: (value: string) => void): this;
+}
+
+export class Setting {
+  settingEl: HTMLElement;
+
+  constructor(container: HTMLElement) {
+    this.settingEl = container;
+  }
+
+  setName(name: string) {
+    this.settingEl.setAttribute('data-name', name);
+    return this;
+  }
+
+  setDesc(description: string) {
+    this.settingEl.setAttribute('data-desc', description);
+    return this;
+  }
+
+  addToggle(
+    cb: (t: {
+      setValue: (v: boolean) => void;
+      onChange: (fn: (v: boolean) => void) => void;
+    }) => void
+  ) {
+    cb({ setValue() {}, onChange() {} });
+    return this;
+  }
+
+  addText(cb: (t: TextComponent) => void) {
+    cb(new TextComponent());
+    return this;
+  }
+
+  addDropdown(cb: (component: DropdownComponent) => void) {
+    const mockDropdown: DropdownComponent = {
+      addOption(value: string, display: string): DropdownComponent {
+        // Store option for potential test verification
+        console.log('Adding option:', { value, display });
+        return this;
+      },
+      setValue(value: string): DropdownComponent {
+        // Store current value
+        console.log('Setting dropdown value:', value);
+        return this;
+      },
+      onChange(callback: (value: string) => void): DropdownComponent {
+        // Store callback for dropdown changes
+        const currentValue = '';
+        setTimeout(() => callback(currentValue), 0);
+        return this;
+      },
+    };
+    cb(mockDropdown);
+    return this;
   }
 }
 
@@ -87,6 +325,155 @@ export interface PluginManifest {
   dir: string;
 }
 
+// Workspace type for proper typing
+export class Workspace {
+  activeLeaf: WorkspaceLeaf | null = null;
+}
+
+// ---------- Vault / adapter ----------
+// Type definitions first
+export class FileSystemAdapter {
+  basePath = '/';
+
+  getBasePath() {
+    return this.basePath;
+  }
+
+  async exists(path: string) {
+    // Mock implementation: check if path is in a predefined list
+    return path === this.basePath || false;
+  }
+
+  async mkdir(path: string) {
+    // Mock implementation: log directory creation
+    console.log(`Creating directory: ${path}`);
+  }
+
+  async writeBinary(path: string, data: ArrayBuffer) {
+    // Mock implementation: log binary write
+    console.log(`Writing ${data.byteLength} bytes to ${path}`);
+  }
+
+  async readBinary(path: string) {
+    // Mock implementation: return empty buffer for any path
+    console.log(`Reading binary from ${path}`);
+    return new ArrayBuffer(0);
+  }
+
+  async rename(oldPath: string, newPath: string) {
+    // Mock implementation: log rename operation
+    console.log(`Renaming ${oldPath} to ${newPath}`);
+  }
+
+  async write(path: string, data: string) {
+    // Mock implementation: log write operation
+    console.log(`Writing ${data.length} characters to ${path}`);
+  }
+
+  async append(path: string, data: string) {
+    // Mock implementation: log append operation
+    console.log(`Appending ${data.length} characters to ${path}`);
+  }
+}
+
+export class Vault {
+  adapter = new FileSystemAdapter();
+
+  async delete(file: TAbstractFile, force?: boolean): Promise<void> {
+    console.log(`Deleting file ${force ? 'forcefully' : 'normally'}`, file);
+  }
+
+  getAbstractFileByPath(path: string): TAbstractFile | null {
+    console.log(`Looking for file at ${path}`);
+    return null;
+  }
+}
+
+export abstract class TAbstractFile {
+  path: string = '';
+
+  name: string = '';
+
+  parent: TFolder | null = null;
+
+  declare vault: Vault;
+}
+
+export class TFolder extends TAbstractFile {
+  children: TAbstractFile[] = [];
+
+  isRoot(): boolean {
+    return this.parent === null;
+  }
+}
+
+// ---------- App and dependent classes ----------
+export class App {
+  keymap: Keymap = new Keymap();
+
+  scope: Scope = new Scope();
+
+  workspace: Workspace = new Workspace();
+
+  vault: Vault = new Vault();
+}
+
+export class Modal {
+  app: App;
+
+  scope: Scope;
+
+  containerEl: HTMLElement;
+
+  modalEl: HTMLElement;
+
+  titleEl: HTMLElement;
+
+  contentEl: ObsidianHTMLElement;
+
+  shouldRestoreSelection = false;
+
+  constructor(app: App) {
+    this.app = app;
+    this.scope = new Scope();
+
+    // Create DOM structure
+    this.modalEl = document.createElement('div');
+    this.containerEl = document.createElement('div');
+    this.titleEl = document.createElement('div');
+    this.contentEl = createObsidianElement();
+
+    this.modalEl.appendChild(this.containerEl);
+    this.containerEl.appendChild(this.titleEl);
+    this.containerEl.appendChild(this.contentEl);
+  }
+
+  open(): void {
+    this.onOpen();
+  }
+
+  close(): void {
+    this.onClose();
+  }
+
+  onOpen(): void {
+    // Override in subclass
+  }
+
+  onClose(): void {
+    // Override in subclass
+  }
+}
+
+export class MarkdownRenderer {
+  static async render(app: App, markdown: string, el: HTMLElement): Promise<void> {
+    // Use app context for rendering (in real implementation)
+    if (app.workspace) {
+      el.textContent = markdown; // simplistic – strips formatting
+    }
+  }
+}
+
 export class Plugin {
   public app: App;
 
@@ -101,126 +488,24 @@ export class Plugin {
     return {};
   }
 
-  async saveData(_d: unknown) {}
+  async saveData<T extends Record<string, unknown>>(data: T) {
+    // In real implementation, this would persist data
+    console.log('Saving data:', data);
+  }
 }
 
 export class PluginSettingTab {
+  containerEl: HTMLElement;
+
   constructor(
     public app: App,
     public plugin: Plugin
-  ) {}
+  ) {
+    this.containerEl = document.createElement('div');
+  }
 
   display() {}
 }
-
-export class TextComponent {
-  inputEl = { type: '', min: '', value: '' };
-
-  setValue(_v: string): TextComponent {
-    return this;
-  }
-
-  onChange(_fn: (v: string) => void): TextComponent {
-    return this;
-  }
-}
-
-// Placeholder for DropdownComponent type
-export interface DropdownComponent {
-  addOption(value: string, display: string): this;
-  setValue(value: string): this;
-  onChange(callback: (value: string) => void): this;
-}
-
-export class Setting {
-  settingEl: HTMLElement;
-
-  constructor(container: HTMLElement) {
-    this.settingEl = container;
-  }
-
-  setName(_n: string) {
-    return this;
-  }
-
-  setDesc(_d: string) {
-    return this;
-  }
-
-  addToggle(
-    cb: (t: {
-      setValue: (v: boolean) => void;
-      onChange: (fn: (v: boolean) => void) => void;
-    }) => void
-  ) {
-    cb({ setValue() {}, onChange() {} });
-    return this;
-  }
-
-  addText(cb: (t: TextComponent) => void) {
-    cb(new TextComponent());
-    return this;
-  }
-
-  addDropdown(cb: (component: DropdownComponent) => void) {
-    const mockDropdown: DropdownComponent = {
-      addOption(_value: string, _display: string): DropdownComponent {
-        return this;
-      },
-      setValue(_value: string): DropdownComponent {
-        return this;
-      },
-      onChange(_callback: (value: string) => void): DropdownComponent {
-        return this;
-      },
-    };
-    cb(mockDropdown);
-    return this;
-  }
-}
-
-// ---------- Vault / adapter ----------
-export type TAbstractFile = Record<string, unknown>; // Placeholder type
-
-export class FileSystemAdapter {
-  basePath = '/';
-
-  getBasePath() {
-    return this.basePath;
-  }
-
-  async exists(_p: string) {
-    return false;
-  }
-
-  async mkdir(_p: string) {}
-
-  async writeBinary(_p: string, _d: ArrayBuffer) {}
-
-  async readBinary(_p: string) {
-    return new ArrayBuffer(0);
-  }
-
-  async rename(_oldPath: string, _newPath: string) {}
-
-  async write(_p: string, _data: string) {}
-
-  async append(_p: string, _d: string) {}
-}
-
-export class Vault {
-  adapter = new FileSystemAdapter();
-
-  async delete(_file: TAbstractFile, _force?: boolean) {}
-
-  getAbstractFileByPath(_p: string) {
-    return undefined;
-  }
-}
-
-// Export types used only for typing in tests so that `import { Vault, TFolder, PluginManifest } from 'obsidian'` succeeds.
-// They don't require runtime behavior.
-export type TFolder = Record<string, unknown>;
 
 // Default export (some code uses `import obsidian from 'obsidian'`)
 export default {};

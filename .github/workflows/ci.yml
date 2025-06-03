@@ -47,8 +47,28 @@ jobs:
       - name: Unit & Integration Tests
         run: pnpm test:unit && pnpm test:int
 
+      - name: Test Coverage
+        run: pnpm test:coverage:ci
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+        if: always()
+
       - name: Build (bundle)
         run: pnpm build
+
+      - name: Generate API Documentation
+        run: pnpm docs:api
+
+      - name: Upload API Documentation
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-docs
+          path: docs/api/
+        if: always()
 
       - name: End-to-End Tests
         run: pnpm e2e

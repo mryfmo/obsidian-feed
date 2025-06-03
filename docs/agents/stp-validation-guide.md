@@ -66,6 +66,7 @@ PLAN ☑
 
 ### Valid Phases
 
+- `FETCH` - Fetch (gathering external resources)
 - `INV` - Investigation
 - `ANA` - Analysis
 - `PLAN` - Planning

@@ -29,7 +29,7 @@ else
 fi
 
 # Configuration
-STP_PHASES=(INV ANA PLAN BUILD VERIF REL)
+STP_PHASES=(FETCH INV ANA PLAN BUILD VERIF REL)
 STP_PHASE_PATTERN=$(IFS='|'; echo "${STP_PHASES[*]}")
 
 # Patterns to search for

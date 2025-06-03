@@ -79,12 +79,12 @@ const createAssetMock = (): AssetService =>
 function mockHttpResponse(url: string, xml: string) {
   // The mocked "request" created above is a Vitest spy instance (vi.fn()). We
   // therefore cast to the generic spy interface that exposes
-  // `mockImplementationOnce`.
+  // `mockImplementation`.
   (
     request as unknown as {
-      mockImplementationOnce: (fn: (opts: unknown) => Promise<string>) => void;
+      mockImplementation: (fn: (opts: unknown) => Promise<string>) => void;
     }
-  ).mockImplementationOnce(async (opts: unknown) => {
+  ).mockImplementation(async (opts: unknown) => {
     const u = typeof opts === 'string' ? opts : (opts as { url: string }).url;
     if (u === url) return xml;
     throw new Error(`Unexpected URL in mock: ${u}`);
@@ -123,6 +123,7 @@ describe('getFeedItems', () => {
 
   it('parses a minimal RSS feed', async () => {
     const url = 'https://example.com/rss.xml';
+    vi.mocked(request).mockReset();
     mockHttpResponse(url, RSS_SAMPLE);
 
     const info: FeedInfo = { name: 'sample', feedUrl: url, folder: 'fs', unread: 0, updated: 0 };
@@ -142,6 +143,7 @@ describe('getFeedItems', () => {
 
   it('parses a minimal Atom feed', async () => {
     const url = 'https://example.com/atom.xml';
+    vi.mocked(request).mockReset();
     mockHttpResponse(url, ATOM_SAMPLE);
 
     const info: FeedInfo = { name: 'atom', feedUrl: url, folder: 'fs', unread: 0, updated: 0 };

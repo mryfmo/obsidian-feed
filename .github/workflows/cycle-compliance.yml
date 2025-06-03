@@ -1,0 +1,152 @@
+name: 7-Step Cycle Compliance Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  cycle-compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check cycle enforcement configuration
+        run: |
+          echo "Checking 7-step cycle enforcement configuration..."
+          
+          # Check if cycle enforcement config exists
+          if [ ! -f ".claude/config/cycle-enforcement.json" ]; then
+            echo "❌ Missing cycle-enforcement.json"
+            exit 1
+          fi
+          
+          # Validate JSON format
+          if ! jq empty .claude/config/cycle-enforcement.json 2>/dev/null; then
+            echo "❌ Invalid JSON in cycle-enforcement.json"
+            exit 1
+          fi
+          
+          # Check if strict mode is enabled
+          STRICT_MODE=$(jq -r '.enforcement_rules.strict_mode' .claude/config/cycle-enforcement.json)
+          if [ "$STRICT_MODE" != "true" ]; then
+            echo "❌ Strict mode is not enabled in cycle enforcement"
+            exit 1
+          fi
+          
+          echo "✅ Cycle enforcement configuration is valid"
+
+      - name: Check cycle automation scripts
+        run: |
+          echo "Checking cycle automation scripts..."
+          
+          SCRIPTS=(
+            ".claude/scripts/execute-task-with-cycle.sh"
+            ".claude/scripts/create-task-backup.sh"
+            ".claude/scripts/request-confirmation.sh"
+            ".claude/scripts/verify-task.sh"
+            ".claude/scripts/evaluate-task.sh"
+            ".claude/scripts/update-progress.sh"
+            ".claude/scripts/cleanup-task.sh"
+          )
+          
+          MISSING=0
+          for script in "${SCRIPTS[@]}"; do
+            if [ ! -f "$script" ]; then
+              echo "❌ Missing: $script"
+              MISSING=$((MISSING + 1))
+            elif [ ! -x "$script" ]; then
+              echo "❌ Not executable: $script"
+              MISSING=$((MISSING + 1))
+            else
+              echo "✅ Found: $script"
+            fi
+          done
+          
+          if [ $MISSING -gt 0 ]; then
+            echo "❌ $MISSING cycle scripts are missing or not executable"
+            exit 1
+          fi
+          
+          echo "✅ All cycle automation scripts are present and executable"
+
+      - name: Check CLAUDE.md for cycle references
+        run: |
+          echo "Checking CLAUDE.md for 7-step cycle references..."
+          
+          if ! grep -q "MANDATORY 7-STEP EXECUTION CYCLE" CLAUDE.md; then
+            echo "❌ CLAUDE.md missing mandatory cycle section"
+            exit 1
+          fi
+          
+          if ! grep -q "EXECUTE the 7-step cycle" CLAUDE.md; then
+            echo "❌ CLAUDE.md missing cycle enforcement directive"
+            exit 1
+          fi
+          
+          echo "✅ CLAUDE.md contains proper cycle references"
+
+      - name: Check operation-guard.ts for cycle validation
+        run: |
+          echo "Checking operation-guard.ts for cycle validation..."
+          
+          if [ ! -f ".mcp/operation-guard.ts" ]; then
+            echo "⚠️ operation-guard.ts not found (MCP may not be configured)"
+            exit 0
+          fi
+          
+          if ! grep -q "validateCycleCompliance" .mcp/operation-guard.ts; then
+            echo "❌ operation-guard.ts missing validateCycleCompliance method"
+            exit 1
+          fi
+          
+          if ! grep -q "initializeCycle" .mcp/operation-guard.ts; then
+            echo "❌ operation-guard.ts missing initializeCycle method"
+            exit 1
+          fi
+          
+          echo "✅ operation-guard.ts contains cycle validation methods"
+
+      - name: Validate cycle logs directory
+        run: |
+          echo "Checking runtime directory structure..."
+          
+          # These would be created at runtime, so just check parent exists
+          if [ ! -d ".claude" ]; then
+            echo "❌ .claude directory missing"
+            exit 1
+          fi
+          
+          echo "✅ Runtime directory structure is valid"
+
+      - name: Generate compliance report
+        if: always()
+        run: |
+          echo "## 7-Step Cycle Compliance Report" > cycle-compliance-report.md
+          echo "" >> cycle-compliance-report.md
+          echo "**Date:** $(date)" >> cycle-compliance-report.md
+          echo "**Branch:** ${{ github.ref }}" >> cycle-compliance-report.md
+          echo "**Commit:** ${{ github.sha }}" >> cycle-compliance-report.md
+          echo "" >> cycle-compliance-report.md
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ **Status:** COMPLIANT" >> cycle-compliance-report.md
+            echo "" >> cycle-compliance-report.md
+            echo "All 7-step cycle enforcement mechanisms are properly configured." >> cycle-compliance-report.md
+          else
+            echo "❌ **Status:** NON-COMPLIANT" >> cycle-compliance-report.md
+            echo "" >> cycle-compliance-report.md
+            echo "One or more cycle enforcement mechanisms are missing or misconfigured." >> cycle-compliance-report.md
+          fi
+
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycle-compliance-report
+          path: cycle-compliance-report.md

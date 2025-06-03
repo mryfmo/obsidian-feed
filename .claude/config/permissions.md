@@ -1,5 +1,26 @@
 # Claude Code Permission Matrix
 
+## 🔄 MANDATORY 7-STEP EXECUTION CYCLE
+
+**ALL operations MUST follow the 7-step cycle. The required steps vary by operation level:**
+
+### Cycle Requirements by Level:
+- **LEVEL 0**: Steps 3-4 (Execute, Verify)
+- **LEVEL 1**: Steps 1, 3-6 (Backup, Execute, Verify, Evaluate, Update)
+- **LEVEL 2**: ALL 7 steps (Backup, Confirm, Execute, Verify, Evaluate, Update, Cleanup)
+- **LEVEL 3**: ALL 7 steps + additional safety review
+
+### The 7 Steps:
+1. **BACKUP** - Create backups before changes
+2. **CONFIRM** - Get user approval (LEVEL 2+ only)
+3. **EXECUTE** - Perform the operation
+4. **VERIFY** - Check results
+5. **EVALUATE** - Assess success/failure
+6. **UPDATE** - Track progress
+7. **CLEANUP** - Remove temporary files
+
+**Use `.claude/scripts/execute-task-with-cycle.sh` to ensure compliance.**
+
 ## Operation Level Definitions
 
 ### LEVEL 0: READ-ONLY
@@ -31,10 +52,12 @@
 ## Mandatory Confirmation Rules
 
 ### Required before LEVEL 2+ operations:
-1. Operation description
-2. Impact scope clarification
-3. Rollback method presentation
-4. Explicit approval wait
+1. Complete BACKUP step of 7-step cycle
+2. Operation description
+3. Impact scope clarification
+4. Rollback method presentation
+5. Explicit approval wait (CONFIRM step)
+6. Post-operation VERIFY and CLEANUP steps
 
 ### Confirmation Template:
 ```
@@ -91,6 +114,21 @@ When uncertain:
 ## Audit Requirements
 
 All LEVEL 2+ operations must:
-- Log before execution
-- Log execution results
-- Save rollback information
+- Follow complete 7-step cycle
+- Log before execution (part of EXECUTE step)
+- Log execution results (part of VERIFY step)
+- Save rollback information (part of BACKUP step)
+- Log cycle compliance in `.claude/runtime/cycle-compliance.log`
+- Report violations to `.claude/runtime/violations.log`
+
+## Cycle Enforcement
+
+### Automatic Enforcement:
+- OperationGuard validates cycle compliance
+- Scripts in `.claude/scripts/` automate cycle steps
+- GitHub Actions verify cycle configuration
+
+### Manual Enforcement:
+- Each step must be explicitly logged
+- Skipping steps triggers violation reporting
+- Non-compliance blocks further operations

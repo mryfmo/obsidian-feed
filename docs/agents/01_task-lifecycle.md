@@ -17,17 +17,19 @@ forces explicit _state transitions_ so that omissions are caught early.
 
 ---
 
-## State Machine
+## State Machine (7-Phase STP Model)
 
 | State                      | Required Artefacts                                                                                                                                                                    | Exit Gate                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **FETCH**<br>(Fetch)       | • Gather external resources, documentation<br>• Download dependencies or reference materials<br>• Network operations allowed                                                          | All required resources successfully retrieved               |
 | **INV**<br>(Investigation) | • Reproduction steps / failing test<br>• Logs, stack trace, screenshots                                                                                                               | Maintainer (or reporter) acknowledges reproduction is valid |
 | **ANA**<br>(Analysis)      | • Root-cause description (1-2 para)<br>• Impacted files / modules list                                                                                                                | Reviewer agrees the analysis matches evidence               |
 | **PLAN**                   | • RFC-style note (`docs/rfcs/NNN-*.md`) containing:<br> – Scope & out-of-scope<br> – Risk list & mitigations<br> – Test strategy (unit / int / e2e)<br> – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval                    |
-| **BUILD**                  | • Code, docs, migration scripts, test fixtures                                                                                                                                        | CI ‑ lint + type-check + tests green                        |
-| **VERIF**                  | • Test results attached<br>• Manual QA notes (if UI)<br>• CHANGELOG entry                                                                                                             | Reviewer & QA sign-off                                      |
+| **BUILD**                  | • Code, docs, migration scripts, test fixtures<br>• Implementation limited to ≤1000 LOC, ≤10 files                                                                                   | CI ‑ lint + type-check + tests green                        |
+| **VERIF**<br>(Verification)| • Test results attached<br>• Manual QA notes (if UI)<br>• CHANGELOG entry                                                                                                             | Reviewer & QA sign-off                                      |
+| **REL**<br>(Release)       | • Version bump<br>• Release notes<br>• GitHub release draft                                                                                                                          | Release published or staged for deployment                  |
 
-After **VERIF** the task is considered _done_ and can be merged ➜ release train.
+After **REL** the task is considered _done_ and deployed.
 
 ### Same flow in Claude Code sessions
 
@@ -50,8 +52,8 @@ PR yet), the very same artefacts **must still be committed**:
 > 4. Return explanation → next state = **ANA**
 
 > **Skip policy** Trivial chores (typo fixes, comment clarifications, version
-> bumps) may collapse states _INV → BUILD → VERIF_ **only if** the change is
-> < 5 lines and has no runtime effect.
+> bumps) may collapse states _FETCH → INV → BUILD → VERIF → REL_ **only if** the change is
+> < 5 lines and has no runtime effect. FETCH phase may be skipped if no external resources are needed.
 
 ## How Agents Mark Progress
 

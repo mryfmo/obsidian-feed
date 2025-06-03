@@ -1,82 +1,84 @@
-# Claude Integration Directory
+# Claude Integration System
 
-This directory contains all Claude-specific files and documentation.
+## 🎯 Quick Navigation
 
-## Structure
+### Working on an Issue or Feature?
+→ You need the **[7-Phase Development Lifecycle](docs/guides/development-lifecycle.md)**
+- Manages work from start to finish (FETCH → REL)
+- Used for: issues, features, bugs, enhancements
 
-- `config/` - Configuration files (tracked in git)
-  - `claude-rules.json` - Safety rules configuration
-  - `permissions.md` - Permission levels documentation
-  - `safety-checks.json` - Operation safety checks
-  - `consolidated-safety-rules.json` - Unified safety rules
-  
-- `docs/` - Claude documentation (tracked in git)
-  - `core/` - Core principles and safety guidelines
-  - `standards/` - Standards including WORKSPACE-HIERARCHY.md
-  - `workflows/` - Development workflows and processes
-  - `integration/` - Integration guides
-  - `guards/` - Validation guard documentation
-  
-- `workspace/` - Project workspace (not tracked)
-  - `projects/{project-name}/{PHASE}/{task-id}/{process}/`
-  - See `docs/standards/WORKSPACE-HIERARCHY.md` for details
-  
-- `runtime/` - Operational files like audit logs (not tracked)
+### Performing File Operations?
+→ You need the **[7-Step Execution Cycle](docs/guides/execution-cycle.md)**
+- Ensures safety for each operation (BACKUP → CLEANUP)
+- Used for: creating, editing, deleting files
 
-- `scripts/` - Claude-specific scripts
-  - `validate-workspace.sh` - Workspace structure validation
+### New to the System?
+→ Start with **[Understanding the Two Processes](docs/concepts/dual-process-model.md)**
 
-- `mcp/` - MCP integration files
-
-## Key Documentation
-
-- `docs/standards/WORKSPACE-HIERARCHY.md` - Workspace organization standard
-- `docs/workflows/DEVELOPMENT.md` - 7-phase development process
-- `docs/workflows/RFC-WORKFLOW.md` - RFC creation workflow
-- `../CLAUDE.md` - Main Claude usage guide (project root)
-
-## Workspace Structure
-
-All project work follows the hierarchy:
+## 🔄 How They Work Together
 
 ```
-workspace/projects/{project-name}/{PHASE}/{task-id}/{process}/
+Development Lifecycle (Strategic Level)
+└── FETCH → INV → ANA → PLAN → BUILD → VERIF → REL
+                                  │
+                                  └── Each file operation triggers
+                                      └── Execution Cycle (Tactical Level)
+                                          └── BACKUP → CONFIRM → EXECUTE → VERIFY → EVALUATE → UPDATE → CLEANUP
 ```
 
-Where:
-- **Project**: Complete work item (e.g., `issue-13-cors-proxy`)
-- **Phase**: `FETCH`, `INV`, `ANA`, `PLAN`, `BUILD`, `VERIF`, `REL`
-- **Task**: Specific deliverable (e.g., `P-1-rfc-draft`)
-- **Process**: `01-investigation`, `02-planning`, `03-execution`, `04-results`
+During the BUILD phase (or any phase requiring file changes), each operation automatically follows the execution cycle for safety.
 
-## Quick Start
+## 🛡️ Safety Levels
 
-See `.claude/docs/QUICKSTART.md` for immediate productivity.
+| Level | Type | Operations | Cycle Requirements |
+|-------|------|------------|-------------------|
+| 0 | Read-only | View files, git status | Steps 3-4 only |
+| 1 | Safe writes | Create/edit files | Steps 1,3-6 |
+| 2 | Destructive | Delete files, git reset | All 7 steps |
+| 3 | System | Modify configs | All 7 steps + review |
 
+## 📚 Documentation Structure
+
+```
+.claude/
+├── README.md (you are here)
+├── docs/
+│   ├── concepts/          # Core concepts and philosophy
+│   ├── guides/            # Step-by-step guides
+│   ├── workflows/         # Detailed workflows
+│   └── reference/         # Complete reference
+├── config/                # Active configuration
+├── scripts/               # Automation scripts
+└── workspace/             # Your work area
+```
+
+## 🚀 Common Tasks
+
+### Start a New Issue
 ```bash
-# Start your first project
-.claude/scripts/init-workspace.sh issue 42 "your-feature"
-
-# Validate your work
-.claude/scripts/validate-workspace.sh
+# Begin at FETCH phase
+.claude/scripts/start-issue.sh issue-123
 ```
 
-## Key Scripts
+### Check Current Status
+```bash
+# See your current phase and pending operations
+.claude/scripts/status.sh
+```
 
-- `scripts/init-workspace.sh` - Create new project workspace
-- `scripts/validate-workspace.sh` - Validate workspace structure
+### Validate Compliance
+```bash
+# Ensure all safety measures are in place
+.claude/scripts/validate-cycle-compliance.sh
+```
 
-## Usage
+## ❓ Need Help?
 
-1. **Start**: Use init-workspace.sh to create project
-2. **Work**: Follow the 7-phase process (INV → ANA → PLAN → BUILD → VERIF → REL)
-3. **Validate**: Run validation frequently
-4. **Complete**: Move final deliverables to `docs/`
-5. **Archive**: Move completed projects to `archive/`
+- **Conceptual Questions**: See [concepts/](docs/concepts/)
+- **How-to Guides**: See [guides/](docs/guides/)
+- **Troubleshooting**: See [docs/troubleshooting.md](docs/troubleshooting.md)
+- **Contributing**: See [CONTRIBUTING.md](docs/CONTRIBUTING.md)
 
-## Important Notes
+---
 
-- The `workspace/` directory is git-ignored for clean history
-- Use metadata files to track progress
-- Follow naming conventions for consistency
-- Archive completed work promptly
+*This system prioritizes safety and auditability while enabling efficient development.*

@@ -16,8 +16,30 @@ export default defineConfig({
   // Root config does not run tests, only workspace-side project definitions are used
   test: {
     include: [],
+    testTimeout: 20000, // Increase timeout for coverage runs
     coverage: {
-      reporter: ['text', 'html'],
+      provider: 'v8',
+      reporter: ['text', 'json', 'html', 'lcov'],
+      exclude: [
+        'node_modules/',
+        'tests/',
+        'e2e/',
+        '*.config.*',
+        'docs/templates/**',
+        '.mcp/',
+        '.claude/',
+        'dist/',
+        '**/*.d.ts',
+        '**/*.spec.ts',
+        '**/*.test.ts',
+        'tests/__mocks__/**',
+      ],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 75,
+        statements: 80,
+      },
     },
   },
 });

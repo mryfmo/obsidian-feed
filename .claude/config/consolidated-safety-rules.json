@@ -95,5 +95,20 @@
     "log_operations": ["level_2", "level_3"],
     "require_rollback_plan": ["file_delete", "directory_delete", "config_modification"],
     "recommend_backup": ["*.json", "*.yml", "*.yaml", "manifest.json"]
+  },
+  
+  "cycle_enforcement": {
+    "enabled": true,
+    "config_file": ".claude/config/cycle-enforcement.json",
+    "mandatory": true,
+    "bypass_allowed": false,
+    "validation_required": true,
+    "enforcement_script": ".claude/scripts/execute-task-with-cycle.sh",
+    "level_requirements": {
+      "level_0": ["EXECUTE", "VERIFY"],
+      "level_1": ["BACKUP", "EXECUTE", "VERIFY", "EVALUATE", "UPDATE"],
+      "level_2": ["BACKUP", "CONFIRM", "EXECUTE", "VERIFY", "EVALUATE", "UPDATE", "CLEANUP"],
+      "level_3": ["BACKUP", "CONFIRM", "EXECUTE", "VERIFY", "EVALUATE", "UPDATE", "CLEANUP"]
+    }
   }
 }

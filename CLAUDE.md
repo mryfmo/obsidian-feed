@@ -19,21 +19,83 @@ This file provides guidance to Claude Code (claude.ai/code) and Claude Code Acti
 
 **ALL DESTRUCTIVE OPERATIONS (LEVEL 2+) REQUIRE EXPLICIT USER APPROVAL**
 
+## 🔄 Two Complementary Processes
+
+This project uses two distinct processes that work together:
+
+### 1. **7-Phase Development Lifecycle** (Strategic Work Management)
+**Purpose**: Structure complete work items from inception to release  
+**Phases**: FETCH → INV → ANA → PLAN → BUILD → VERIF → REL  
+**Used for**: GitHub issues, features, bugs, enhancements  
+**Duration**: Hours to days per work item  
+**Details**: See `docs/agents/01_task-lifecycle.md`
+
+### 2. **7-Step Execution Cycle** (Tactical Operation Safety)
+**Purpose**: Ensure every file operation is safe and reversible  
+**Steps**: BACKUP → CONFIRM → EXECUTE → VERIFY → EVALUATE → UPDATE → CLEANUP  
+**Used for**: All file operations, git commands, system changes  
+**Duration**: Seconds to minutes per operation  
+**MANDATORY**: Every operation MUST follow this cycle based on its security level
+
+### How They Work Together
+During any development phase (especially BUILD), each file operation automatically triggers the execution cycle. For example:
+- In BUILD phase, editing a file → triggers 7-step cycle
+- In VERIF phase, running tests → triggers appropriate cycle steps
+- The execution cycle operates WITHIN the development lifecycle
+
+**Quick Reference**: See `.claude/README.md` for navigation or `.claude/docs/concepts/dual-process-model.md` for detailed explanation.
+
+## 🔄 MANDATORY 7-STEP EXECUTION CYCLE
+
+### The 7 Mandatory Steps:
+1. **BACKUP** - Create backups of all files that will be modified
+2. **CONFIRM** - Get explicit user approval for the operation
+3. **EXECUTE** - Perform the actual operation
+4. **VERIFY** - Check that the operation completed successfully
+5. **EVALUATE** - Assess the overall success/failure
+6. **UPDATE** - Update progress tracking and status
+7. **CLEANUP** - Clean up temporary files and resources
+
+### Enforcement Mechanisms:
+- **Automated Scripts**: Use `.claude/scripts/execute-task-with-cycle.sh` for automation
+- **Manual Execution**: Each step MUST be logged in `.claude/runtime/cycle-compliance.log`
+- **Violation Detection**: Any cycle bypass triggers immediate operation abort
+- **Audit Trail**: All cycle executions logged with timestamps and outcomes
+
+### Cycle Requirements by Operation Level:
+- **LEVEL 0** (Read-only): Steps 3-4 only (Execute, Verify)
+- **LEVEL 1** (Safe modifications): Steps 1, 3-6 (Skip Confirm, Cleanup)
+- **LEVEL 2** (Destructive): ALL 7 steps MANDATORY
+- **LEVEL 3** (System): ALL 7 steps + additional safety review
+
+### Consequences of Non-Compliance:
+1. **Immediate operation termination**
+2. **Violation logged to `.claude/runtime/violations.log`
+3. **Rollback initiated automatically**
+4. **User notified of compliance failure**
+5. **Further operations blocked until resolved**
+
 ## ⚡ ENFORCEABLE DIRECTIVES
 
 Claude MUST:
-1. Check `.claude/config/consolidated-safety-rules.json` before EVERY file system operation
-2. Log ALL operations with level >= 2 to audit trail
-3. Request confirmation before ANY destructive operation (level 2+)
-4. STOP immediately if user types: STOP, CANCEL, or ABORT
-5. NEVER execute forbidden operations listed in safety rules
+1. **EXECUTE the 7-step cycle** for EVERY operation (no exceptions)
+2. Check `.claude/config/consolidated-safety-rules.json` before EVERY file system operation
+3. Log ALL operations with level >= 2 to audit trail
+4. Request confirmation before ANY destructive operation (level 2+)
+5. STOP immediately if user types: STOP, CANCEL, or ABORT
+6. NEVER execute forbidden operations listed in safety rules
+7. **VERIFY cycle compliance** before proceeding with any operation
+8. **CREATE backups** before ANY modification operation
 
 Claude MUST NOT:
-1. Delete files without explicit approval (even if asked)
-2. Modify config files without showing diff first
-3. Execute commands containing: rm -rf /, git push --force, npm publish
-4. Create or modify: .env files, private keys, credentials
-5. Perform bulk operations without preview and confirmation
+1. **SKIP any mandatory cycle step** for the operation level
+2. Delete files without explicit approval (even if asked)
+3. Modify config files without showing diff first
+4. Execute commands containing: rm -rf /, git push --force, npm publish
+5. Create or modify: .env files, private keys, credentials
+6. Perform bulk operations without preview and confirmation
+7. **BYPASS the 7-step cycle** even if user requests it
+8. **PROCEED without cycle validation** from operation-guard
 
 ## 📚 Essential Documentation
 
@@ -106,6 +168,19 @@ The following shell scripts are available:
 - `tools/list_guards.sh` → Lists implemented validation guards
 - `tools/gen_wbs.sh` → Generates work breakdown structure
 - `tools/validate-stp-markers.sh` → Validates STP compliance
+
+### 7-Step Cycle Automation Scripts
+
+**MANDATORY**: Use these scripts for cycle compliance:
+
+- `.claude/scripts/execute-task-with-cycle.sh` → Main cycle enforcement script
+- `.claude/scripts/create-task-backup.sh` → Step 1: Backup creation
+- `.claude/scripts/request-confirmation.sh` → Step 2: User confirmation
+- `.claude/scripts/verify-task.sh` → Step 4: Result verification
+- `.claude/scripts/evaluate-task.sh` → Step 5: Success evaluation
+- `.claude/scripts/update-progress.sh` → Step 6: Progress tracking
+- `.claude/scripts/cleanup-task.sh` → Step 7: Resource cleanup
+- `.claude/scripts/validate-cycle-compliance.sh` → Cycle compliance validation
 
 ### Implementation Status
 
@@ -224,12 +299,18 @@ When working with Claude Code Action:
 **GitHub Actions in `.github/workflows/`:**
 
 - `claude.yml` - Main Claude Code Action workflow
+- `claude-basic.yml` - Basic Claude integration workflow
+- `claude-integration-helper.yml` - Claude integration helper utilities
+- `claude-safety.yml` - Claude safety checks and validations
 - `label-sync.yml` - Enforces phase label consistency
 - `stp-guard.yml` - Validates lifecycle artifacts
 - `path-guard.yml` - Role-based path restrictions
 - `guard-unit.yml` - Runs guard validation tests
 - `ci.yml` - Standard CI pipeline
 - `mcp-validation.yml` - MCP integration health checks
+- `validate-git-commands.yml` - Git command validation
+- `version-check.yml` - Version consistency checks
+- `release.yml` - Release automation workflow
 
 ## Development Guidelines
 
@@ -314,6 +395,120 @@ If an operation goes wrong:
 4. **Maintain audit trail** - All LEVEL 2+ operations must be logged
 5. **Test rollback plans** - Ensure recovery is possible before proceeding
 
+## MANDATORY TypeScript Implementation Rules
+
+### Core Principles (MUST follow in order of priority)
+1. **Essential Implementation** - Every line of code must have a clear purpose
+2. **Type Safety** - Use TypeScript's type system properly without shortcuts
+3. **API Compliance** - Follow official API specifications exactly
+4. **Maintainability** - Code must be clear and self-documenting
+
+### STRICTLY FORBIDDEN (Will result in immediate rejection)
+1. **Type evasion**
+   - NEVER use `any` type (including `as any`, `: any`, `<any>`)
+   - NEVER use `unknown` type when proper types exist
+   - NEVER use `as` type assertions (use type guards instead)
+   - NEVER use `// @ts-ignore` comments
+   - NEVER use `!` non-null assertion when avoidable
+   - NEVER use `null!` or `undefined!`
+
+2. **Implementation shortcuts**
+   - NEVER leave empty implementations `{}`
+   - NEVER write meaningless comments
+   - NEVER use `_` prefix for variables (use meaningful names)
+   - Use meaningful return types that express the operation's result
+   - `void` is acceptable when:
+     - External API requires it
+     - Operation success/failure is communicated via exceptions
+     - Side effects are the primary purpose (e.g., logging)
+
+3. **Naming conventions (STRICTLY FORBIDDEN)**
+   - NEVER use `I` prefix for interfaces (e.g., `IVault`, `IFile`)
+   - NEVER use `_` prefix for private properties
+   - NEVER use Hungarian notation
+   - NEVER use abbreviations that reduce clarity
+   - MUST use descriptive names that express intent
+
+### REQUIRED Naming Conventions
+
+1. **Interfaces**: Use descriptive names without prefixes
+   ```typescript
+   // GOOD
+   interface FileSystem { }
+   interface VaultOperations { }
+   
+   // BAD
+   interface IFileSystem { }
+   interface FileSystemInterface { }
+   ```
+
+2. **Types**: Use descriptive names, optionally with `Type` suffix for clarity
+   ```typescript
+   // GOOD
+   type FileMetadata = { ... }
+   type VaultConfig = { ... }
+   
+   // ACCEPTABLE when avoiding name conflicts
+   type FileType = { ... }
+   ```
+
+3. **Private properties**: Use descriptive names without prefixes
+   ```typescript
+   // GOOD
+   private vaultCache: Map<string, Vault>
+   
+   // BAD
+   private _vaultCache: Map<string, Vault>
+   ```
+
+### Circular Reference Resolution Pattern
+When encountering circular references (e.g., A depends on B, B depends on A):
+1. **DO NOT** use `any` type
+2. **DO NOT** use forward declarations with `!`
+3. **DO** use one of these patterns:
+   ```typescript
+   // Pattern 1: Interface segregation
+   interface IVault {
+     delete(file: IFile): Promise<void>;
+   }
+   interface IFile {
+     vault: IVault;
+   }
+   class Vault implements IVault { ... }
+   class File implements IFile { ... }
+   
+   // Pattern 2: Late binding
+   class File {
+     private vaultRef: WeakRef<Vault>;
+     get vault(): Vault {
+       const v = this.vaultRef.deref();
+       if (!v) throw new Error('Vault has been garbage collected');
+       return v;
+     }
+   }
+   ```
+
+### MANDATORY Requirements
+1. **Type accuracy**
+   - MUST follow official Obsidian API type definitions exactly
+   - MUST initialize all properties with appropriate values
+   - MUST use generics for type safety where applicable
+
+2. **Dependency management**
+   - MUST eliminate all circular references
+   - MUST order class definitions to avoid forward references
+   - MUST use interfaces to separate types from implementations
+
+3. **Implementation completeness**
+   - MUST provide meaningful implementations for all methods
+   - MUST fully implement features used in tests
+   - MUST handle errors appropriately
+
+### Enforcement
+- ANY violation of these rules MUST be rejected immediately
+- MUST provide compliant implementation that follows ALL rules
+- NO exceptions or workarounds are permitted
+
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
@@ -356,12 +551,27 @@ fs.unlinkSync('/path/to/file');  // NEVER do this
 
 ## 📁 File Organization
 
-All Claude-specific files are organized under `.claude/`:
+### Active Claude Integration Files
 
-- `.claude/config/` - Configuration and rules
+All Claude-specific **active** files are organized under `.claude/`:
+
+- `.claude/config/` - Active configuration and rules (used at runtime)
 - `.claude/docs/` - Documentation and guides
 - `.claude/runtime/` - Runtime files (audit logs, etc.)
 - `.claude/workspace/` - Project workspace (see `.claude/docs/standards/WORKSPACE-HIERARCHY.md`)
 - `.claude/scripts/` - Claude-specific scripts
+
+### Template Files
+
+Template files for setting up new Claude integrations are located in:
+
+- `docs/templates/claude/` - All Claude-related templates
+  - `config/` - Configuration templates (*.template.json, *.template.md)
+  - `core/` - Core integration templates (*.template.md)
+  - `mcp/` - MCP integration templates (*.template.ts, *.template.json)
+  - `scripts/` - Script templates (*.template.sh)
+  - `workflows/` - Workflow templates (*.template.md)
+
+**Important**: Template files have `.template` extension and should be copied/renamed when creating actual integration files. Do not edit templates directly unless updating the template system itself.
 
 See `.claude/README.md` for details.
