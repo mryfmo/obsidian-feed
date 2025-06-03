@@ -182,6 +182,7 @@ describe('FeedReaderSettingTab', () => {
       } as FeedsReaderSettings,
       saveSettings: vi.fn().mockResolvedValue(undefined),
       loadSettings: vi.fn(),
+      refreshView: vi.fn(),
     } as unknown as IFeedsReaderPlugin;
 
     mockApp = new App();
@@ -217,9 +218,12 @@ describe('FeedReaderSettingTab', () => {
       const headingTexts = Array.from(headings).map(h => h.textContent);
 
       expect(headingTexts).toContain('General');
-      expect(headingTexts).toContain('Article Actions');
-      expect(headingTexts).toContain('Performance');
-      expect(headingTexts).toContain('AI Integration');
+      expect(headingTexts).toContain('Display Options');
+      expect(headingTexts).toContain('Item Action Buttons Visibility');
+      expect(headingTexts).toContain('Content Fetching & Caching');
+      expect(headingTexts).toContain('ChatGPT Integration');
+      expect(headingTexts).toContain('Advanced ChatGPT Settings');
+      expect(headingTexts).toContain('Performance Settings');
     });
 
     it('should clear container before displaying', () => {
@@ -276,7 +280,7 @@ describe('FeedReaderSettingTab', () => {
     });
 
     it('should toggle mixed feed view', () => {
-      const callback = settingCallbacks.toggle.get('Mixed feed view');
+      const callback = settingCallbacks.toggle.get('Unified Feed View');
       expect(callback).toBeDefined();
 
       if (callback) {
@@ -287,7 +291,7 @@ describe('FeedReaderSettingTab', () => {
     });
 
     it('should toggle show read button', () => {
-      const callback = settingCallbacks.toggle.get('Show read button');
+      const callback = settingCallbacks.toggle.get('Show Mark Read/Unread Button');
       expect(callback).toBeDefined();
 
       if (callback) {
@@ -298,7 +302,7 @@ describe('FeedReaderSettingTab', () => {
     });
 
     it('should update view style', () => {
-      const callback = settingCallbacks.dropdown.get('View style');
+      const callback = settingCallbacks.dropdown.get('Display style');
       expect(callback).toBeDefined();
 
       if (callback) {

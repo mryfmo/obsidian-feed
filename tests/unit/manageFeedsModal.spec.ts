@@ -10,11 +10,52 @@ vi.mock('../../src/utils/confirm', () => ({
   showConfirmDialog: vi.fn(),
 }));
 
-    contentEl: HTMLElement;
+// Mock obsidian
+vi.mock('obsidian', () => ({
+  App: vi.fn(),
+  Modal: class {
+    app: unknown;
+    contentEl: HTMLElement & {
+      empty: () => void;
+      createEl: (tag: string, options?: { text?: string; cls?: string }) => HTMLElement;
+    };
 
     constructor(app: unknown) {
       this.app = app;
-      this.contentEl = document.createElement('div');
+      const el = document.createElement('div') as HTMLElement & {
+        empty: () => void;
+        createEl: (tag: string, options?: { text?: string; cls?: string }) => HTMLElement;
+      };
+      
+      el.empty = function() {
+        this.innerHTML = '';
+      };
+      
+      el.createEl = function(tag: string, options?: { text?: string; cls?: string }) {
+        const newEl = document.createElement(tag) as HTMLElement & {
+          empty: () => void;
+          createEl: (tag: string, options?: { text?: string; cls?: string }) => HTMLElement;
+          detach: () => void;
+        };
+        
+        // Add empty, createEl, and detach methods recursively
+        newEl.empty = function() {
+          this.innerHTML = '';
+        };
+        
+        newEl.createEl = el.createEl.bind(newEl);
+        
+        newEl.detach = function() {
+          this.remove();
+        };
+        
+        if (options?.text) newEl.textContent = options.text;
+        if (options?.cls) newEl.className = options.cls;
+        this.appendChild(newEl);
+        return newEl;
+      };
+      
+      this.contentEl = el;
     }
 
     open() {}
@@ -116,11 +157,12 @@ describe('FRManageFeedsModal', () => {
       expect(buttonGroup).toBeTruthy();
 
       const buttons = buttonGroup?.querySelectorAll('button');
-      expect(buttons).toHaveLength(3);
+      expect(buttons).toHaveLength(4);
 
       const buttonTexts = Array.from(buttons || []).map(b => b.textContent);
-      expect(buttonTexts).toContain('Purge');
-      expect(buttonTexts).toContain('Mark all as read');
+      expect(buttonTexts).toContain('Mark all read');
+      expect(buttonTexts).toContain('Purge deleted');
+      expect(buttonTexts).toContain('Purge all items');
       expect(buttonTexts).toContain('Unsubscribe');
     });
   });
@@ -192,13 +234,12 @@ describe('FRManageFeedsModal', () => {
 
       modal.onOpen();
 
-      const unsubscribeButton = modal.contentEl.querySelector(
-        'button[aria-label*="Unsubscribe"]'
-      ) as HTMLButtonElement;
-      expect(unsubscribeButton).toBeTruthy();
+      const buttons = Array.from(modal.contentEl.querySelectorAll('button'));
+      const removeButton = buttons.find(b => b.textContent === 'Unsubscribe') as HTMLButtonElement;
+      expect(removeButton).toBeTruthy();
 
-      // Click unsubscribe button
-      unsubscribeButton.click();
+      // Click remove button
+      removeButton.click();
 
       // Wait for async operations
       await new Promise(resolve => {
@@ -242,18 +283,20 @@ describe('FRManageFeedsModal', () => {
 
       modal.onOpen();
 
-      const unsubscribeButton = modal.contentEl.querySelector(
-        'button[aria-label*="Unsubscribe"]'
-      ) as HTMLButtonElement;
-      unsubscribeButton.click();
+      const buttons = Array.from(modal.contentEl.querySelectorAll('button'));
+      const removeButton = buttons.find(b => b.textContent === 'Unsubscribe') as HTMLButtonElement;
+      removeButton.click();
 
       await new Promise(resolve => {
         setTimeout(resolve, 0);
       });
 
-      // Content should be updated to show empty state
-      const emptyMessage = modal.contentEl.querySelector('p:last-child');
-      expect(emptyMessage?.textContent).toBe('No feeds subscribed yet.');
+      // The feed div should be removed from the DOM
+      const feedDivs = modal.contentEl.querySelectorAll('.fr-manage-feed');
+      expect(feedDivs).toHaveLength(0);
+      
+      // Plugin method should have been called
+      expect(mockPlugin.unsubscribeFeed).toHaveBeenCalledWith('Test Feed');
     });
   });
 });
