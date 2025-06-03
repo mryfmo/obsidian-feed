@@ -5,9 +5,9 @@
 set -euo pipefail
 
 # Check if MCP integration is available
-if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+if [ -f ".claude/mcp-integration/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
   # Try to use MCP integration
-  if npx tsx .mcp/bridge.ts fetch_doc "$@" 2>/dev/null; then
+  if npx tsx .claude/mcp-integration/bridge.ts fetch_doc "$@" 2>/dev/null; then
     exit $?
   fi
   # Fall back to shell implementation if MCP fails

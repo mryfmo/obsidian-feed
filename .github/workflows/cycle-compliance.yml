@@ -95,17 +95,17 @@ jobs:
         run: |
           echo "Checking operation-guard.ts for cycle validation..."
           
-          if [ ! -f ".mcp/operation-guard.ts" ]; then
+          if [ ! -f ".claude/mcp-integration/operation-guard.ts" ]; then
             echo "⚠️ operation-guard.ts not found (MCP may not be configured)"
             exit 0
           fi
           
-          if ! grep -q "validateCycleCompliance" .mcp/operation-guard.ts; then
+          if ! grep -q "validateCycleCompliance" .claude/mcp-integration/operation-guard.ts; then
             echo "❌ operation-guard.ts missing validateCycleCompliance method"
             exit 1
           fi
           
-          if ! grep -q "initializeCycle" .mcp/operation-guard.ts; then
+          if ! grep -q "initializeCycle" .claude/mcp-integration/operation-guard.ts; then
             echo "❌ operation-guard.ts missing initializeCycle method"
             exit 1
           fi

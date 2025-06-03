@@ -28,4 +28,4 @@ jobs:
         run: |
           # Use the validation script (MCP-enhanced with fallback)
           # Note: In CI, this automatically uses shell script mode
-          ./tools/validate-stp-markers.sh "$PR_BODY" "$BASE_SHA" "$HEAD_SHA"
+          ./.claude/validation/validate-stp.sh "$PR_BODY" "$BASE_SHA" "$HEAD_SHA"

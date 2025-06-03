@@ -1,123 +1,123 @@
 # Directory Restructuring Proposal
 
-## 🎯 推奨案: 目的別の再編成
+## 🎯 Recommendation: Purpose-Based Reorganization
 
-### 現状の問題点
-1. `.mcp`という名前が一般的すぎる（MCPプロトコル全般を想起）
-2. `tools`にClaude専用とプロジェクト汎用が混在
-3. Claude統合の全体像が見えにくい
+### Current Issues
+1. `.mcp` name is too generic (suggests general MCP protocol)
+2. `tools` contains mixed Claude-specific and general-purpose utilities
+3. Claude integration overview is difficult to grasp
 
-### 提案する新構造
+### Proposed New Structure
 
 ```
 obsidian-feed/
-├── .claude/                       # Claude統合のホームディレクトリ
-│   ├── README.md                 # 統合ガイド（既存）
-│   ├── config/                   # 設定（既存）
-│   ├── docs/                     # ドキュメント（既存）
-│   ├── scripts/                  # 実行サイクルスクリプト（既存）
-│   ├── workspace/                # 作業領域（既存）
-│   ├── runtime/                  # 実行時ファイル（既存）
+├── .claude/                       # Claude integration home directory
+│   ├── README.md                 # Integration guide (existing)
+│   ├── config/                   # Configuration (existing)
+│   ├── docs/                     # Documentation (existing)
+│   ├── scripts/                  # Execution cycle scripts (existing)
+│   ├── workspace/                # Work area (existing)
+│   ├── runtime/                  # Runtime files (existing)
 │   │
-│   ├── mcp-integration/          # MCPプロトコル実装（.mcp/から移動）
-│   │   ├── README.md            # MCP統合の説明
-│   │   ├── index.ts             # エントリーポイント
-│   │   ├── operation-guard.ts   # 安全性検証
-│   │   ├── bridge.ts            # シェル→TypeScriptブリッジ
-│   │   ├── package.json         # 独立したパッケージ
-│   │   └── tests/               # MCPテスト
+│   ├── mcp-integration/          # MCP protocol implementation (moved from .mcp/)
+│   │   ├── README.md            # MCP integration description
+│   │   ├── index.ts             # Entry point
+│   │   ├── operation-guard.ts   # Safety validation
+│   │   ├── bridge.ts            # Shell → TypeScript bridge
+│   │   ├── package.json         # Independent package
+│   │   └── tests/               # MCP tests
 │   │
-│   └── validation/               # Claude専用検証ツール
-│       ├── turn-guard.sh        # tools/から移動
-│       ├── validate-stp.sh      # tools/から移動・改名
-│       └── README.md            # 検証ツールの説明
+│   └── validation/               # Claude-specific validation tools
+│       ├── turn-guard.sh        # Moved from tools/
+│       ├── validate-stp.sh      # Moved and renamed from tools/
+│       └── README.md            # Validation tools description
 │
-└── tools/                        # プロジェクト汎用ツール
-    ├── fetch-doc.sh             # 汎用ドキュメント取得
-    ├── gen-wbs.sh               # 汎用WBS生成
-    ├── gen-wbs.py               # Python版WBS
-    └── list-guards.sh           # ガード一覧（汎用）
+└── tools/                        # General-purpose project tools
+    ├── fetch-doc.sh             # General document fetching
+    ├── gen-wbs.sh               # General WBS generation
+    ├── gen-wbs.py               # Python version of WBS
+    └── list-guards.sh           # List guards (general)
 ```
 
-### 移行による利点
+### Migration Benefits
 
-1. **明確な所属**
-   - Claude関連はすべて`.claude/`配下
-   - MCPは「統合」として位置づけ
-   - 汎用ツールは`tools/`に残存
+1. **Clear Ownership**
+   - All Claude-related items under `.claude/`
+   - MCP positioned as "integration"
+   - General tools remain in `tools/`
 
-2. **発見しやすさ**
-   - `.claude/`を見ればClaude統合の全体像が把握可能
-   - 各サブディレクトリが明確な役割
+2. **Discoverability**
+   - Complete Claude integration overview visible in `.claude/`
+   - Each subdirectory has clear role
 
-3. **保守性向上**
-   - Claude固有の変更が`.claude/`に集約
-   - 汎用ツールの独立性維持
+3. **Improved Maintainability**
+   - Claude-specific changes consolidated in `.claude/`
+   - General tools maintain independence
 
-### 移行計画
+### Migration Plan
 
-#### Phase 1: 準備（非破壊的）
+#### Phase 1: Preparation (Non-destructive)
 ```bash
-# 1. 新ディレクトリ作成
+# 1. Create new directories
 mkdir -p .claude/mcp-integration
 mkdir -p .claude/validation
 
-# 2. ファイルコピー（gitログ保持）
+# 2. File copy (preserving git history)
 git mv .mcp/* .claude/mcp-integration/
 git mv tools/turn_guard.sh .claude/validation/turn-guard.sh
 git mv tools/validate-stp-markers.sh .claude/validation/validate-stp.sh
 ```
 
-#### Phase 2: 参照更新
-1. **GitHub Workflows** (5ファイル)
+#### Phase 2: Update References
+1. **GitHub Workflows** (5 files)
    ```yaml
-   # 変更前
+   # Before
    - run: ./tools/validate-stp-markers.sh
-   # 変更後
+   # After
    - run: ./.claude/validation/validate-stp.sh
    ```
 
-2. **ドキュメント** (40+ファイル)
-   - 一括置換スクリプトで対応
+2. **Documentation** (40+ files)
+   - Handle with bulk replacement script
 
-3. **ブリッジパターン** (7ファイル)
+3. **Bridge Pattern** (7 files)
    ```bash
-   # 変更前
+   # Before
    if [ -f ".mcp/bridge.ts" ]
-   # 変更後
+   # After
    if [ -f ".claude/mcp-integration/bridge.ts" ]
    ```
 
-#### Phase 3: 検証
-- すべてのGitHub Actionsが成功
-- テストがすべてパス
-- ドキュメントのリンクが有効
+#### Phase 3: Validation
+- All GitHub Actions succeed
+- All tests pass
+- Documentation links are valid
 
-#### Phase 4: クリーンアップ
-- 古いディレクトリを削除
-- .gitignoreを更新
+#### Phase 4: Cleanup
+- Delete old directories
+- Update .gitignore
 
-### リスクと対策
+### Risks and Mitigations
 
-| リスク | 影響度 | 対策 |
-|--------|--------|------|
-| 外部参照の破損 | 中 | 事前に全参照を検索・リスト化 |
-| CI/CDの失敗 | 高 | ブランチでテスト後にマージ |
-| 開発者の混乱 | 低 | 明確な移行ガイドを提供 |
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| External reference breakage | Medium | Search and list all references beforehand |
+| CI/CD failure | High | Test in branch before merging |
+| Developer confusion | Low | Provide clear migration guide |
 
-### 代替案との比較
+### Alternative Comparison
 
-| 案 | 利点 | 欠点 |
-|----|------|------|
-| 現状維持 | 変更不要 | 構造が不明確なまま |
-| すべて.claude/へ | 完全統合 | 汎用ツールも巻き込む |
-| **目的別再編成** | **明確で発見しやすい** | **移行作業が必要** |
+| Option | Advantages | Disadvantages |
+|--------|------------|---------------|
+| Keep current | No changes needed | Structure remains unclear |
+| All to .claude/ | Complete integration | Includes general tools |
+| **Purpose-based reorganization** | **Clear and discoverable** | **Migration work required** |
 
-### 実装判断
+### Implementation Decision
 
-移行のコストは中程度だが、長期的な保守性とClaude統合の明確化を考慮すると、**目的別再編成を推奨**します。
+While migration cost is moderate, considering long-term maintainability and Claude integration clarity, **purpose-based reorganization is recommended**.
 
-特に：
-- MCPが「Model Context Protocol」の一般実装でなく「Claude MCP統合」であることが明確になる
-- 新規開発者がClaude関連機能を探しやすくなる
-- 将来的な拡張（新しい検証ツールなど）の配置が明確
+Specifically:
+- Clarifies that MCP is "Claude MCP integration" not general "Model Context Protocol" implementation
+- Makes it easier for new developers to find Claude-related features
+- Clear placement for future extensions (new validation tools, etc.)

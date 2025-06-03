@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd .mcp
+          cd .claude/mcp-integration
           pnpm install
 
       - name: Run MCP tests

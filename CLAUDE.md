@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) and Claude Code Acti
 1. **.claude/config/consolidated-safety-rules.json** - Unified safety rules and validations
 2. **.claude/config/permissions.md** - Operation permission levels and confirmation requirements
 3. **.claude/docs/workflows/OPERATIONS.md** - Detailed operation procedures and templates
-4. **.mcp/operation-guard.ts** - Runtime operation validation
+4. **.claude/mcp-integration/operation-guard.ts** - Runtime operation validation
 5. **.claude/docs/standards/WORKSPACE-HIERARCHY.md** - Workspace organization standards
 
 **ALL DESTRUCTIVE OPERATIONS (LEVEL 2+) REQUIRE EXPLICIT USER APPROVAL**
@@ -163,11 +163,11 @@ Configure Claude Desktop with:
 
 The following shell scripts are available:
 
-- `tools/turn_guard.sh` → Validates Claude output format with ~10 guards implemented
+- `.claude/validation/turn-guard.sh` → Validates Claude output format with ~10 guards implemented
+- `.claude/validation/validate-stp.sh` → Validates STP compliance
 - `tools/fetch_doc.sh` → Downloads documents to cache directory
 - `tools/list_guards.sh` → Lists implemented validation guards
 - `tools/gen_wbs.sh` → Generates work breakdown structure
-- `tools/validate-stp-markers.sh` → Validates STP compliance
 
 ### 7-Step Cycle Automation Scripts
 
@@ -188,7 +188,7 @@ The following shell scripts are available:
   - Configuration in `.claude/config/`
   - Workspace validation scripts in `.claude/scripts/`
   - Safety rules and permissions defined
-- ✅ **MCP Integration**: Available in `.mcp/` directory
+- ✅ **MCP Integration**: Available in `.claude/mcp-integration/` directory
   - OperationGuard for safety validation
   - MCP server with tool definitions
   - TypeScript-based implementation

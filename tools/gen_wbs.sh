@@ -3,8 +3,8 @@
 set -e
 
 # Try MCP bridge first if available
-if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
-    if npx tsx .mcp/bridge.ts generate_wbs "$@" 2>/dev/null; then
+if [ -f ".claude/mcp-integration/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+    if npx tsx .claude/mcp-integration/bridge.ts generate_wbs "$@" 2>/dev/null; then
         exit $?
     fi
 fi

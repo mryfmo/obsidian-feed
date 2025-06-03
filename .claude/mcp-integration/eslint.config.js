@@ -50,7 +50,7 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-require-imports': 'off',
-      'no-console': 'off', // CLIツールなのでconsoleは許可
+      'no-console': 'off', // Console allowed for CLI tools
       'no-debugger': 'error',
       'no-fallthrough': ['error', { commentPattern: 'break[\\s\\w]*omitted' }],
       'no-case-declarations': 'off',

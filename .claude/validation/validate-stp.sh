@@ -5,9 +5,9 @@
 set -euo pipefail
 
 # Check for MCP bridge availability
-if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
+if [ -f ".claude/mcp-integration/bridge.ts" ] && command -v npx >/dev/null 2>&1; then
     # Try to use MCP bridge for enhanced validation
-    if npx tsx .mcp/bridge.ts validate_stp "$@" 2>/dev/null; then
+    if npx tsx .claude/mcp-integration/bridge.ts validate_stp "$@" 2>/dev/null; then
         exit $?
     fi
     # Fall back to shell implementation if MCP fails

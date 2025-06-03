@@ -6,12 +6,12 @@
 set -euo pipefail
 
 # Check if MCP integration is available
-if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1 && command -v tsx >/dev/null 2>&1; then
+if [ -f ".claude/mcp-integration/bridge.ts" ] && command -v npx >/dev/null 2>&1 && command -v tsx >/dev/null 2>&1; then
   # Debug mode for MCP integration
   if [[ "${DEBUG_MCP:-}" == "true" ]]; then
     echo "[DEBUG] MCP integration available, attempting to use it..." >&2
-    echo "[DEBUG] Running: npx tsx .mcp/bridge.ts turn_guard $*" >&2
-    if npx tsx .mcp/bridge.ts turn_guard "$@"; then
+    echo "[DEBUG] Running: npx tsx .claude/mcp-integration/bridge.ts turn_guard $*" >&2
+    if npx tsx .claude/mcp-integration/bridge.ts turn_guard "$@"; then
       echo "[DEBUG] MCP integration successful" >&2
       exit $?
     else
@@ -21,7 +21,7 @@ if [ -f ".mcp/bridge.ts" ] && command -v npx >/dev/null 2>&1 && command -v tsx >
     fi
   else
     # Silent mode (current behavior)
-    if npx tsx .mcp/bridge.ts turn_guard "$@" 2>/dev/null; then
+    if npx tsx .claude/mcp-integration/bridge.ts turn_guard "$@" 2>/dev/null; then
       exit $?
     fi
   fi

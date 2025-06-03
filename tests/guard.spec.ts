@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
  */
 function run(file: string): number {
   try {
-    execSync(`bash tools/turn_guard.sh ${file}`, { stdio: 'pipe' });
+    execSync(`bash .claude/validation/turn-guard.sh ${file}`, { stdio: 'pipe' });
     return 0;
   } catch (error: unknown) {
     // Properly handle exec errors with type safety
