@@ -18,7 +18,7 @@ describe('Shell Script Compatibility', () => {
   });
 
   describe('turn_guard.sh', () => {
-    const turnGuardPath = path.resolve(__dirname, '../../tools/turn_guard.sh');
+    const turnGuardPath = path.resolve(__dirname, '../../validation/turn-guard.sh');
 
     it('should validate a valid turn file', () => {
       const turnFile = path.join(tempDir, 'valid-turn.md');
@@ -150,7 +150,7 @@ Testing the MCP bridge
   });
 
   describe('fetch_doc.sh', () => {
-    const fetchDocPath = path.resolve(__dirname, '../../tools/fetch_doc.sh');
+    const fetchDocPath = path.resolve(__dirname, '../../validation/fetch-doc.sh');
 
     it('should fetch a local file', () => {
       const sourceFile = path.join(tempDir, 'source.txt');
@@ -238,7 +238,7 @@ Testing the MCP bridge
         fs.writeFileSync(turnFile, test.content);
 
         try {
-          execSync(`bash ${path.resolve(__dirname, '../../tools/turn_guard.sh')} ${turnFile}`, {
+          execSync(`bash ${path.resolve(__dirname, '../../validation/turn-guard.sh')} ${turnFile}`, {
             encoding: 'utf8',
           });
           expect.fail(`${test.description} should have failed`);
