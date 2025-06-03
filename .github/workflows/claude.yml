@@ -120,17 +120,17 @@ jobs:
           cat > .github/claude/tools.json << EOF
           {
             "shell_scripts": {
-              "turn_guard": "tools/turn_guard.sh - Validates Claude output format and guards",
-              "fetch_doc": "tools/fetch_doc.sh - Downloads documents (with MCP fallback)",
-              "list_guards": "tools/list_guards.sh - Lists all validation guards",
-              "gen_wbs": "tools/gen_wbs.py - Generates work breakdown structure",
-              "validate_stp": "tools/validate-stp-markers.sh - Validates STP compliance"
+              "turn_guard": ".claude/validation/turn-guard.sh - Validates Claude output format and guards",
+              "fetch_doc": ".claude/validation/fetch-doc.sh - Downloads documents (with MCP fallback)",
+              "list_guards": ".claude/validation/list-guards.sh - Lists all validation guards",
+              "gen_wbs": ".claude/validation/gen-wbs.py - Generates work breakdown structure",
+              "validate_stp": ".claude/validation/validate-stp-markers.sh - Validates STP compliance"
             },
             "mcp_integration": {
-              "bridge": ".mcp/bridge.ts - Bridge between shell scripts and MCP",
-              "validator": ".mcp/validator.ts - 14 guards implemented",
-              "fetcher": ".mcp/fetcher.ts - Enhanced document fetching with Context7",
-              "workflow": ".mcp/workflow.ts - 7-phase workflow management"
+              "bridge": ".claude/mcp-integration/bridge.ts - Bridge between shell scripts and MCP",
+              "validator": ".claude/mcp-integration/validator.ts - 14 guards implemented",
+              "fetcher": ".claude/mcp-integration/fetcher.ts - Enhanced document fetching with Context7",
+              "workflow": ".claude/mcp-integration/workflow.ts - 7-phase workflow management"
             },
             "mode": "${{ env.mode }}",
             "capabilities": {
@@ -174,7 +174,7 @@ jobs:
           # Get phase-specific constraints
           case $PHASE in
             FETCH)
-              echo "phase_constraints=Network access allowed via tools/fetch_doc.sh or MCP fetch server" >> $GITHUB_OUTPUT
+              echo "phase_constraints=Network access allowed via .claude/validation/fetch-doc.sh or MCP fetch server" >> $GITHUB_OUTPUT
               ;;
             BUILD)
               echo "phase_constraints=Max 1000 LOC, 10 files per patch. Use MCP for validation." >> $GITHUB_OUTPUT
@@ -254,10 +254,10 @@ jobs:
               cat >> instructions.md << 'EOF'
           ### Shell-Only Mode
           Use traditional shell scripts exclusively:
-          - `tools/turn_guard.sh` for validation
-          - `tools/fetch_doc.sh` for document fetching
-          - `tools/list_guards.sh` to see all guards
-          - `tools/gen_wbs.py` for work breakdown
+          - `.claude/validation/turn-guard.sh` for validation
+          - `.claude/validation/fetch-doc.sh` for document fetching
+          - `.claude/validation/list-guards.sh` to see all guards
+          - `.claude/validation/gen-wbs.py` for work breakdown
           - No MCP servers available
           EOF
               ;;
@@ -278,8 +278,8 @@ jobs:
           ### Hybrid Mode (True Integration)
           Leverage both shell scripts and MCP servers:
           - Shell scripts have MCP fallback via `.mcp/bridge.ts`
-          - Use `tools/turn_guard.sh` - it will use MCP if available
-          - Use `tools/fetch_doc.sh` - it will use Context7 if available
+          - Use `.claude/validation/turn-guard.sh` - it will use MCP if available
+          - Use `.claude/validation/fetch-doc.sh` - it will use Context7 if available
           - Direct MCP usage for advanced features
           - Best of both worlds approach
 
@@ -316,7 +316,7 @@ jobs:
           ## Validation
           All outputs must pass validation. In hybrid/shell mode, use:
           ```bash
-          tools/turn_guard.sh output.md
+          .claude/validation/turn-guard.sh output.md
           ```
 
           In MCP mode, validation is automatic via the integration layer.
@@ -386,7 +386,7 @@ jobs:
           npm install -g tsx
 
           # Install MCP dependencies
-          cd .mcp && npm install
+          cd .claude/mcp-integration && npm install
 
           # Verify MCP is available
           npx tsx bridge.ts --version || echo "MCP bridge ready"
@@ -401,14 +401,14 @@ jobs:
 
           # Always try MCP first (it has all 25+ guards)
           if [ -f "claude-output.md" ]; then
-            chmod +x tools/turn_guard.sh
+            chmod +x .claude/validation/turn-guard.sh
             
             # Try MCP validation first
-            if command -v tsx >/dev/null 2>&1 && [ -f ".mcp/bridge.ts" ]; then
+            if command -v tsx >/dev/null 2>&1 && [ -f ".claude/mcp-integration/bridge.ts" ]; then
               echo "Using MCP validation (25+ guards)"
-              npx tsx .mcp/bridge.ts turn_guard claude-output.md || {
+              npx tsx .claude/mcp-integration/bridge.ts turn_guard claude-output.md || {
                 echo "::warning::MCP validation failed, trying shell fallback"
-                tools/turn_guard.sh claude-output.md || {
+                .claude/validation/turn-guard.sh claude-output.md || {
                   echo "::error::Claude output failed validation"
                   exit 1
                 }
@@ -416,7 +416,7 @@ jobs:
             else
               # Fallback to shell validation
               echo "Using shell validation (10 guards)"
-              tools/turn_guard.sh claude-output.md || {
+              .claude/validation/turn-guard.sh claude-output.md || {
                 echo "::error::Claude output failed validation"
                 exit 1
               }

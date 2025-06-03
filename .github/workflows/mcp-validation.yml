@@ -54,7 +54,7 @@ jobs:
       - name: Validate shell script compatibility
         run: |
           # Ensure all shell scripts work on Ubuntu
-          ./tools/list_guards.sh
+          ./.claude/validation/list-guards.sh
           echo "FETCH: Test" > test-turn.md
           echo "<think>This is a test with enough words to pass validation</think>" >> test-turn.md
           echo "<act>Test action</act>" >> test-turn.md

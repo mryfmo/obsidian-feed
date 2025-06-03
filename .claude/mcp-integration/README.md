@@ -57,36 +57,36 @@ This implementation follows the **integration** approach:
 
 ```bash
 # Validate a turn file
-./tools/turn_guard.sh turn.md
+./.claude/validation/turn-guard.sh turn.md
 # Or use MCP directly
-npx tsx .mcp/bridge.ts turn_guard turn.md
+npx tsx .claude/mcp-integration/bridge.ts turn_guard turn.md
 
 # Fetch documentation
-./tools/fetch_doc.sh https://api.example.com/docs
-./tools/fetch_doc.sh react  # Fetches from Context7
+./.claude/validation/fetch-doc.sh https://api.example.com/docs
+./.claude/validation/fetch-doc.sh react  # Fetches from Context7
 
 # List all guards
-./tools/list_guards.sh
+./.claude/validation/list-guards.sh
 ```
 
 ### Workflow Commands
 
 ```bash
 # Initialize workflow for a task
-npx tsx .mcp/bridge.ts workflow init TASK-001
+npx tsx .claude/mcp-integration/bridge.ts workflow init TASK-001
 
 # Check and auto-transition if ready
-npx tsx .mcp/bridge.ts workflow auto check TASK-001
+npx tsx .claude/mcp-integration/bridge.ts workflow auto check TASK-001
 
 # Generate visualization
-npx tsx .mcp/bridge.ts workflow auto visualize TASK-001
+npx tsx .claude/mcp-integration/bridge.ts workflow auto visualize TASK-001
 ```
 
 ### Interactive CLI
 
 ```bash
 # Launch interactive mode
-npx tsx .mcp/bridge.ts cli
+npx tsx .claude/mcp-integration/bridge.ts cli
 ```
 
 In CLI mode:

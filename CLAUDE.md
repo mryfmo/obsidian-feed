@@ -165,9 +165,9 @@ The following shell scripts are available:
 
 - `.claude/validation/turn-guard.sh` → Validates Claude output format with ~10 guards implemented
 - `.claude/validation/validate-stp.sh` → Validates STP compliance
-- `tools/fetch_doc.sh` → Downloads documents to cache directory
-- `tools/list_guards.sh` → Lists implemented validation guards
-- `tools/gen_wbs.sh` → Generates work breakdown structure
+- `.claude/validation/fetch-doc.sh` → Downloads documents to cache directory
+- `.claude/validation/list-guards.sh` → Lists implemented validation guards
+- `.claude/validation/gen-wbs.sh` → Generates work breakdown structure
 
 ### 7-Step Cycle Automation Scripts
 
@@ -192,7 +192,7 @@ The following shell scripts are available:
   - OperationGuard for safety validation
   - MCP server with tool definitions
   - TypeScript-based implementation
-- ✅ Shell-based guards in `tools/` directory
+- ✅ Shell-based guards in `.claude/validation/` directory
 - ✅ GitHub Actions workflows configured
 - ⚠️ Some advanced guards still in development
 
@@ -280,7 +280,7 @@ When working with Claude Code Action:
 1. Follow the STP (Standard Task Protocol) defined in `docs/agents/01_task-lifecycle.md`
 2. Use phase labels (FETCH, INV, ANA, PLAN, BUILD, VERIF, REL) in PR titles
 3. Update task state transitions in commit messages or PR comments
-4. Ensure all guardrails pass (`tools/turn_guard.sh`)
+4. Ensure all guardrails pass (`.claude/validation/turn-guard.sh`)
 
 ### Phase-Based Development Process
 
