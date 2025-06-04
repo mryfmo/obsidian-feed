@@ -11,15 +11,38 @@ See LICENSE-MIT for details.
 
 The development process follows 7 mandatory phases:
 
-1. **FETCH** - Document/resource retrieval
-2. **INV** - Investigation and reproduction
-3. **ANA** - Root cause analysis
-4. **PLAN** - RFC creation and planning
-5. **BUILD** - Implementation
-6. **VERIF** - Testing and validation
-7. **REL** - Release preparation
+1. **FETCH** - Requirements gathering, document/resource retrieval
+2. **INV** - Investigation, reproduction, and requirements validation
+3. **ANA** - Root cause analysis and initial architecture design
+4. **PLAN** - RFC creation, detailed design, and test specification
+5. **BUILD** - Implementation with API compliance and integrated documentation
+6. **VERIF** - Testing, validation, and quality assurance
+7. **REL** - Release preparation with complete documentation
 
 For workspace organization, see: `.claude/docs/standards/WORKSPACE-HIERARCHY.md`
+
+### Phase Entry Criteria
+
+| Phase | Can Start From | Required Inputs | Skip Allowed |
+|-------|----------------|-----------------|---------------|
+| FETCH | New work item | Issue/requirement description | No |
+| INV | FETCH or New bug | Requirements (if from FETCH) or Bug report | No |
+| ANA | INV only | Validated requirements/reproduction | No |
+| PLAN | ANA only | Analysis results and architecture | No |
+| BUILD | PLAN only | Approved RFC and design specs | Yes (trivial) |
+| VERIF | BUILD only | Implemented code and tests | No |
+| REL | VERIF only | All quality gates passed | No |
+
+### Phase Output-to-Input Mapping
+
+| From Phase | Outputs | To Phase | Required Inputs |
+|------------|---------|----------|------------------|
+| FETCH | requirements.md, acceptance-criteria.md | INV | Requirements to validate |
+| INV | validation-report.md, feasibility-report.md | ANA | Validated requirements |
+| ANA | architecture-design.md, api-impact.md | PLAN | Architecture for detailed design |
+| PLAN | detailed-design.md, test-specification.md | BUILD | Design to implement |
+| BUILD | Source code, unit tests, api-compliance.md | VERIF | Code to verify |
+| VERIF | test-report.md, coverage-report.md, verif-complete.yml | REL | Verification certificate |
 
 ## Task-Lifecycle Process
 
@@ -39,12 +62,12 @@ forces explicit _state transitions_ so that omissions are caught early.
 
 | State                      | Required Artefacts                                                                                                                                                                    | Exit Gate                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **FETCH** (Resource Gathering) | • Downloaded docs, specs, references • Cached resources in workspace • Summary of gathered materials | All necessary resources available locally |
-| **INV** (Investigation) | • Reproduction steps / failing test • Logs, stack trace, screenshots | Maintainer (or reporter) acknowledges reproduction is valid |
-| **ANA** (Analysis) | • Root-cause description (1-2 para) • Impacted files / modules list | Reviewer agrees the analysis matches evidence |
-| **PLAN** | • RFC-style note (`docs/rfcs/NNN-*.md`) containing: – Scope & out-of-scope – Risk list & mitigations – Test strategy (unit / int / e2e) – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval |
-| **BUILD** | • Code, docs, migration scripts, test fixtures | CI ‑ lint + type-check + tests green |
-| **VERIF** | • Test results attached • Manual QA notes (if UI) • CHANGELOG entry • **CLAUDE.md Development Completion Checklist** | Reviewer & QA sign-off + All checklist items complete |
+| **FETCH** (Requirements & Resources) | • requirements.md - Numbered requirements with priorities<br>• acceptance-criteria.md - Testable success conditions<br>• stakeholder-approval.md - Signed approvals<br>• resource-list.md - External resources needed<br>• .cache/* - Downloaded resources | Requirements approved by stakeholders<br>All acceptance criteria are testable<br>Resources cached locally |
+| **INV** (Investigation & Validation) | • Reproduction steps / failing test<br>• Requirements validation report<br>• Feasibility assessment<br>• Logs, stack trace, screenshots | Issue reproduced and requirements validated<br>Technical feasibility confirmed |
+| **ANA** (Analysis & Architecture) | • Root-cause description (1-2 para)<br>• Impacted files / modules list<br>• High-level architecture design<br>• API impact analysis | Analysis complete and architecture approved<br>API compatibility assessed |
+| **PLAN** (Planning & Design) | • RFC-style note (`docs/rfcs/NNN-*.md`)<br>• Detailed design specification<br>• API compliance checklist<br>• Test specification with test cases<br>• Risk list & mitigations | Design reviewed and approved<br>Test cases defined<br>API compliance plan in place |
+| **BUILD** (Implementation) | • Code implementation with unit tests<br>• API compliance verification<br>• Integrated documentation (API docs, JSDoc)<br>• Continuous quality checks<br>• build-status.yml (incremental) | TypeScript: ZERO errors (checked per file)<br>ESLint: ZERO warnings (checked per file)<br>Tests: 100% pass rate (run incrementally)<br>API compliance verified (per commit)<br>No regression from previous builds |
+| **VERIF** (Verification & QA) | • test-report.md - Full test execution results<br>• coverage-report.md - Coverage ≥90% for modified files<br>• api-compliance-report.md - API compatibility verification<br>• performance-report.md - Performance benchmarks<br>• qa-checklist.md - Manual QA results<br>• CHANGELOG.md - Updated with changes<br>• verif-complete.yml - Phase completion certificate | All tests pass (100%)<br>Coverage ≥90% for modified files<br>API compliance verified<br>Performance acceptable<br>QA sign-off complete<br>CLAUDE.md checklist complete |
 | **REL** (Release) | • PR created/updated • Release notes • Version bump (if applicable) | PR merged or release published |
 
 After **REL** the task is considered _complete_ with all work merged and released.
@@ -69,9 +92,61 @@ PR yet), the very same artefacts **must still be committed**:
 > 3. `apply_patch` → mark `[x] INV` in the RFC checklist
 > 4. Return explanation → next state = **ANA**
 
-> **Skip policy** Trivial chores (typo fixes, comment clarifications, version
-> bumps) may collapse states _INV → BUILD → VERIF_ **only if** the change is
-> < 5 lines and has no runtime effect.
+> **Skip policy** Trivial changes may skip phases as follows:
+> - **Typo fixes** (< 5 lines, no runtime effect): Can go directly to BUILD → VERIF → REL
+> - **Comment updates** (documentation only): Can skip to BUILD → VERIF → REL
+> - **Version bumps** (no code changes): Can skip to REL
+> - All skips must be documented in commit message with `[skip:<phases>]` tag
+
+## GitHub Integration Strategy
+
+### Issue Management
+
+| Phase | Issue Updates | Labels |
+|-------|--------------|--------|
+| FETCH | Create/update issue with requirements | `phase:fetch`, `status:requirements` |
+| INV | Add investigation results | `phase:inv`, `status:investigating` |
+| ANA | Add analysis findings | `phase:ana`, `status:analyzing` |
+| PLAN | Link to RFC PR | `phase:plan`, `status:planning` |
+| BUILD | Link to implementation PR | `phase:build`, `status:implementing` |
+| VERIF | Add test results | `phase:verif`, `status:testing` |
+| REL | Close with release link | `phase:rel`, `status:released` |
+
+### Pull Request Strategy
+
+| Phase | PR Action | Branch Naming |
+|-------|-----------|---------------|
+| PLAN | Create draft PR with RFC | `plan/<issue-id>-<description>` |
+| BUILD | Convert to ready PR | `build/<issue-id>-<description>` |
+| VERIF | Request reviews | Same branch |
+| REL | Merge to main | Same branch |
+
+### Commit Strategy
+
+Each phase has specific commit requirements:
+
+```bash
+# FETCH phase commits
+git commit -m "feat(fetch): Gather requirements for <feature>
+
+- Added requirements.md with user stories
+- Added acceptance-criteria.md with test conditions
+- Added stakeholder-approval.md with sign-offs
+
+Phase: FETCH
+Deliverables: requirements, acceptance criteria, approvals"
+
+# BUILD phase commits (include API compliance)
+git commit -m "feat(build): Implement <feature>
+
+- Added <component> with <functionality>
+- Added unit tests with 95% coverage
+- Verified API compliance (no breaking changes)
+
+Phase: BUILD
+API-Compliance: PASS
+Test-Coverage: 95%"
+```
 
 ## How Agents Mark Progress
 
@@ -170,44 +245,50 @@ Detailed tasks are listed in §2.
 **Step** shows actual command examples with “`$`”.
 **Exit Gate** must list Guard ID (see §3).
 
-### FETCH
+### FETCH (Requirements & Resources)
 
-| Step | Task                | Purpose             | Procedure                   | Input           | Output      | Exit Gate                    |
-| ---- | ------------------- | ------------------- | --------------------------- | --------------- | ----------- | ---------------------------- |
-| F-1  | Retrieval plan      | List required URLs  | Markdown table in `<think>` | Assignment text | doc-list.md | ―                            |
-| F-2  | Retrieval execution | File DL & cache     | `$ .claude/validation/fetch-doc.sh URL`  | doc-list.md     | .cache/...  | G-DUP                        |
-| F-3  | Commit              | Add retrieved items | `apply_patch`               | .cache          | Git tree    | diff is retrieved items only |
+| Step | Task                | Purpose                      | Procedure                                | Input           | Output                   | Exit Gate                           |
+| ---- | ------------------- | ---------------------------- | ---------------------------------------- | --------------- | ------------------------ | ----------------------------------- |
+| F-1  | Requirements gather | Elicit and document requirements | Interview stakeholders, analyze needs | Issue/request   | requirements.md          | Requirements documented             |
+| F-2  | Acceptance criteria | Define testable criteria     | Create measurable success conditions     | requirements.md | acceptance-criteria.md   | Criteria are testable               |
+| F-3  | Resource planning   | List required docs/URLs      | Identify external resources needed       | Requirements    | resource-list.md         | Resources identified                |
+| F-4  | Resource retrieval  | Download external resources  | `$ .claude/validation/fetch-doc.sh URL` | resource-list   | .cache/...               | G-DUP (no duplicates)               |
+| F-5  | Stakeholder approval| Get requirements sign-off    | Review with stakeholders                 | All artifacts   | stakeholder-approval.md  | Stakeholders approve                |
+| F-6  | Commit artifacts    | Add all artifacts to git     | `apply_patch`                            | All outputs     | Git tree                 | All requirements artifacts committed |
 
-### INV
+### INV (Investigation & Validation)
 
-| Step | Task         | Purpose           | Procedure     | Output   | Exit Gate |
-| ---- | ------------ | ----------------- | ------------- | -------- | --------- |
-| I-1  | Reproduce    | Reproduce failure | `$ pnpm test` | fail-log | exit≠0    |
-| I-2  | Minimal test | Create Red test   | `apply_patch` | spec     | spec Red  |
+| Step | Task                    | Purpose                      | Procedure                               | Input           | Output                    | Exit Gate                   |
+| ---- | ----------------------- | ---------------------------- | --------------------------------------- | --------------- | ------------------------- | --------------------------- |
+| I-1  | Requirements validation | Validate requirements feasibility | Technical assessment of requirements | requirements.md | validation-report.md      | Requirements are feasible   |
+| I-2  | Issue reproduction      | Reproduce reported issue     | `$ pnpm test` or manual steps           | Bug report      | reproduction-log.md       | Issue reproduced            |
+| I-3  | Create failing test     | Document issue as test       | `apply_patch` to create test file       | Repro steps     | test.spec.ts              | Test fails as expected      |
+| I-4  | Impact assessment       | Analyze affected components  | Code analysis and dependency check      | Issue details   | impact-analysis.md        | Impact scope defined        |
+| I-5  | Feasibility check       | Confirm technical approach   | Prototype or proof of concept           | Requirements    | feasibility-report.md     | Approach validated          |
 
 ### Complete Task Definitions
 
-The remaining tasks follow the same tabular format. All 28 tasks are defined across the 7 phases:
+All tasks are defined in detail for each phase:
 
-- FETCH: 3 tasks (F-1 to F-3)
-- INV: 3 tasks (I-1 to I-3)
-- ANA: 4 tasks (A-1 to A-4)
-- PLAN: 4 tasks (P-1 to P-4)
-- BUILD: 6 tasks (B-1 to B-6)
-- VERIF: 5 tasks (V-1 to V-5)
-- REL: 3 tasks (R-1 to R-3)
-
-**For the complete task definitions, see: [`02_claude-code-complete-tasks.md`](./02_claude-code-complete-tasks.md)**
+- FETCH: 6 tasks (F-1 to F-6) - Requirements engineering and resource gathering
+- INV: 5 tasks (I-1 to I-5) - Investigation and validation
+- ANA: 5 tasks - Analysis and architecture design
+- PLAN: 6 tasks - Planning, detailed design, and test specification
+- BUILD: 8 tasks - Implementation with API compliance
+- VERIF: 7 tasks - Comprehensive verification including refactoring
+- REL: 4 tasks - Release with complete documentation
 
 **Task Summary:**
 
 | Phase     | Tasks                                                                                | Key Deliverables                             |
 | --------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
-| **ANA**   | Causal tree, Impact scope, Risk assessment, Commit analysis                          | cause-tree.md, impact.md, risks.md           |
-| **PLAN**  | RFC draft, Test strategy, Patch design, Review checkpoint                            | rfc-draft.md, test-plan.md, patch-plan.md    |
-| **BUILD** | Code modification, Unit tests, Lint & format, Type check, Integration, Documentation | src/ diff, test/ diff, docs/ diff            |
-| **VERIF** | Coverage check, Manual QA, Performance, Security scan, Changelog                     | coverage.html, qa-results.md, CHANGELOG diff |
-| **REL**   | Version bump, Release notes, Tag & publish                                           | package.json, RELEASE.md, Git tag            |
+| **FETCH** | Requirements gathering, acceptance criteria, resource retrieval, stakeholder approval | requirements.md, acceptance-criteria.md, approval-record.md |
+| **INV**   | Requirements validation, issue reproduction, impact assessment, feasibility check     | validation-report.md, reproduction-log.md, feasibility-report.md |
+| **ANA**   | Root cause analysis, architecture design, API impact analysis, risk assessment        | cause-tree.md, architecture-design.md, api-impact.md, risks.md |
+| **PLAN**  | RFC draft, detailed design, API specification, test specification, review checkpoint  | rfc-draft.md, detailed-design.md, api-spec.md, test-spec.md |
+| **BUILD** | Implementation, unit tests, API compliance verification, documentation, integration   | src/ code, tests/, api-compliance-report.md, integrated docs |
+| **VERIF** | Full testing, coverage check, API compliance validation, performance, refactoring     | test-report.md, coverage.html, performance-report.md, refactoring-log.md |
+| **REL**   | Documentation finalization, version bump, release notes, deployment                   | Complete docs, package.json, RELEASE.md, Git tag, deployment-report.md |
 
 ---
 
@@ -299,27 +380,39 @@ graph LR
 
 ## Phase Definitions with Explicit Dependencies
 
-### FETCH Phase
+### FETCH Phase (Requirements & Resources)
 
 ```yaml
 phase: FETCH
-purpose: Retrieve external documents and resources
+purpose: Gather requirements and retrieve external resources
 allowed_operations:
+  - stakeholder_interviews
+  - requirements_documentation
   - network_access
   - file_download
   - cache_write
 depends_on: [] # Entry point - no dependencies
 required_artifacts:
-  - doc-list.md
+  - requirements.md
+  - acceptance-criteria.md
+  - stakeholder-approval.md
+  - resource-list.md
   - .cache/* (downloaded files)
 constraints:
+  - Requirements must be testable
+  - Stakeholder approval required
   - URL validation required
   - SHA256 duplicate check (G-DUP)
-  - Malicious URL blocking
   - Max download size: 10MB
 validation:
+  - Requirements completeness check
+  - Acceptance criteria testability
   - .claude/validation/fetch-doc.sh --validate-url
   - .claude/validation/turn-guard.sh (G-DUP check)
+downstream_impact:
+  - Changes invalidate all subsequent phases
+  - Requires re-approval from stakeholders
+  - Must notify all active work items
 ```
 
 ### INV Phase
@@ -691,19 +784,238 @@ jobs:
             "${{ steps.phase.outputs.phase }}"
 ```
 
-## Summary of Improvements
+## Early Quality Gates (Regression Prevention)
 
-1. **Explicit Dependencies**: Each phase now has a `depends_on` field with clear requirements
-2. **Completion Artifacts**: Phases generate JSON artifacts proving completion
-3. **Transition Validation**: New function in turn_guard.sh enforces dependencies
-4. **Security Hardening**: fetch_doc.sh now validates URLs and content
-5. **Flexible Constraints**: BUILD phase allows exceptions with approval
-6. **CI Integration**: Automated phase transition validation in PRs
+### Incremental Validation in BUILD Phase
 
-These improvements ensure:
+To prevent late-stage failures, implement continuous validation:
 
-- No phase can start without required dependencies
-- Security risks in FETCH phase are mitigated
-- BUILD constraints are practical with escape hatches
-- REL phase explicitly requires VERIF completion artifact
-- All transitions are auditable and enforceable
+```bash
+# Pre-commit hook (.git/hooks/pre-commit)
+#!/bin/bash
+# Run for every commit in BUILD phase
+
+# 1. Type check only changed files
+CHANGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep '\.ts$')
+if [ ! -z "$CHANGED_TS" ]; then
+  pnpm tsc --noEmit $CHANGED_TS || exit 1
+fi
+
+# 2. Lint only changed files
+CHANGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ ! -z "$CHANGED_FILES" ]; then
+  pnpm eslint $CHANGED_FILES || exit 1
+fi
+
+# 3. Run affected tests
+pnpm test:affected || exit 1
+
+# 4. Check API compliance
+pnpm api:check || exit 1
+```
+
+### Continuous Integration Checks
+
+Each commit triggers validation:
+
+| Check | When | Failure Action |
+|-------|------|----------------|
+| TypeScript | Every file save | Block commit |
+| ESLint | Every file save | Block commit |
+| Unit tests | Every commit | Block push |
+| API compliance | Every commit | Create warning |
+| Integration tests | Every push | Block PR merge |
+
+## Refactoring Activities
+
+Refactoring is integrated into the VERIF phase to ensure code quality improvements:
+
+### When to Refactor
+- After all tests pass in VERIF phase
+- When code complexity exceeds thresholds
+- When performance benchmarks are not met
+- Before finalizing documentation
+
+### Refactoring Checklist
+```markdown
+- [ ] Reduce cyclomatic complexity below 10
+- [ ] Eliminate code duplication (DRY principle)
+- [ ] Improve naming clarity
+- [ ] Extract long methods (max 20 lines)
+- [ ] Update tests to match refactored code
+- [ ] Verify no regression in functionality
+- [ ] Document refactoring decisions in refactoring-log.md
+```
+
+## Documentation Update Timeline
+
+Documentation must be updated at specific points in each phase:
+
+| Phase | Documentation Requirements | When to Update |
+|-------|---------------------------|----------------|
+| **FETCH** | Requirements, acceptance criteria | As requirements are gathered |
+| **INV** | Investigation findings, validation results | During investigation |
+| **ANA** | Architecture diagrams, API impact | After analysis complete |
+| **PLAN** | RFC, detailed design, API specs, test specs | During planning |
+| **BUILD** | API docs (JSDoc), inline comments | While coding |
+| **VERIF** | Test results, coverage reports, CHANGELOG | After tests pass |
+| **REL** | README updates, migration guides, release notes | Before release |
+
+### Documentation Quality Gates
+- No phase completes without required documentation
+- All public APIs must have JSDoc comments
+- CHANGELOG.md must be updated for any user-facing changes
+- README.md must reflect new features or breaking changes
+
+## API Compliance Verification
+
+API compliance is verified at multiple points:
+
+### Design Phase (PLAN)
+- Define API contracts in api-spec.md
+- Review for backward compatibility
+- Document breaking changes
+
+### Implementation Phase (BUILD)
+- Implement according to API specification
+- Run API compliance checks:
+  ```bash
+  pnpm run api:check  # Verify API signatures
+  pnpm run api:diff   # Check for breaking changes
+  ```
+
+### Verification Phase (VERIF)
+- Validate API compliance report
+- Test backward compatibility
+- Update API documentation
+
+### API Compliance Checklist
+```markdown
+- [ ] All public APIs documented
+- [ ] No unintended breaking changes
+- [ ] Deprecation warnings for changes
+- [ ] Migration guide for breaking changes
+- [ ] API versioning updated if needed
+```
+
+## Change Management Process
+
+### Upstream Change Handling
+
+When changes occur in earlier phases, follow this process:
+
+| Change in Phase | Impact | Required Actions |
+|-----------------|--------|------------------|
+| FETCH (Requirements) | Invalidates all work | 1. Stop current work<br>2. Create change request<br>3. Get stakeholder approval<br>4. Reset to FETCH |
+| INV (Validation) | May invalidate ANA-REL | 1. Review impact on analysis<br>2. Update feasibility report<br>3. Continue or reset to INV |
+| ANA (Architecture) | Invalidates PLAN-REL | 1. Review design compatibility<br>2. Update architecture docs<br>3. Reset to PLAN |
+| PLAN (Design) | Invalidates BUILD-REL | 1. Assess implementation impact<br>2. Update design docs<br>3. Reset to BUILD |
+
+### Change Request Template
+
+```markdown
+## Change Request CR-XXX
+
+**Current Phase**: [PHASE]
+**Change Type**: [Requirements/Design/Architecture/Implementation]
+**Impact Level**: [High/Medium/Low]
+
+### Description
+[What is changing and why]
+
+### Impact Analysis
+- Affected phases: [List phases]
+- Affected deliverables: [List documents]
+- Effort impact: [Hours/Days]
+
+### Approval
+- [ ] Stakeholder approval (if requirements change)
+- [ ] Technical lead approval
+- [ ] PM approval
+```
+
+### API Breaking Change Process
+
+If API changes are required:
+
+1. **Detection** (BUILD/VERIF phase):
+   ```bash
+   pnpm run api:check  # Detects breaking changes
+   ```
+
+2. **Decision Point**:
+   - If minor: Add deprecation warnings, continue
+   - If major: Stop, create change request, go back to PLAN
+
+3. **Migration Path**:
+   - Create migration-guide.md
+   - Update api-spec.md with new version
+   - Add deprecation timeline
+
+## Phase Completion Certificates
+
+Each phase must generate a completion certificate before transition:
+
+```yaml
+# .phase-status.yml format
+phase: "BUILD"
+status: "completed"
+timestamp: "2024-01-15T10:30:00Z"
+deliverables:
+  - path: "src/feature.ts"
+    checksum: "sha256:abc123..."
+  - path: "tests/feature.spec.ts"
+    checksum: "sha256:def456..."
+validation:
+  typescript: "PASS"
+  eslint: "PASS"
+  tests: "PASS (100%)"
+  coverage: "95%"
+  api_compliance: "PASS"
+next_phase: "VERIF"
+approver: "@username"
+```
+
+## Summary of Integrated Process
+
+This integrated development process includes:
+
+1. **Requirements Engineering**: Formal requirements gathering in FETCH phase
+2. **Requirements Validation**: Technical feasibility in INV phase
+3. **Architecture Design**: High-level design in ANA phase
+4. **Detailed Design & Test Specs**: Comprehensive specifications in PLAN phase
+5. **API Compliance**: Verification throughout BUILD and VERIF phases
+6. **Refactoring**: Code quality improvements in VERIF phase
+7. **Documentation Timeline**: Clear update points for all documentation
+8. **Quality Gates**: Mandatory checks at each phase transition
+9. **Change Management**: Process for handling upstream changes
+10. **Phase Certificates**: Formal completion verification
+
+All improvements maintain backward compatibility with the existing 7-phase model while addressing identified gaps in the development lifecycle.
+
+## Process Validation Cross-References
+
+### Deliverable Consistency Check
+| Deliverable | Created In | Used By | Format |
+|-------------|------------|---------|--------|
+| requirements.md | FETCH (F-1) | INV (I-1) | Markdown with numbered items |
+| acceptance-criteria.md | FETCH (F-2) | INV, VERIF | Markdown with test conditions |
+| stakeholder-approval.md | FETCH (F-5) | All phases | Markdown with signatures |
+| validation-report.md | INV (I-1) | ANA | Markdown with feasibility |
+| architecture-design.md | ANA | PLAN | Markdown with diagrams |
+| api-impact.md | ANA | PLAN, BUILD | Markdown with breaking changes |
+| detailed-design.md | PLAN | BUILD | Markdown with specifications |
+| test-specification.md | PLAN | BUILD, VERIF | Markdown with test cases |
+| api-compliance-report.md | BUILD, VERIF | REL | Markdown with results |
+| verif-complete.yml | VERIF | REL | YAML with validation results |
+| .phase-status.yml | All phases | CI/CD | YAML with phase metadata |
+
+### Process Integrity Verification
+- ✓ All phase outputs map to next phase inputs
+- ✓ Skip policy is consistent with phase dependencies
+- ✓ GitHub integration covers all phases
+- ✓ Change management handles all upstream impacts
+- ✓ Quality gates prevent regression at multiple points
+- ✓ Documentation timeline covers all phases
+- ✓ API compliance is verified continuously
+- ✓ Phase completion is formally certified
