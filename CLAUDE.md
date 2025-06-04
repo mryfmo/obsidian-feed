@@ -395,6 +395,50 @@ If an operation goes wrong:
 4. **Maintain audit trail** - All LEVEL 2+ operations must be logged
 5. **Test rollback plans** - Ensure recovery is possible before proceeding
 
+## 🎯 MANDATORY Development Completion Checklist
+
+**CRITICAL**: The following checklist MUST be completed at the end of EVERY development task before considering the work done:
+
+### 1. Documentation Updates (MANDATORY)
+- [ ] **README.md** - Update if new features, APIs, or usage changes were introduced
+- [ ] **API Documentation** - Update JSDoc/TypeDoc comments for all modified functions/classes
+- [ ] **CHANGELOG.md** - Add entry describing the changes (features, fixes, breaking changes)
+- [ ] **Migration Guide** - Document breaking changes and migration steps if applicable
+- [ ] **Architecture Docs** - Update if architectural changes were made
+
+### 2. Test Coverage (MANDATORY)
+- [ ] **All Tests Pass** - Run `pnpm test` and ensure 100% pass rate
+- [ ] **New Tests Added** - Every new feature/fix MUST have corresponding tests
+- [ ] **Coverage Check** - Run `pnpm test:coverage` and ensure ≥90% coverage for modified files
+- [ ] **E2E Tests** - Run `pnpm e2e` if UI or user-facing features were changed
+- [ ] **Integration Tests** - Ensure external dependencies are properly tested
+
+### 3. Code Quality (MANDATORY)
+- [ ] **Lint Check** - Run `pnpm lint` and fix all errors
+- [ ] **Type Check** - Run `pnpm tsc --noEmit` to ensure no TypeScript errors
+- [ ] **Build Success** - Run `pnpm build` to ensure production build works
+- [ ] **No Console Logs** - Remove all debug console.log statements
+- [ ] **Error Handling** - All edge cases have proper error handling
+
+### 4. Impact Analysis (MANDATORY)
+- [ ] **Breaking Changes** - Document any breaking API changes
+- [ ] **Performance Impact** - Note if changes affect performance
+- [ ] **Security Review** - Ensure no security vulnerabilities introduced
+- [ ] **Dependency Updates** - Document any new or updated dependencies
+- [ ] **Compatibility** - Verify compatibility with supported Obsidian versions
+
+### 5. Final Verification (MANDATORY)
+- [ ] **Feature Works** - Manually test the implemented feature/fix
+- [ ] **No Regressions** - Verify existing features still work
+- [ ] **Clean Git Status** - No uncommitted changes or untracked files
+- [ ] **PR Ready** - All changes are ready for review
+
+### Enforcement
+- **NEVER** mark a task as complete without completing ALL checklist items
+- **ALWAYS** run the full test suite before finalizing any work
+- **MUST** update documentation for ANY user-facing changes
+- **If any item cannot be completed**, explicitly document why and get approval
+
 ## MANDATORY TypeScript Implementation Rules
 
 ### Core Principles (MUST follow in order of priority)

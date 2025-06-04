@@ -64,3 +64,15 @@ The agent must `yield` (end its turn) when:
 - All checks pass AND the task acceptance criteria are met, OR
 - A blocking ambiguity requires human input, OR
 - The change would exceed **500 added lines** – request a manual refactor instead.
+
+## 7. Mandatory Completion Requirements
+
+Before marking ANY task as complete, developers MUST:
+
+1. **Complete the CLAUDE.md Development Completion Checklist** - Every item must be checked
+2. **Update Documentation** - README, API docs, CHANGELOG for any user-facing changes
+3. **Ensure Test Coverage** - ≥90% coverage for all modified files
+4. **Pass All Quality Checks** - `pnpm lint`, `pnpm tsc --noEmit`, `pnpm build`
+5. **Document Impact** - Breaking changes, performance impact, security considerations
+
+**IMPORTANT**: No development work is considered complete until ALL checklist items in CLAUDE.md are satisfied. This is non-negotiable.

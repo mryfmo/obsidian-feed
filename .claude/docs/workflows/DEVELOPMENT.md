@@ -44,7 +44,7 @@ forces explicit _state transitions_ so that omissions are caught early.
 | **ANA** (Analysis) | • Root-cause description (1-2 para) • Impacted files / modules list | Reviewer agrees the analysis matches evidence |
 | **PLAN** | • RFC-style note (`docs/rfcs/NNN-*.md`) containing: – Scope & out-of-scope – Risk list & mitigations – Test strategy (unit / int / e2e) – Estimated effort & timeline | 1 reviewer 👍 or design-meeting approval |
 | **BUILD** | • Code, docs, migration scripts, test fixtures | CI ‑ lint + type-check + tests green |
-| **VERIF** | • Test results attached • Manual QA notes (if UI) • CHANGELOG entry | Reviewer & QA sign-off |
+| **VERIF** | • Test results attached • Manual QA notes (if UI) • CHANGELOG entry • **CLAUDE.md Development Completion Checklist** | Reviewer & QA sign-off + All checklist items complete |
 | **REL** (Release) | • PR created/updated • Release notes • Version bump (if applicable) | PR merged or release published |
 
 After **REL** the task is considered _complete_ with all work merged and released.
