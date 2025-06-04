@@ -12,10 +12,12 @@
 node_modules/
 
 # Build outputs
-main.js
+/main.js
 dist/
 build/
 *.js.map
+*.tsbuildinfo
+tsconfig.tsbuildinfo
 
 # Coverage reports
 coverage/
@@ -27,8 +29,10 @@ docs/api/
 docs/api-md/
 
 # Obsidian plugin data
-data.json
+/data.json
 .obsidian/plugins/contents-feeds-reader/data/
+.hotreload
+styles.css.map
 
 # OS-specific files
 .DS_Store
@@ -53,16 +57,25 @@ vitest_output.json
 vitest_result*.json
 test-results/
 playwright-report/
+playwright/.cache/
 e2e-results/
+e2e/screenshots/
+e2e/videos/
 *.test-results/
+*.snap
+.vite/
+vite.config.ts.timestamp-*
 
 # Temporary files
 *.tmp
 *.temp
 *.bak
+*.bak[0-9]
 *.backup
 *.old
 ~*
+.*.swp
+.*.swo
 
 # Cache directories
 .cache/
@@ -93,11 +106,13 @@ claude_desktop_config.json
 .claude/workspace/
 .claude/backups/
 .claude/session/
+.claude/logs/
 # But track configuration and docs
 !.claude/config/
 !.claude/docs/
 !.claude/scripts/
-!.claude/mcp/
+!.claude/mcp-integration/
+!.claude/validation/
 !.claude/.gitignore
 !.claude/README.md
 
