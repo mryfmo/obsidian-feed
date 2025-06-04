@@ -37,6 +37,8 @@
     "test:coverage:ci": "vitest run --coverage --coverage.reporter=lcov",
     "test:coverage:html": "vitest run --coverage --coverage.reporter=html",
     "docs:api": "typedoc --out docs/api src/main.ts",
+    "check:all": "npm run typecheck && npm run lint && npm run test && echo '✅ All checks passed!'",
+    "check:quick": "npm run typecheck && npm run lint && npm run test:unit && echo '✅ Quick checks passed!'",
     "docs:api:watch": "typedoc --watch --out docs/api src/main.ts",
     "docs:api:markdown": "typedoc --plugin typedoc-plugin-markdown --out docs/api-md src/main.ts",
     "clean": "rimraf dist",

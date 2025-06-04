@@ -6,6 +6,7 @@
 → You need the **[7-Phase Development Lifecycle](docs/guides/development-lifecycle.md)**
 - Manages work from start to finish (FETCH → REL)
 - Used for: issues, features, bugs, enhancements
+- **MANDATORY**: Complete CLAUDE.md Development Completion Checklist in VERIF phase
 
 ### Performing File Operations?
 → You need the **[7-Step Execution Cycle](docs/guides/execution-cycle.md)**

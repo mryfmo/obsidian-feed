@@ -46,3 +46,30 @@ Automated gating via **SonarCloud** is planned but not yet active. In the interi
 ## 6. Termination Criteria
 
 Conclude once failing tests reproduce the issue **or** when new tests pass and provide 2× regression safety compared to before.
+
+## 7. Mandatory Development Completion Checklist Compliance
+
+**CRITICAL**: The tester MUST ensure all testing requirements from the CLAUDE.md Development Completion Checklist are met:
+
+### Required Test Coverage:
+1. **Modified Files** - MUST achieve ≥90% coverage (not just the 80% road-map target)
+2. **New Features/Fixes** - MUST have corresponding test cases
+3. **E2E Tests** - MUST run `pnpm e2e` for any UI changes
+4. **Integration Tests** - MUST verify external dependencies are properly tested
+
+### Verification Steps:
+1. Run `pnpm test:coverage` and check coverage report
+2. Verify coverage for modified files meets ≥90% threshold
+3. Ensure all edge cases and error paths are tested
+4. Confirm no decrease in overall test coverage
+
+### Coverage Report Analysis:
+```bash
+# Generate detailed coverage report
+pnpm test:coverage
+
+# Check specific file coverage
+pnpm test:coverage -- path/to/file.spec.ts
+```
+
+**IMPORTANT**: Testing is NOT complete until ALL checklist requirements are satisfied. Report any gaps as blocking issues.

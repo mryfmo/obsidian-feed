@@ -28,7 +28,11 @@ It is expected to run inside the _Claude Code_ sandbox. All commands mentioned b
 3. **Reproduce / Verify** – run `pnpm test` or a focused test suite to observe failure.
 4. **Design a Minimal Fix** – favour small, isolated changes; avoid API churn.
 5. **Edit** – apply patches via `apply_patch` blocks.
-6. **Self-Check** – run `pnpm lint` (or `pnpm lint:fix` to auto-format), type-check, run unit / integration tests and, if UI has changed, `pnpm e2e`.
+6. **Self-Check** – run in this order and ALL MUST BE GREEN:
+   - `pnpm tsc --noEmit` (type-check FIRST) - ZERO errors allowed
+   - `pnpm lint` (or `pnpm lint:fix`) - ZERO errors/warnings allowed
+   - `pnpm test` - 100% pass rate required
+   - `pnpm e2e` (if UI changed) - ALL tests must pass
 7. **Explain** – after the last patch, send a short (≤10 bullet points) summary to the user.
 
 ## 3. Constraints & Priorities
@@ -72,7 +76,11 @@ Before marking ANY task as complete, developers MUST:
 1. **Complete the CLAUDE.md Development Completion Checklist** - Every item must be checked
 2. **Update Documentation** - README, API docs, CHANGELOG for any user-facing changes
 3. **Ensure Test Coverage** - ≥90% coverage for all modified files
-4. **Pass All Quality Checks** - `pnpm lint`, `pnpm tsc --noEmit`, `pnpm build`
+4. **Pass All Quality Checks** - ALL MUST BE GREEN:
+   - `pnpm tsc --noEmit` (FIRST) - ZERO TypeScript errors
+   - `pnpm lint` (SECOND) - ZERO ESLint errors/warnings
+   - `pnpm test` - 100% pass rate
+   - `pnpm build` - Successful build with no errors
 5. **Document Impact** - Breaking changes, performance impact, security considerations
 
 **IMPORTANT**: No development work is considered complete until ALL checklist items in CLAUDE.md are satisfied. This is non-negotiable.

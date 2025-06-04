@@ -406,19 +406,23 @@ If an operation goes wrong:
 - [ ] **Migration Guide** - Document breaking changes and migration steps if applicable
 - [ ] **Architecture Docs** - Update if architectural changes were made
 
-### 2. Test Coverage (MANDATORY)
-- [ ] **All Tests Pass** - Run `pnpm test` and ensure 100% pass rate
+### 2. Test Coverage (MANDATORY - ALL TESTS MUST PASS)
+- [ ] **All Tests Pass** - Run `pnpm test` - MUST have 100% pass rate (ZERO failures)
 - [ ] **New Tests Added** - Every new feature/fix MUST have corresponding tests
 - [ ] **Coverage Check** - Run `pnpm test:coverage` and ensure ≥90% coverage for modified files
-- [ ] **E2E Tests** - Run `pnpm e2e` if UI or user-facing features were changed
+- [ ] **E2E Tests** - Run `pnpm e2e` if UI changes - MUST pass completely
 - [ ] **Integration Tests** - Ensure external dependencies are properly tested
 
-### 3. Code Quality (MANDATORY)
-- [ ] **Lint Check** - Run `pnpm lint` and fix all errors
-- [ ] **Type Check** - Run `pnpm tsc --noEmit` to ensure no TypeScript errors
-- [ ] **Build Success** - Run `pnpm build` to ensure production build works
+**⚠️ STRICT REQUIREMENT**: ZERO test failures allowed. Fix ALL failing tests before proceeding.
+
+### 3. Code Quality (MANDATORY - ALL MUST BE GREEN/ZERO ERRORS)
+- [ ] **Type Check** - Run `pnpm tsc --noEmit` - MUST have ZERO errors (run FIRST)
+- [ ] **Lint Check** - Run `pnpm lint` - MUST have ZERO errors/warnings (run SECOND)
+- [ ] **Build Success** - Run `pnpm build` - MUST complete without errors
 - [ ] **No Console Logs** - Remove all debug console.log statements
 - [ ] **Error Handling** - All edge cases have proper error handling
+
+**⚠️ STRICT REQUIREMENT**: Do NOT proceed if ANY of these checks fail. All must show green/success status.
 
 ### 4. Impact Analysis (MANDATORY)
 - [ ] **Breaking Changes** - Document any breaking API changes
@@ -436,8 +440,24 @@ If an operation goes wrong:
 ### Enforcement
 - **NEVER** mark a task as complete without completing ALL checklist items
 - **ALWAYS** run the full test suite before finalizing any work
+- **MUST** achieve ZERO errors in: TypeScript, ESLint, and Tests
 - **MUST** update documentation for ANY user-facing changes
+- **If any check is not GREEN**, STOP and fix it before proceeding
 - **If any item cannot be completed**, explicitly document why and get approval
+
+### Quick Verification Command
+```bash
+# Run all checks in correct order (should ALL be green):
+pnpm check:all
+
+# For faster iteration during development:
+pnpm check:quick  # Runs type check, lint, and unit tests only
+
+# Manual verification:
+pnpm tsc --noEmit && pnpm lint && pnpm test && echo "✅ All checks passed!"
+```
+
+**REMEMBER**: ALL checks MUST show green/zero errors before marking work complete.
 
 ## MANDATORY TypeScript Implementation Rules
 

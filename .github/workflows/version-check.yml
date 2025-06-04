@@ -30,8 +30,10 @@ jobs:
           
           # Check if version exists in CHANGELOG.md
           if ! grep -qE "^## \\[?${PKG_VERSION//./\\.}\\]?" CHANGELOG.md; then
-            echo "⚠️  Warning: Version $PKG_VERSION not found in CHANGELOG.md"
+            echo "❌ Error: Version $PKG_VERSION not found in CHANGELOG.md"
+            echo "MANDATORY: Per CLAUDE.md Development Completion Checklist, CHANGELOG.md MUST be updated"
             echo "Please add a changelog entry for this version"
+            exit 1
           fi
           
           echo "✅ All version checks passed!"

@@ -37,3 +37,41 @@ Runs after a PR labelled `ready-for-release` is merged into `main` **and** CI is
 ## 4. Termination
 
 Stop after the GitHub Release is published and BRAT manifest receives the new commit SHA.
+
+## 5. Mandatory Pre-Release Verification
+
+**CRITICAL**: Before creating ANY release, the release agent MUST verify completion of the CLAUDE.md Development Completion Checklist:
+
+### Required Verifications:
+1. **Documentation Complete**
+   - README.md updated for new features/changes
+   - API documentation reflects all changes
+   - CHANGELOG.md has detailed release notes
+   - Migration guide for breaking changes
+
+2. **Quality Standards Met**
+   - All tests pass (`pnpm test`)
+   - Test coverage ≥90% for modified files
+   - Lint checks pass (`pnpm lint`)
+   - Build succeeds (`pnpm build`)
+   - No console.log or debug code
+
+3. **Release Readiness**
+   - Version numbers consistent across all files
+   - No uncommitted changes
+   - CI pipeline is green
+   - E2E tests confirm no regressions
+
+### Pre-Release Commands:
+```bash
+# Verify all quality checks
+pnpm check:all
+
+# Verify clean working tree
+git status --porcelain
+
+# Check for debug code
+grep -r "console.log" src/
+```
+
+**IMPORTANT**: If ANY checklist item is incomplete, ABORT the release and report what needs to be completed.
